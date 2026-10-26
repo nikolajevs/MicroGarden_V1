@@ -1,0 +1,30 @@
+REJECTED ST1S14 VIN and SW pins swapped  <- ST1S14 pin map: VIN 7 on fused +24V_AUX, EN1 3 and GND 6/EP 9 on GND, EN2 5, FB 4, SW 8, B
+REJECTED ST1S14 EN1 left floating instead of GND  <- ST1S14 pin map: VIN 7 on fused +24V_AUX, EN1 3 and GND 6/EP 9 on GND, EN2 5, FB 4, SW 8, B
+REJECTED 12 V divider top 82k -> 100k (13 V)  <- +12V = 1.222 V x (1 + 88.2k/10k) = 14.20 V (11.8-12.2 V over VFB 1.202-1.239 V)
+REJECTED 3.3 V divider bottom resistor dropped to 100k only  <- +3V3 = 0.8 V x (1 + 100k / (47k||100k)) = 2.40 V (2.35-2.45 V); ESP32 needs 3.0-3.6 V
+REJECTED INA238 IN+ and IN- swapped  <- Power monitor: INA238 U102 at I2C 0x40 (A0=A1=GND), 3.5 mOhm low-side shunt carries all re
+REJECTED Q102 drain and source swapped  <- Reverse polarity: Q102 IRL2505 drain on PSU return, source on the shunt; PSU_RTN touches o
+REJECTED Reverse-polarity gate without zener (12 V -> 24 V)  <- Q102 gate clamp: 12 V zener keeps Vgs below the IRL2505 16 V limit up to the 42 V TVS clam
+REJECTED LM3429 OVP divider top 33k -> 47k (59.5 V)  <- OVP = 1.24 V x 44 = 71.92 V: above the 48 V maximum Vf, below the 63 V electrolytic and 10
+REJECTED LED sense resistor 0R15 -> 0R10 (about 2.3 A)  <- 75 W-class LED output: 1.235 V x 1k / (5.32k x 0.15 R) = 2.321 A total, 111.43 W at 48 V, 
+REJECTED Added LED terminal J502 has reversed polarity  <- J501/J502/J503 are parallel stock KF301 terminals after R502, sharing one current-controll
+REJECTED Added LED terminal J503 bypasses the current shunt  <- J501/J502/J503 are parallel stock KF301 terminals after R502, sharing one current-controll
+REJECTED Old 6k2 setpoint resistor cannot provide the 75 W LED load  <- 75 W-class LED output: 1.235 V x 1k / (5.32k x 0.15 R) = 1.207 A total, 57.95 W at 48 V, s
+REJECTED IS resistor 0R040 -> 0R15 (current limit too low)  <- IS minimum 215 mV / (0.040 R +1%) = 1.42 A versus modeled peak 4.36 A (1.26 V CSH, 1% setp
+REJECTED BSC146N10LS5 gate and drain swapped (Q501)  <- Boost power stage: 47 uH from fused 24 V to SW, SBRT15U100SP5 cathode on OUT, BSC146N10LS5
+REJECTED nDIM series resistor shorted to HIGH-only (no pull-down)  <- nDIM: GPIO series 5.1k + one 10k pull-down: HIGH 2.19 V (> 1.6 V hysteresis threshold), Hi
+REJECTED Fan 1 PWM FET gate pull-down removed  <- Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tac
+REJECTED Heater R702 raised to 47k (internal pull-up would turn it on)  <- PTC stays off with the ESP32 internal pull-up (30k worst case) on GPIO32: base 1.99 V < 0.
+REJECTED SD pull-up for DAT1 missing  <- No one-pin orphan nets
+REJECTED GPIO34 tach pull-up removed (floating input)  <- Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tac
+REJECTED Fan tach signal wired from the header to GPIO34  <- Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tac
+REJECTED Diode D501 reversed  <- Boost power stage: 47 uH from fused 24 V to SW, SBRT15U100SP5 cathode on OUT, BSC146N10LS5
+REJECTED RGB LED anode wired to +3V3 (blue/green Vf cannot be driven)  <- RGB status LED D901 (common anode on +12V, OSTAPA57E2A lead order G/B/A/R): per channel GP
+REJECTED RGB green resistor 2k -> 100 R (about 90 mA)  <- RGB status LED D901 (common anode on +12V, OSTAPA57E2A lead order G/B/A/R): per channel GP
+REJECTED RGB blue base pull-down missing (glows during reset)  <- Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tac
+REJECTED RGB red channel moved to strapping pin GPIO12  <- Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tac
+REJECTED RGB base resistor 4k7 -> 470k (NPN not saturated)  <- RGB status LED D901 (common anode on +12V, OSTAPA57E2A lead order G/B/A/R): per channel GP
+REJECTED Stock overdrawn (3 x BSC146N10LS5, 2 in stock)  <- Stock rows in BOM_allocated.json match the design counts and the remaining stock
+REJECTED Purchase price differs from the frozen snapshot  <- Purchase prices equal the frozen catalogue snapshot (procurement_lite.json); all lines inc
+REJECTED Purchase from a shop outside the allowed list  <- Every purchased MPN is bought at least in the fitted quantity, respecting the shop minimum
+Unmodified design: PASS

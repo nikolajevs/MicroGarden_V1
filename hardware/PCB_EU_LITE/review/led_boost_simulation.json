@@ -1,0 +1,5034 @@
+{
+  "simulation_kind": "periodic CCM power stage with fitted ideal PWM",
+  "design_sha256": "66fbe04017d0b6ef46d61d2012bc19140a2d7b7dd0a318fbd414733226dddc3a",
+  "assumptions": {
+    "frequency_hz": 400000.0,
+    "inductance_h": 4.35e-05,
+    "inductor_dcr_ohm": 0.03,
+    "switch_ron_ohm": 0.0208,
+    "sense_ohm": 0.0404,
+    "diode_vf_v": 0.6,
+    "diode_rd_ohm": 0.02,
+    "output_cap_f": 0.0004982999999999999,
+    "output_esr_ohm": 0.06,
+    "output_shunt_ohm": 0.15,
+    "led_voltage_v": 48.0
+  },
+  "reference_is_limit_min_a": 5.321782178217822,
+  "reference_ovp_v": 54.56,
+  "source": "https://www.ti.com/lit/ds/symlink/lm3429.pdf",
+  "limitations": [
+    "Duty fitted to prescribed current; regulation is an input assumption.",
+    "No LM3429 PRO/COMP, startup, nDIM or protection simulation.",
+    "Resistive LED equivalent; no branch-sharing or thermal prediction.",
+    "Switching/core losses, parasitics and capacitor bias are excluded."
+  ],
+  "step_refinement_relative_change": {
+    "low_line": {
+      "vout_avg_v": 4.073216094326295e-10,
+      "vout_pp_v": 6.2141641281295104e-12,
+      "inductor_current_peak_a": 6.158101091727818e-12,
+      "input_power_avg_w": 9.050726999397492e-10
+    },
+    "nominal": {
+      "vout_avg_v": 4.1398302026736743e-10,
+      "vout_pp_v": 1.0067210773484645e-13,
+      "inductor_current_peak_a": 8.66628484888198e-14,
+      "input_power_avg_w": 1.0963806033870623e-09
+    },
+    "high_line": {
+      "vout_avg_v": 4.157811174584256e-10,
+      "vout_pp_v": 1.2194559185221925e-12,
+      "inductor_current_peak_a": 1.2087233333491112e-12,
+      "input_power_avg_w": 1.226193201721929e-09
+    },
+    "low_line_tolerance": {
+      "vout_avg_v": 4.0630242639720807e-10,
+      "vout_pp_v": 2.3842748656261016e-12,
+      "inductor_current_peak_a": 2.3791693552805008e-12,
+      "input_power_avg_w": 8.07419407075262e-10
+    }
+  },
+  "cases": [
+    {
+      "case": "low_line",
+      "vin_v": 21.6,
+      "target_a": 1.5476190476190477,
+      "required_duty": 0.5640649372711777,
+      "max_time_step_ns": 12.479312771486233,
+      "vout_avg_v": 48.23219764020038,
+      "vout_pp_v": 0.2332585929600981,
+      "vout_max_v": 48.37054140302649,
+      "led_current_avg_a": 1.5476208054365168,
+      "led_power_avg_w": 74.28623996220503,
+      "inductor_current_avg_a": 3.5502977224842835,
+      "inductor_current_peak_a": 3.8951277568100724,
+      "inductor_current_min_a": 3.2054060033432688,
+      "is_peak_v": 0.15736316137512693,
+      "input_power_avg_w": 76.68643080566054,
+      "model_loss_w": 2.400191619295998,
+      "r502_loss_w": 0.35927124981721154,
+      "energy_balance_relative_error": 1.0117050500754278e-08,
+      "periodic_current_error_a": 6.661338147750939e-15,
+      "periodic_voltage_error_v": 5.684341886080802e-14,
+      "current_target_relative_error": 1.1358205185206206e-06,
+      "reference_limit_margin_a": 1.4266544214077492,
+      "reference_ovp_margin_v": 6.189458596973509,
+      "waveform": [
+        {
+          "time_us": 0.0,
+          "vout_v": 48.1416457,
+          "inductor_a": 3.205406,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0124793,
+          "vout_v": 48.1416071,
+          "inductor_a": 3.2115187,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0249586,
+          "vout_v": 48.1415685,
+          "inductor_a": 3.2176312,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0374379,
+          "vout_v": 48.1415298,
+          "inductor_a": 3.2237436,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0499173,
+          "vout_v": 48.1414912,
+          "inductor_a": 3.2298558,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0623966,
+          "vout_v": 48.1414526,
+          "inductor_a": 3.2359678,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0748759,
+          "vout_v": 48.141414,
+          "inductor_a": 3.2420797,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0873552,
+          "vout_v": 48.1413754,
+          "inductor_a": 3.2481914,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0998345,
+          "vout_v": 48.1413368,
+          "inductor_a": 3.254303,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1123138,
+          "vout_v": 48.1412982,
+          "inductor_a": 3.2604144,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1247931,
+          "vout_v": 48.1412596,
+          "inductor_a": 3.2665256,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1372724,
+          "vout_v": 48.141221,
+          "inductor_a": 3.2726367,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1497518,
+          "vout_v": 48.1411823,
+          "inductor_a": 3.2787476,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1622311,
+          "vout_v": 48.1411437,
+          "inductor_a": 3.2848584,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1747104,
+          "vout_v": 48.1411051,
+          "inductor_a": 3.290969,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1871897,
+          "vout_v": 48.1410665,
+          "inductor_a": 3.2970794,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.199669,
+          "vout_v": 48.1410279,
+          "inductor_a": 3.3031897,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2121483,
+          "vout_v": 48.1409893,
+          "inductor_a": 3.3092998,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2246276,
+          "vout_v": 48.1409507,
+          "inductor_a": 3.3154098,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2371069,
+          "vout_v": 48.1409121,
+          "inductor_a": 3.3215196,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2495863,
+          "vout_v": 48.1408735,
+          "inductor_a": 3.3276292,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2620656,
+          "vout_v": 48.1408348,
+          "inductor_a": 3.3337387,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2745449,
+          "vout_v": 48.1407962,
+          "inductor_a": 3.339848,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2870242,
+          "vout_v": 48.1407576,
+          "inductor_a": 3.3459572,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2995035,
+          "vout_v": 48.140719,
+          "inductor_a": 3.3520662,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3119828,
+          "vout_v": 48.1406804,
+          "inductor_a": 3.358175,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3244621,
+          "vout_v": 48.1406418,
+          "inductor_a": 3.3642837,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3369414,
+          "vout_v": 48.1406032,
+          "inductor_a": 3.3703922,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3494208,
+          "vout_v": 48.1405646,
+          "inductor_a": 3.3765006,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3619001,
+          "vout_v": 48.140526,
+          "inductor_a": 3.3826088,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3743794,
+          "vout_v": 48.1404874,
+          "inductor_a": 3.3887168,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3868587,
+          "vout_v": 48.1404487,
+          "inductor_a": 3.3948247,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.399338,
+          "vout_v": 48.1404101,
+          "inductor_a": 3.4009324,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4118173,
+          "vout_v": 48.1403715,
+          "inductor_a": 3.40704,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4242966,
+          "vout_v": 48.1403329,
+          "inductor_a": 3.4131474,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4367759,
+          "vout_v": 48.1402943,
+          "inductor_a": 3.4192547,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4492553,
+          "vout_v": 48.1402557,
+          "inductor_a": 3.4253617,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4617346,
+          "vout_v": 48.1402171,
+          "inductor_a": 3.4314687,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4742139,
+          "vout_v": 48.1401785,
+          "inductor_a": 3.4375754,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4866932,
+          "vout_v": 48.1401399,
+          "inductor_a": 3.443682,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4991725,
+          "vout_v": 48.1401013,
+          "inductor_a": 3.4497885,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5116518,
+          "vout_v": 48.1400626,
+          "inductor_a": 3.4558948,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5241311,
+          "vout_v": 48.140024,
+          "inductor_a": 3.4620009,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5366104,
+          "vout_v": 48.1399854,
+          "inductor_a": 3.4681069,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5490898,
+          "vout_v": 48.1399468,
+          "inductor_a": 3.4742127,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5615691,
+          "vout_v": 48.1399082,
+          "inductor_a": 3.4803183,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5740484,
+          "vout_v": 48.1398696,
+          "inductor_a": 3.4864238,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5865277,
+          "vout_v": 48.139831,
+          "inductor_a": 3.4925291,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.599007,
+          "vout_v": 48.1397924,
+          "inductor_a": 3.4986343,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6114863,
+          "vout_v": 48.1397538,
+          "inductor_a": 3.5047393,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6239656,
+          "vout_v": 48.1397152,
+          "inductor_a": 3.5108442,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.636445,
+          "vout_v": 48.1396765,
+          "inductor_a": 3.5169488,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6489243,
+          "vout_v": 48.1396379,
+          "inductor_a": 3.5230534,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6614036,
+          "vout_v": 48.1395993,
+          "inductor_a": 3.5291577,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6738829,
+          "vout_v": 48.1395607,
+          "inductor_a": 3.5352619,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6863622,
+          "vout_v": 48.1395221,
+          "inductor_a": 3.541366,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6988415,
+          "vout_v": 48.1394835,
+          "inductor_a": 3.5474699,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7113208,
+          "vout_v": 48.1394449,
+          "inductor_a": 3.5535736,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7238001,
+          "vout_v": 48.1394063,
+          "inductor_a": 3.5596772,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7362795,
+          "vout_v": 48.1393677,
+          "inductor_a": 3.5657806,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7487588,
+          "vout_v": 48.1393291,
+          "inductor_a": 3.5718839,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7612381,
+          "vout_v": 48.1392905,
+          "inductor_a": 3.5779869,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7737174,
+          "vout_v": 48.1392518,
+          "inductor_a": 3.5840899,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7861967,
+          "vout_v": 48.1392132,
+          "inductor_a": 3.5901926,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.798676,
+          "vout_v": 48.1391746,
+          "inductor_a": 3.5962953,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8111553,
+          "vout_v": 48.139136,
+          "inductor_a": 3.6023977,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8236346,
+          "vout_v": 48.1390974,
+          "inductor_a": 3.6085,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.836114,
+          "vout_v": 48.1390588,
+          "inductor_a": 3.6146021,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8485933,
+          "vout_v": 48.1390202,
+          "inductor_a": 3.6207041,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8610726,
+          "vout_v": 48.1389816,
+          "inductor_a": 3.6268059,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8735519,
+          "vout_v": 48.138943,
+          "inductor_a": 3.6329076,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8860312,
+          "vout_v": 48.1389044,
+          "inductor_a": 3.6390091,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8985105,
+          "vout_v": 48.1388658,
+          "inductor_a": 3.6451104,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9109898,
+          "vout_v": 48.1388271,
+          "inductor_a": 3.6512116,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9234691,
+          "vout_v": 48.1387885,
+          "inductor_a": 3.6573126,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9359485,
+          "vout_v": 48.1387499,
+          "inductor_a": 3.6634135,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9484278,
+          "vout_v": 48.1387113,
+          "inductor_a": 3.6695142,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9609071,
+          "vout_v": 48.1386727,
+          "inductor_a": 3.6756147,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9733864,
+          "vout_v": 48.1386341,
+          "inductor_a": 3.6817151,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9858657,
+          "vout_v": 48.1385955,
+          "inductor_a": 3.6878153,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.998345,
+          "vout_v": 48.1385569,
+          "inductor_a": 3.6939153,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0108243,
+          "vout_v": 48.1385183,
+          "inductor_a": 3.7000152,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0233036,
+          "vout_v": 48.1384797,
+          "inductor_a": 3.706115,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.035783,
+          "vout_v": 48.1384411,
+          "inductor_a": 3.7122146,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0482623,
+          "vout_v": 48.1384024,
+          "inductor_a": 3.718314,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0607416,
+          "vout_v": 48.1383638,
+          "inductor_a": 3.7244132,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0732209,
+          "vout_v": 48.1383252,
+          "inductor_a": 3.7305123,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0857002,
+          "vout_v": 48.1382866,
+          "inductor_a": 3.7366113,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0981795,
+          "vout_v": 48.138248,
+          "inductor_a": 3.7427101,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1106588,
+          "vout_v": 48.1382094,
+          "inductor_a": 3.7488087,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1231381,
+          "vout_v": 48.1381708,
+          "inductor_a": 3.7549071,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1356175,
+          "vout_v": 48.1381322,
+          "inductor_a": 3.7610055,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1480968,
+          "vout_v": 48.1380936,
+          "inductor_a": 3.7671036,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1605761,
+          "vout_v": 48.138055,
+          "inductor_a": 3.7732016,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1730554,
+          "vout_v": 48.1380164,
+          "inductor_a": 3.7792994,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1855347,
+          "vout_v": 48.1379778,
+          "inductor_a": 3.7853971,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.198014,
+          "vout_v": 48.1379391,
+          "inductor_a": 3.7914946,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2104933,
+          "vout_v": 48.1379005,
+          "inductor_a": 3.7975919,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2229727,
+          "vout_v": 48.1378619,
+          "inductor_a": 3.8036891,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.235452,
+          "vout_v": 48.1378233,
+          "inductor_a": 3.8097861,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2479313,
+          "vout_v": 48.1377847,
+          "inductor_a": 3.815883,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2604106,
+          "vout_v": 48.1377461,
+          "inductor_a": 3.8219797,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2728899,
+          "vout_v": 48.1377075,
+          "inductor_a": 3.8280763,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2853692,
+          "vout_v": 48.1376689,
+          "inductor_a": 3.8341726,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2978485,
+          "vout_v": 48.1376303,
+          "inductor_a": 3.8402689,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3103278,
+          "vout_v": 48.1375917,
+          "inductor_a": 3.8463649,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3228072,
+          "vout_v": 48.1375531,
+          "inductor_a": 3.8524609,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3352865,
+          "vout_v": 48.1375145,
+          "inductor_a": 3.8585566,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3477658,
+          "vout_v": 48.1374758,
+          "inductor_a": 3.8646522,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3602451,
+          "vout_v": 48.1374372,
+          "inductor_a": 3.8707476,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3727244,
+          "vout_v": 48.1373986,
+          "inductor_a": 3.8768429,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3852037,
+          "vout_v": 48.13736,
+          "inductor_a": 3.882938,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.397683,
+          "vout_v": 48.1373214,
+          "inductor_a": 3.889033,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.4101623,
+          "vout_v": 48.1372828,
+          "inductor_a": 3.8951278,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.4101623,
+          "vout_v": 48.3705414,
+          "inductor_a": 3.8951278,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4225469,
+          "vout_v": 48.3701295,
+          "inductor_a": 3.88728,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4349314,
+          "vout_v": 48.3697173,
+          "inductor_a": 3.8794324,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4473159,
+          "vout_v": 48.3693051,
+          "inductor_a": 3.8715851,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4597004,
+          "vout_v": 48.3688926,
+          "inductor_a": 3.8637381,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4720849,
+          "vout_v": 48.3684799,
+          "inductor_a": 3.8558912,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4844695,
+          "vout_v": 48.3680671,
+          "inductor_a": 3.8480446,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.496854,
+          "vout_v": 48.3676541,
+          "inductor_a": 3.8401982,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5092385,
+          "vout_v": 48.3672409,
+          "inductor_a": 3.832352,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.521623,
+          "vout_v": 48.3668275,
+          "inductor_a": 3.8245061,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5340075,
+          "vout_v": 48.3664139,
+          "inductor_a": 3.8166604,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5463921,
+          "vout_v": 48.3660002,
+          "inductor_a": 3.8088149,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5587766,
+          "vout_v": 48.3655862,
+          "inductor_a": 3.8009696,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5711611,
+          "vout_v": 48.3651721,
+          "inductor_a": 3.7931246,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5835456,
+          "vout_v": 48.3647579,
+          "inductor_a": 3.7852798,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5959301,
+          "vout_v": 48.3643434,
+          "inductor_a": 3.7774353,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6083146,
+          "vout_v": 48.3639287,
+          "inductor_a": 3.769591,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6206992,
+          "vout_v": 48.3635139,
+          "inductor_a": 3.7617469,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6330837,
+          "vout_v": 48.3630989,
+          "inductor_a": 3.753903,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6454682,
+          "vout_v": 48.3626837,
+          "inductor_a": 3.7460593,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6578527,
+          "vout_v": 48.3622684,
+          "inductor_a": 3.7382159,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6702372,
+          "vout_v": 48.3618528,
+          "inductor_a": 3.7303728,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6826218,
+          "vout_v": 48.3614371,
+          "inductor_a": 3.7225298,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6950063,
+          "vout_v": 48.3610212,
+          "inductor_a": 3.7146871,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7073908,
+          "vout_v": 48.3606051,
+          "inductor_a": 3.7068446,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7197753,
+          "vout_v": 48.3601888,
+          "inductor_a": 3.6990023,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7321598,
+          "vout_v": 48.3597724,
+          "inductor_a": 3.6911603,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7445444,
+          "vout_v": 48.3593557,
+          "inductor_a": 3.6833185,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7569289,
+          "vout_v": 48.3589389,
+          "inductor_a": 3.6754769,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7693134,
+          "vout_v": 48.3585219,
+          "inductor_a": 3.6676356,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7816979,
+          "vout_v": 48.3581048,
+          "inductor_a": 3.6597945,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7940824,
+          "vout_v": 48.3576874,
+          "inductor_a": 3.6519536,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8064669,
+          "vout_v": 48.3572699,
+          "inductor_a": 3.644113,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8188515,
+          "vout_v": 48.3568522,
+          "inductor_a": 3.6362726,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.831236,
+          "vout_v": 48.3564343,
+          "inductor_a": 3.6284324,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8436205,
+          "vout_v": 48.3560162,
+          "inductor_a": 3.6205924,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.856005,
+          "vout_v": 48.3555979,
+          "inductor_a": 3.6127527,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8683895,
+          "vout_v": 48.3551795,
+          "inductor_a": 3.6049132,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8807741,
+          "vout_v": 48.3547609,
+          "inductor_a": 3.5970739,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8931586,
+          "vout_v": 48.3543421,
+          "inductor_a": 3.5892349,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9055431,
+          "vout_v": 48.3539231,
+          "inductor_a": 3.5813961,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9179276,
+          "vout_v": 48.353504,
+          "inductor_a": 3.5735575,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9303121,
+          "vout_v": 48.3530846,
+          "inductor_a": 3.5657192,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9426967,
+          "vout_v": 48.3526651,
+          "inductor_a": 3.5578811,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9550812,
+          "vout_v": 48.3522454,
+          "inductor_a": 3.5500432,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9674657,
+          "vout_v": 48.3518255,
+          "inductor_a": 3.5422055,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9798502,
+          "vout_v": 48.3514055,
+          "inductor_a": 3.5343681,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9922347,
+          "vout_v": 48.3509853,
+          "inductor_a": 3.5265309,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0046192,
+          "vout_v": 48.3505648,
+          "inductor_a": 3.518694,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0170038,
+          "vout_v": 48.3501442,
+          "inductor_a": 3.5108573,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0293883,
+          "vout_v": 48.3497235,
+          "inductor_a": 3.5030208,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0417728,
+          "vout_v": 48.3493025,
+          "inductor_a": 3.4951845,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0541573,
+          "vout_v": 48.3488814,
+          "inductor_a": 3.4873485,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0665418,
+          "vout_v": 48.34846,
+          "inductor_a": 3.4795127,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0789264,
+          "vout_v": 48.3480386,
+          "inductor_a": 3.4716771,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0913109,
+          "vout_v": 48.3476169,
+          "inductor_a": 3.4638418,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1036954,
+          "vout_v": 48.347195,
+          "inductor_a": 3.4560067,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1160799,
+          "vout_v": 48.346773,
+          "inductor_a": 3.4481718,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1284644,
+          "vout_v": 48.3463508,
+          "inductor_a": 3.4403372,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.140849,
+          "vout_v": 48.3459284,
+          "inductor_a": 3.4325028,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1532335,
+          "vout_v": 48.3455058,
+          "inductor_a": 3.4246686,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.165618,
+          "vout_v": 48.345083,
+          "inductor_a": 3.4168347,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1780025,
+          "vout_v": 48.3446601,
+          "inductor_a": 3.4090009,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.190387,
+          "vout_v": 48.344237,
+          "inductor_a": 3.4011675,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2027715,
+          "vout_v": 48.3438137,
+          "inductor_a": 3.3933342,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2151561,
+          "vout_v": 48.3433902,
+          "inductor_a": 3.3855012,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2275406,
+          "vout_v": 48.3429665,
+          "inductor_a": 3.3776684,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2399251,
+          "vout_v": 48.3425427,
+          "inductor_a": 3.3698359,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2523096,
+          "vout_v": 48.3421187,
+          "inductor_a": 3.3620035,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2646941,
+          "vout_v": 48.3416945,
+          "inductor_a": 3.3541715,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2770787,
+          "vout_v": 48.3412701,
+          "inductor_a": 3.3463396,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2894632,
+          "vout_v": 48.3408455,
+          "inductor_a": 3.338508,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3018477,
+          "vout_v": 48.3404208,
+          "inductor_a": 3.3306766,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3142322,
+          "vout_v": 48.3399959,
+          "inductor_a": 3.3228454,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3266167,
+          "vout_v": 48.3395708,
+          "inductor_a": 3.3150145,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3390013,
+          "vout_v": 48.3391455,
+          "inductor_a": 3.3071838,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3513858,
+          "vout_v": 48.33872,
+          "inductor_a": 3.2993534,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3637703,
+          "vout_v": 48.3382944,
+          "inductor_a": 3.2915231,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3761548,
+          "vout_v": 48.3378686,
+          "inductor_a": 3.2836931,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3885393,
+          "vout_v": 48.3374426,
+          "inductor_a": 3.2758634,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4009238,
+          "vout_v": 48.3370164,
+          "inductor_a": 3.2680338,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4133084,
+          "vout_v": 48.33659,
+          "inductor_a": 3.2602046,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4256929,
+          "vout_v": 48.3361635,
+          "inductor_a": 3.2523755,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4380774,
+          "vout_v": 48.3357368,
+          "inductor_a": 3.2445467,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4504619,
+          "vout_v": 48.3353099,
+          "inductor_a": 3.2367181,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4628464,
+          "vout_v": 48.3348828,
+          "inductor_a": 3.2288897,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.475231,
+          "vout_v": 48.3344555,
+          "inductor_a": 3.2210616,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4876155,
+          "vout_v": 48.3340281,
+          "inductor_a": 3.2132337,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.5,
+          "vout_v": 48.3336005,
+          "inductor_a": 3.205406,
+          "switch_on": false
+        }
+      ]
+    },
+    {
+      "case": "nominal",
+      "vin_v": 24.0,
+      "target_a": 1.5476190476190477,
+      "required_duty": 0.5141412166878583,
+      "max_time_step_ns": 12.47915574485093,
+      "vout_avg_v": 48.23221173676817,
+      "vout_pp_v": 0.21173970181439472,
+      "vout_max_v": 48.34921536108799,
+      "led_current_avg_a": 1.5476212577514161,
+      "led_power_avg_w": 74.28621902274577,
+      "inductor_current_avg_a": 3.185499670598967,
+      "inductor_current_peak_a": 3.535789096940127,
+      "inductor_current_min_a": 2.8352135400800726,
+      "is_peak_v": 0.1428458795163811,
+      "input_power_avg_w": 76.45199209437521,
+      "model_loss_w": 2.165773849098971,
+      "r502_loss_w": 0.35927114854750547,
+      "energy_balance_relative_error": 1.0169382175002151e-08,
+      "periodic_current_error_a": 4.75175454539567e-14,
+      "periodic_voltage_error_v": 3.552713678800501e-14,
+      "current_target_relative_error": 1.4280855303843837e-06,
+      "reference_limit_margin_a": 1.7859930812776947,
+      "reference_ovp_margin_v": 6.21078463891201,
+      "waveform": [
+        {
+          "time_us": 0.0,
+          "vout_v": 48.1414524,
+          "inductor_a": 2.8352135,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0124792,
+          "vout_v": 48.1414138,
+          "inductor_a": 2.8420243,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0249583,
+          "vout_v": 48.1413752,
+          "inductor_a": 2.8488349,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0374375,
+          "vout_v": 48.1413365,
+          "inductor_a": 2.8556454,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0499166,
+          "vout_v": 48.1412979,
+          "inductor_a": 2.8624556,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0623958,
+          "vout_v": 48.1412593,
+          "inductor_a": 2.8692657,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0748749,
+          "vout_v": 48.1412207,
+          "inductor_a": 2.8760756,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0873541,
+          "vout_v": 48.1411821,
+          "inductor_a": 2.8828853,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0998332,
+          "vout_v": 48.1411435,
+          "inductor_a": 2.8896948,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1123124,
+          "vout_v": 48.1411049,
+          "inductor_a": 2.8965042,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1247916,
+          "vout_v": 48.1410663,
+          "inductor_a": 2.9033134,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1372707,
+          "vout_v": 48.1410277,
+          "inductor_a": 2.9101224,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1497499,
+          "vout_v": 48.1409891,
+          "inductor_a": 2.9169312,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.162229,
+          "vout_v": 48.1409504,
+          "inductor_a": 2.9237398,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1747082,
+          "vout_v": 48.1409118,
+          "inductor_a": 2.9305483,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1871873,
+          "vout_v": 48.1408732,
+          "inductor_a": 2.9373566,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1996665,
+          "vout_v": 48.1408346,
+          "inductor_a": 2.9441647,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2121456,
+          "vout_v": 48.140796,
+          "inductor_a": 2.9509726,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2246248,
+          "vout_v": 48.1407574,
+          "inductor_a": 2.9577804,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.237104,
+          "vout_v": 48.1407188,
+          "inductor_a": 2.964588,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2495831,
+          "vout_v": 48.1406802,
+          "inductor_a": 2.9713954,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2620623,
+          "vout_v": 48.1406416,
+          "inductor_a": 2.9782026,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2745414,
+          "vout_v": 48.140603,
+          "inductor_a": 2.9850096,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2870206,
+          "vout_v": 48.1405643,
+          "inductor_a": 2.9918165,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2994997,
+          "vout_v": 48.1405257,
+          "inductor_a": 2.9986232,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3119789,
+          "vout_v": 48.1404871,
+          "inductor_a": 3.0054297,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.324458,
+          "vout_v": 48.1404485,
+          "inductor_a": 3.012236,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3369372,
+          "vout_v": 48.1404099,
+          "inductor_a": 3.0190422,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3494164,
+          "vout_v": 48.1403713,
+          "inductor_a": 3.0258482,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3618955,
+          "vout_v": 48.1403327,
+          "inductor_a": 3.032654,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3743747,
+          "vout_v": 48.1402941,
+          "inductor_a": 3.0394596,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3868538,
+          "vout_v": 48.1402555,
+          "inductor_a": 3.046265,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.399333,
+          "vout_v": 48.1402169,
+          "inductor_a": 3.0530703,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4118121,
+          "vout_v": 48.1401782,
+          "inductor_a": 3.0598754,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4242913,
+          "vout_v": 48.1401396,
+          "inductor_a": 3.0666803,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4367705,
+          "vout_v": 48.140101,
+          "inductor_a": 3.073485,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4492496,
+          "vout_v": 48.1400624,
+          "inductor_a": 3.0802895,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4617288,
+          "vout_v": 48.1400238,
+          "inductor_a": 3.0870939,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4742079,
+          "vout_v": 48.1399852,
+          "inductor_a": 3.0938981,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4866871,
+          "vout_v": 48.1399466,
+          "inductor_a": 3.1007021,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4991662,
+          "vout_v": 48.139908,
+          "inductor_a": 3.107506,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5116454,
+          "vout_v": 48.1398694,
+          "inductor_a": 3.1143096,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5241245,
+          "vout_v": 48.1398308,
+          "inductor_a": 3.1211131,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5366037,
+          "vout_v": 48.1397922,
+          "inductor_a": 3.1279164,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5490829,
+          "vout_v": 48.1397535,
+          "inductor_a": 3.1347195,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.561562,
+          "vout_v": 48.1397149,
+          "inductor_a": 3.1415225,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5740412,
+          "vout_v": 48.1396763,
+          "inductor_a": 3.1483253,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5865203,
+          "vout_v": 48.1396377,
+          "inductor_a": 3.1551278,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5989995,
+          "vout_v": 48.1395991,
+          "inductor_a": 3.1619303,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6114786,
+          "vout_v": 48.1395605,
+          "inductor_a": 3.1687325,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6239578,
+          "vout_v": 48.1395219,
+          "inductor_a": 3.1755346,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6364369,
+          "vout_v": 48.1394833,
+          "inductor_a": 3.1823364,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6489161,
+          "vout_v": 48.1394447,
+          "inductor_a": 3.1891381,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6613953,
+          "vout_v": 48.1394061,
+          "inductor_a": 3.1959397,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6738744,
+          "vout_v": 48.1393675,
+          "inductor_a": 3.202741,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6863536,
+          "vout_v": 48.1393288,
+          "inductor_a": 3.2095422,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6988327,
+          "vout_v": 48.1392902,
+          "inductor_a": 3.2163432,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7113119,
+          "vout_v": 48.1392516,
+          "inductor_a": 3.223144,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.723791,
+          "vout_v": 48.139213,
+          "inductor_a": 3.2299446,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7362702,
+          "vout_v": 48.1391744,
+          "inductor_a": 3.2367451,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7487493,
+          "vout_v": 48.1391358,
+          "inductor_a": 3.2435454,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7612285,
+          "vout_v": 48.1390972,
+          "inductor_a": 3.2503455,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7737077,
+          "vout_v": 48.1390586,
+          "inductor_a": 3.2571454,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7861868,
+          "vout_v": 48.13902,
+          "inductor_a": 3.2639451,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.798666,
+          "vout_v": 48.1389814,
+          "inductor_a": 3.2707447,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8111451,
+          "vout_v": 48.1389428,
+          "inductor_a": 3.2775441,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8236243,
+          "vout_v": 48.1389042,
+          "inductor_a": 3.2843433,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8361034,
+          "vout_v": 48.1388655,
+          "inductor_a": 3.2911423,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8485826,
+          "vout_v": 48.1388269,
+          "inductor_a": 3.2979412,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8610617,
+          "vout_v": 48.1387883,
+          "inductor_a": 3.3047399,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8735409,
+          "vout_v": 48.1387497,
+          "inductor_a": 3.3115384,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8860201,
+          "vout_v": 48.1387111,
+          "inductor_a": 3.3183367,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8984992,
+          "vout_v": 48.1386725,
+          "inductor_a": 3.3251348,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9109784,
+          "vout_v": 48.1386339,
+          "inductor_a": 3.3319328,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9234575,
+          "vout_v": 48.1385953,
+          "inductor_a": 3.3387306,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9359367,
+          "vout_v": 48.1385567,
+          "inductor_a": 3.3455282,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9484158,
+          "vout_v": 48.1385181,
+          "inductor_a": 3.3523256,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.960895,
+          "vout_v": 48.1384795,
+          "inductor_a": 3.3591229,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9733741,
+          "vout_v": 48.1384409,
+          "inductor_a": 3.36592,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9858533,
+          "vout_v": 48.1384022,
+          "inductor_a": 3.3727169,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9983325,
+          "vout_v": 48.1383636,
+          "inductor_a": 3.3795136,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0108116,
+          "vout_v": 48.138325,
+          "inductor_a": 3.3863101,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0232908,
+          "vout_v": 48.1382864,
+          "inductor_a": 3.3931065,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0357699,
+          "vout_v": 48.1382478,
+          "inductor_a": 3.3999027,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0482491,
+          "vout_v": 48.1382092,
+          "inductor_a": 3.4066987,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0607282,
+          "vout_v": 48.1381706,
+          "inductor_a": 3.4134945,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0732074,
+          "vout_v": 48.138132,
+          "inductor_a": 3.4202902,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0856865,
+          "vout_v": 48.1380934,
+          "inductor_a": 3.4270856,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0981657,
+          "vout_v": 48.1380548,
+          "inductor_a": 3.4338809,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1106449,
+          "vout_v": 48.1380162,
+          "inductor_a": 3.4406761,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.123124,
+          "vout_v": 48.1379776,
+          "inductor_a": 3.447471,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1356032,
+          "vout_v": 48.1379389,
+          "inductor_a": 3.4542658,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1480823,
+          "vout_v": 48.1379003,
+          "inductor_a": 3.4610604,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1605615,
+          "vout_v": 48.1378617,
+          "inductor_a": 3.4678548,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1730406,
+          "vout_v": 48.1378231,
+          "inductor_a": 3.474649,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1855198,
+          "vout_v": 48.1377845,
+          "inductor_a": 3.4814431,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.197999,
+          "vout_v": 48.1377459,
+          "inductor_a": 3.4882369,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2104781,
+          "vout_v": 48.1377073,
+          "inductor_a": 3.4950306,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2229573,
+          "vout_v": 48.1376687,
+          "inductor_a": 3.5018242,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2354364,
+          "vout_v": 48.1376301,
+          "inductor_a": 3.5086175,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2479156,
+          "vout_v": 48.1375915,
+          "inductor_a": 3.5154107,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2603947,
+          "vout_v": 48.1375529,
+          "inductor_a": 3.5222037,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2728739,
+          "vout_v": 48.1375143,
+          "inductor_a": 3.5289965,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.285353,
+          "vout_v": 48.1374757,
+          "inductor_a": 3.5357891,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.285353,
+          "vout_v": 48.3492154,
+          "inductor_a": 3.5357891,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.2977474,
+          "vout_v": 48.3488358,
+          "inductor_a": 3.5286301,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3101418,
+          "vout_v": 48.3484561,
+          "inductor_a": 3.5214713,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3225361,
+          "vout_v": 48.3480763,
+          "inductor_a": 3.5143128,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3349305,
+          "vout_v": 48.3476962,
+          "inductor_a": 3.5071544,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3473248,
+          "vout_v": 48.347316,
+          "inductor_a": 3.4999962,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3597192,
+          "vout_v": 48.3469357,
+          "inductor_a": 3.4928383,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3721135,
+          "vout_v": 48.3465551,
+          "inductor_a": 3.4856806,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3845079,
+          "vout_v": 48.3461744,
+          "inductor_a": 3.4785231,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3969023,
+          "vout_v": 48.3457936,
+          "inductor_a": 3.4713657,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4092966,
+          "vout_v": 48.3454126,
+          "inductor_a": 3.4642087,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.421691,
+          "vout_v": 48.3450314,
+          "inductor_a": 3.4570518,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4340853,
+          "vout_v": 48.34465,
+          "inductor_a": 3.4498951,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4464797,
+          "vout_v": 48.3442685,
+          "inductor_a": 3.4427386,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.458874,
+          "vout_v": 48.3438868,
+          "inductor_a": 3.4355824,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4712684,
+          "vout_v": 48.343505,
+          "inductor_a": 3.4284263,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4836627,
+          "vout_v": 48.343123,
+          "inductor_a": 3.4212705,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4960571,
+          "vout_v": 48.3427408,
+          "inductor_a": 3.4141149,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5084515,
+          "vout_v": 48.3423585,
+          "inductor_a": 3.4069595,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5208458,
+          "vout_v": 48.3419759,
+          "inductor_a": 3.3998043,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5332402,
+          "vout_v": 48.3415933,
+          "inductor_a": 3.3926493,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5456345,
+          "vout_v": 48.3412104,
+          "inductor_a": 3.3854945,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5580289,
+          "vout_v": 48.3408274,
+          "inductor_a": 3.3783399,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5704232,
+          "vout_v": 48.3404443,
+          "inductor_a": 3.3711856,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5828176,
+          "vout_v": 48.340061,
+          "inductor_a": 3.3640314,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.595212,
+          "vout_v": 48.3396775,
+          "inductor_a": 3.3568775,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6076063,
+          "vout_v": 48.3392938,
+          "inductor_a": 3.3497238,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6200007,
+          "vout_v": 48.33891,
+          "inductor_a": 3.3425702,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.632395,
+          "vout_v": 48.338526,
+          "inductor_a": 3.3354169,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6447894,
+          "vout_v": 48.3381418,
+          "inductor_a": 3.3282638,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6571837,
+          "vout_v": 48.3377575,
+          "inductor_a": 3.321111,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6695781,
+          "vout_v": 48.337373,
+          "inductor_a": 3.3139583,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6819725,
+          "vout_v": 48.3369884,
+          "inductor_a": 3.3068058,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6943668,
+          "vout_v": 48.3366036,
+          "inductor_a": 3.2996536,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7067612,
+          "vout_v": 48.3362186,
+          "inductor_a": 3.2925016,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7191555,
+          "vout_v": 48.3358335,
+          "inductor_a": 3.2853498,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7315499,
+          "vout_v": 48.3354482,
+          "inductor_a": 3.2781981,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7439442,
+          "vout_v": 48.3350627,
+          "inductor_a": 3.2710467,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7563386,
+          "vout_v": 48.3346771,
+          "inductor_a": 3.2638956,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.768733,
+          "vout_v": 48.3342913,
+          "inductor_a": 3.2567446,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7811273,
+          "vout_v": 48.3339053,
+          "inductor_a": 3.2495938,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7935217,
+          "vout_v": 48.3335192,
+          "inductor_a": 3.2424433,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.805916,
+          "vout_v": 48.3331329,
+          "inductor_a": 3.2352929,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8183104,
+          "vout_v": 48.3327464,
+          "inductor_a": 3.2281428,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8307047,
+          "vout_v": 48.3323598,
+          "inductor_a": 3.2209929,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8430991,
+          "vout_v": 48.331973,
+          "inductor_a": 3.2138432,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8554935,
+          "vout_v": 48.3315861,
+          "inductor_a": 3.2066937,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8678878,
+          "vout_v": 48.331199,
+          "inductor_a": 3.1995444,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8802822,
+          "vout_v": 48.3308117,
+          "inductor_a": 3.1923954,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8926765,
+          "vout_v": 48.3304243,
+          "inductor_a": 3.1852465,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9050709,
+          "vout_v": 48.3300367,
+          "inductor_a": 3.1780979,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9174652,
+          "vout_v": 48.3296489,
+          "inductor_a": 3.1709494,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9298596,
+          "vout_v": 48.329261,
+          "inductor_a": 3.1638012,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9422539,
+          "vout_v": 48.3288729,
+          "inductor_a": 3.1566532,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9546483,
+          "vout_v": 48.3284846,
+          "inductor_a": 3.1495054,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9670427,
+          "vout_v": 48.3280962,
+          "inductor_a": 3.1423578,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.979437,
+          "vout_v": 48.3277076,
+          "inductor_a": 3.1352105,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9918314,
+          "vout_v": 48.3273188,
+          "inductor_a": 3.1280633,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0042257,
+          "vout_v": 48.3269299,
+          "inductor_a": 3.1209164,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0166201,
+          "vout_v": 48.3265408,
+          "inductor_a": 3.1137696,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0290144,
+          "vout_v": 48.3261516,
+          "inductor_a": 3.1066231,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0414088,
+          "vout_v": 48.3257621,
+          "inductor_a": 3.0994768,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0538032,
+          "vout_v": 48.3253726,
+          "inductor_a": 3.0923307,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0661975,
+          "vout_v": 48.3249828,
+          "inductor_a": 3.0851849,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0785919,
+          "vout_v": 48.3245929,
+          "inductor_a": 3.0780392,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0909862,
+          "vout_v": 48.3242028,
+          "inductor_a": 3.0708937,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1033806,
+          "vout_v": 48.3238126,
+          "inductor_a": 3.0637485,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1157749,
+          "vout_v": 48.3234222,
+          "inductor_a": 3.0566035,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1281693,
+          "vout_v": 48.3230316,
+          "inductor_a": 3.0494587,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1405637,
+          "vout_v": 48.3226409,
+          "inductor_a": 3.0423141,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.152958,
+          "vout_v": 48.32225,
+          "inductor_a": 3.0351697,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1653524,
+          "vout_v": 48.321859,
+          "inductor_a": 3.0280255,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1777467,
+          "vout_v": 48.3214677,
+          "inductor_a": 3.0208815,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1901411,
+          "vout_v": 48.3210763,
+          "inductor_a": 3.0137378,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2025354,
+          "vout_v": 48.3206848,
+          "inductor_a": 3.0065943,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2149298,
+          "vout_v": 48.3202931,
+          "inductor_a": 2.9994509,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2273242,
+          "vout_v": 48.3199012,
+          "inductor_a": 2.9923078,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2397185,
+          "vout_v": 48.3195092,
+          "inductor_a": 2.9851649,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2521129,
+          "vout_v": 48.3191169,
+          "inductor_a": 2.9780223,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2645072,
+          "vout_v": 48.3187246,
+          "inductor_a": 2.9708798,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2769016,
+          "vout_v": 48.318332,
+          "inductor_a": 2.9637375,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2892959,
+          "vout_v": 48.3179393,
+          "inductor_a": 2.9565955,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3016903,
+          "vout_v": 48.3175465,
+          "inductor_a": 2.9494537,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3140846,
+          "vout_v": 48.3171534,
+          "inductor_a": 2.9423121,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.326479,
+          "vout_v": 48.3167603,
+          "inductor_a": 2.9351707,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3388734,
+          "vout_v": 48.3163669,
+          "inductor_a": 2.9280295,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3512677,
+          "vout_v": 48.3159734,
+          "inductor_a": 2.9208885,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3636621,
+          "vout_v": 48.3155797,
+          "inductor_a": 2.9137477,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3760564,
+          "vout_v": 48.3151858,
+          "inductor_a": 2.9066072,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3884508,
+          "vout_v": 48.3147918,
+          "inductor_a": 2.8994669,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4008451,
+          "vout_v": 48.3143976,
+          "inductor_a": 2.8923268,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4132395,
+          "vout_v": 48.3140033,
+          "inductor_a": 2.8851869,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4256339,
+          "vout_v": 48.3136088,
+          "inductor_a": 2.8780472,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4380282,
+          "vout_v": 48.3132141,
+          "inductor_a": 2.8709077,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4504226,
+          "vout_v": 48.3128193,
+          "inductor_a": 2.8637684,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4628169,
+          "vout_v": 48.3124243,
+          "inductor_a": 2.8566294,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4752113,
+          "vout_v": 48.3120291,
+          "inductor_a": 2.8494906,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4876056,
+          "vout_v": 48.3116338,
+          "inductor_a": 2.8423519,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.5,
+          "vout_v": 48.3112383,
+          "inductor_a": 2.8352135,
+          "switch_on": false
+        }
+      ]
+    },
+    {
+      "case": "high_line",
+      "vin_v": 25.0,
+      "target_a": 1.5476190476190477,
+      "required_duty": 0.4933798240497707,
+      "max_time_step_ns": 12.459086465903303,
+      "vout_avg_v": 48.232218090795236,
+      "vout_pp_v": 0.20393517612134104,
+      "vout_max_v": 48.34149141120944,
+      "led_current_avg_a": 1.5476214616323298,
+      "led_power_avg_w": 74.28621555770228,
+      "inductor_current_avg_a": 3.05495851758831,
+      "inductor_current_peak_a": 3.4054632458322414,
+      "inductor_current_min_a": 2.7044847135416283,
+      "is_peak_v": 0.13758071513162254,
+      "input_power_avg_w": 76.37396293970775,
+      "model_loss_w": 2.087748154161584,
+      "r502_loss_w": 0.35927113178948294,
+      "energy_balance_relative_error": 1.011020090556199e-08,
+      "periodic_current_error_a": 1.3322676295501878e-15,
+      "periodic_voltage_error_v": 2.842170943040401e-14,
+      "current_target_relative_error": 1.5598239669336941e-06,
+      "reference_limit_margin_a": 1.9163189323855803,
+      "reference_ovp_margin_v": 6.218508588790563,
+      "waveform": [
+        {
+          "time_us": 0.0,
+          "vout_v": 48.1413724,
+          "inductor_a": 2.7044847,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0124591,
+          "vout_v": 48.1413338,
+          "inductor_a": 2.7115744,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0249182,
+          "vout_v": 48.1412953,
+          "inductor_a": 2.7186638,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0373773,
+          "vout_v": 48.1412567,
+          "inductor_a": 2.7257531,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0498363,
+          "vout_v": 48.1412182,
+          "inductor_a": 2.7328422,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0622954,
+          "vout_v": 48.1411796,
+          "inductor_a": 2.7399312,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0747545,
+          "vout_v": 48.1411411,
+          "inductor_a": 2.7470199,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0872136,
+          "vout_v": 48.1411025,
+          "inductor_a": 2.7541084,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0996727,
+          "vout_v": 48.141064,
+          "inductor_a": 2.7611968,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1121318,
+          "vout_v": 48.1410254,
+          "inductor_a": 2.768285,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1245909,
+          "vout_v": 48.1409869,
+          "inductor_a": 2.775373,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.13705,
+          "vout_v": 48.1409483,
+          "inductor_a": 2.7824608,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.149509,
+          "vout_v": 48.1409098,
+          "inductor_a": 2.7895484,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1619681,
+          "vout_v": 48.1408712,
+          "inductor_a": 2.7966358,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1744272,
+          "vout_v": 48.1408327,
+          "inductor_a": 2.8037231,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1868863,
+          "vout_v": 48.1407942,
+          "inductor_a": 2.8108101,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1993454,
+          "vout_v": 48.1407556,
+          "inductor_a": 2.817897,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2118045,
+          "vout_v": 48.1407171,
+          "inductor_a": 2.8249837,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2242636,
+          "vout_v": 48.1406785,
+          "inductor_a": 2.8320702,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2367226,
+          "vout_v": 48.14064,
+          "inductor_a": 2.8391565,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2491817,
+          "vout_v": 48.1406014,
+          "inductor_a": 2.8462427,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2616408,
+          "vout_v": 48.1405629,
+          "inductor_a": 2.8533286,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2740999,
+          "vout_v": 48.1405243,
+          "inductor_a": 2.8604144,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.286559,
+          "vout_v": 48.1404858,
+          "inductor_a": 2.8675,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2990181,
+          "vout_v": 48.1404472,
+          "inductor_a": 2.8745854,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3114772,
+          "vout_v": 48.1404087,
+          "inductor_a": 2.8816706,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3239362,
+          "vout_v": 48.1403701,
+          "inductor_a": 2.8887556,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3363953,
+          "vout_v": 48.1403316,
+          "inductor_a": 2.8958405,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3488544,
+          "vout_v": 48.140293,
+          "inductor_a": 2.9029251,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3613135,
+          "vout_v": 48.1402545,
+          "inductor_a": 2.9100096,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3737726,
+          "vout_v": 48.1402159,
+          "inductor_a": 2.9170939,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3862317,
+          "vout_v": 48.1401774,
+          "inductor_a": 2.924178,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3986908,
+          "vout_v": 48.1401388,
+          "inductor_a": 2.9312619,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4111499,
+          "vout_v": 48.1401003,
+          "inductor_a": 2.9383457,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4236089,
+          "vout_v": 48.1400617,
+          "inductor_a": 2.9454292,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.436068,
+          "vout_v": 48.1400232,
+          "inductor_a": 2.9525126,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4485271,
+          "vout_v": 48.1399847,
+          "inductor_a": 2.9595958,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4609862,
+          "vout_v": 48.1399461,
+          "inductor_a": 2.9666788,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4734453,
+          "vout_v": 48.1399076,
+          "inductor_a": 2.9737616,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4859044,
+          "vout_v": 48.139869,
+          "inductor_a": 2.9808442,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4983635,
+          "vout_v": 48.1398305,
+          "inductor_a": 2.9879266,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5108225,
+          "vout_v": 48.1397919,
+          "inductor_a": 2.9950089,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5232816,
+          "vout_v": 48.1397534,
+          "inductor_a": 3.0020909,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5357407,
+          "vout_v": 48.1397148,
+          "inductor_a": 3.0091728,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5481998,
+          "vout_v": 48.1396763,
+          "inductor_a": 3.0162545,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5606589,
+          "vout_v": 48.1396377,
+          "inductor_a": 3.023336,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.573118,
+          "vout_v": 48.1395992,
+          "inductor_a": 3.0304174,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5855771,
+          "vout_v": 48.1395606,
+          "inductor_a": 3.0374985,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5980362,
+          "vout_v": 48.1395221,
+          "inductor_a": 3.0445795,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6104952,
+          "vout_v": 48.1394835,
+          "inductor_a": 3.0516603,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6229543,
+          "vout_v": 48.139445,
+          "inductor_a": 3.0587408,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6354134,
+          "vout_v": 48.1394064,
+          "inductor_a": 3.0658212,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6478725,
+          "vout_v": 48.1393679,
+          "inductor_a": 3.0729015,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6603316,
+          "vout_v": 48.1393294,
+          "inductor_a": 3.0799815,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6727907,
+          "vout_v": 48.1392908,
+          "inductor_a": 3.0870613,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6852498,
+          "vout_v": 48.1392523,
+          "inductor_a": 3.094141,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6977088,
+          "vout_v": 48.1392137,
+          "inductor_a": 3.1012205,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7101679,
+          "vout_v": 48.1391752,
+          "inductor_a": 3.1082998,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.722627,
+          "vout_v": 48.1391366,
+          "inductor_a": 3.1153789,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7350861,
+          "vout_v": 48.1390981,
+          "inductor_a": 3.1224578,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7475452,
+          "vout_v": 48.1390595,
+          "inductor_a": 3.1295366,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7600043,
+          "vout_v": 48.139021,
+          "inductor_a": 3.1366151,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7724634,
+          "vout_v": 48.1389824,
+          "inductor_a": 3.1436935,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7849224,
+          "vout_v": 48.1389439,
+          "inductor_a": 3.1507717,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7973815,
+          "vout_v": 48.1389053,
+          "inductor_a": 3.1578497,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8098406,
+          "vout_v": 48.1388668,
+          "inductor_a": 3.1649275,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8222997,
+          "vout_v": 48.1388282,
+          "inductor_a": 3.1720051,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8347588,
+          "vout_v": 48.1387897,
+          "inductor_a": 3.1790826,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8472179,
+          "vout_v": 48.1387512,
+          "inductor_a": 3.1861598,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.859677,
+          "vout_v": 48.1387126,
+          "inductor_a": 3.1932369,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8721361,
+          "vout_v": 48.1386741,
+          "inductor_a": 3.2003138,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8845951,
+          "vout_v": 48.1386355,
+          "inductor_a": 3.2073905,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8970542,
+          "vout_v": 48.138597,
+          "inductor_a": 3.214467,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9095133,
+          "vout_v": 48.1385584,
+          "inductor_a": 3.2215434,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9219724,
+          "vout_v": 48.1385199,
+          "inductor_a": 3.2286195,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9344315,
+          "vout_v": 48.1384813,
+          "inductor_a": 3.2356955,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9468906,
+          "vout_v": 48.1384428,
+          "inductor_a": 3.2427713,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9593497,
+          "vout_v": 48.1384042,
+          "inductor_a": 3.2498469,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9718087,
+          "vout_v": 48.1383657,
+          "inductor_a": 3.2569223,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9842678,
+          "vout_v": 48.1383271,
+          "inductor_a": 3.2639975,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9967269,
+          "vout_v": 48.1382886,
+          "inductor_a": 3.2710725,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.009186,
+          "vout_v": 48.1382501,
+          "inductor_a": 3.2781474,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0216451,
+          "vout_v": 48.1382115,
+          "inductor_a": 3.2852221,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0341042,
+          "vout_v": 48.138173,
+          "inductor_a": 3.2922966,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0465633,
+          "vout_v": 48.1381344,
+          "inductor_a": 3.2993709,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0590223,
+          "vout_v": 48.1380959,
+          "inductor_a": 3.306445,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0714814,
+          "vout_v": 48.1380573,
+          "inductor_a": 3.3135189,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0839405,
+          "vout_v": 48.1380188,
+          "inductor_a": 3.3205927,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0963996,
+          "vout_v": 48.1379802,
+          "inductor_a": 3.3276662,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1088587,
+          "vout_v": 48.1379417,
+          "inductor_a": 3.3347396,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1213178,
+          "vout_v": 48.1379031,
+          "inductor_a": 3.3418128,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1337769,
+          "vout_v": 48.1378646,
+          "inductor_a": 3.3488858,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.146236,
+          "vout_v": 48.1378261,
+          "inductor_a": 3.3559586,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.158695,
+          "vout_v": 48.1377875,
+          "inductor_a": 3.3630313,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1711541,
+          "vout_v": 48.137749,
+          "inductor_a": 3.3701037,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1836132,
+          "vout_v": 48.1377104,
+          "inductor_a": 3.377176,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1960723,
+          "vout_v": 48.1376719,
+          "inductor_a": 3.3842481,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2085314,
+          "vout_v": 48.1376333,
+          "inductor_a": 3.39132,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2209905,
+          "vout_v": 48.1375948,
+          "inductor_a": 3.3983917,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2334496,
+          "vout_v": 48.1375562,
+          "inductor_a": 3.4054632,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2334496,
+          "vout_v": 48.3414914,
+          "inductor_a": 3.4054632,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.2458667,
+          "vout_v": 48.3411253,
+          "inductor_a": 3.3985806,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.2582839,
+          "vout_v": 48.340759,
+          "inductor_a": 3.3916981,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.270701,
+          "vout_v": 48.3403925,
+          "inductor_a": 3.3848159,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.2831182,
+          "vout_v": 48.3400259,
+          "inductor_a": 3.3779339,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.2955354,
+          "vout_v": 48.3396592,
+          "inductor_a": 3.371052,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3079525,
+          "vout_v": 48.3392922,
+          "inductor_a": 3.3641704,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3203697,
+          "vout_v": 48.3389252,
+          "inductor_a": 3.357289,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3327868,
+          "vout_v": 48.3385579,
+          "inductor_a": 3.3504077,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.345204,
+          "vout_v": 48.3381905,
+          "inductor_a": 3.3435267,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3576212,
+          "vout_v": 48.337823,
+          "inductor_a": 3.3366459,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3700383,
+          "vout_v": 48.3374552,
+          "inductor_a": 3.3297653,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3824555,
+          "vout_v": 48.3370874,
+          "inductor_a": 3.3228848,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.3948727,
+          "vout_v": 48.3367193,
+          "inductor_a": 3.3160046,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4072898,
+          "vout_v": 48.3363511,
+          "inductor_a": 3.3091246,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.419707,
+          "vout_v": 48.3359828,
+          "inductor_a": 3.3022448,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4321241,
+          "vout_v": 48.3356143,
+          "inductor_a": 3.2953652,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4445413,
+          "vout_v": 48.3352456,
+          "inductor_a": 3.2884858,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4569585,
+          "vout_v": 48.3348768,
+          "inductor_a": 3.2816066,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4693756,
+          "vout_v": 48.3345078,
+          "inductor_a": 3.2747276,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4817928,
+          "vout_v": 48.3341386,
+          "inductor_a": 3.2678488,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4942099,
+          "vout_v": 48.3337693,
+          "inductor_a": 3.2609702,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5066271,
+          "vout_v": 48.3333999,
+          "inductor_a": 3.2540919,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5190443,
+          "vout_v": 48.3330302,
+          "inductor_a": 3.2472137,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5314614,
+          "vout_v": 48.3326605,
+          "inductor_a": 3.2403357,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5438786,
+          "vout_v": 48.3322905,
+          "inductor_a": 3.2334579,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5562958,
+          "vout_v": 48.3319204,
+          "inductor_a": 3.2265804,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5687129,
+          "vout_v": 48.3315502,
+          "inductor_a": 3.219703,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5811301,
+          "vout_v": 48.3311798,
+          "inductor_a": 3.2128258,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5935472,
+          "vout_v": 48.3308092,
+          "inductor_a": 3.2059489,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6059644,
+          "vout_v": 48.3304384,
+          "inductor_a": 3.1990721,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6183816,
+          "vout_v": 48.3300676,
+          "inductor_a": 3.1921956,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6307987,
+          "vout_v": 48.3296965,
+          "inductor_a": 3.1853192,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6432159,
+          "vout_v": 48.3293253,
+          "inductor_a": 3.1784431,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.655633,
+          "vout_v": 48.3289539,
+          "inductor_a": 3.1715672,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6680502,
+          "vout_v": 48.3285824,
+          "inductor_a": 3.1646914,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6804674,
+          "vout_v": 48.3282107,
+          "inductor_a": 3.1578159,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6928845,
+          "vout_v": 48.3278389,
+          "inductor_a": 3.1509406,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7053017,
+          "vout_v": 48.3274669,
+          "inductor_a": 3.1440655,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7177188,
+          "vout_v": 48.3270947,
+          "inductor_a": 3.1371905,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.730136,
+          "vout_v": 48.3267224,
+          "inductor_a": 3.1303158,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7425532,
+          "vout_v": 48.3263499,
+          "inductor_a": 3.1234413,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7549703,
+          "vout_v": 48.3259773,
+          "inductor_a": 3.116567,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7673875,
+          "vout_v": 48.3256045,
+          "inductor_a": 3.1096929,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7798047,
+          "vout_v": 48.3252316,
+          "inductor_a": 3.102819,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7922218,
+          "vout_v": 48.3248585,
+          "inductor_a": 3.0959454,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.804639,
+          "vout_v": 48.3244852,
+          "inductor_a": 3.0890719,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8170561,
+          "vout_v": 48.3241118,
+          "inductor_a": 3.0821986,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8294733,
+          "vout_v": 48.3237382,
+          "inductor_a": 3.0753255,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8418905,
+          "vout_v": 48.3233644,
+          "inductor_a": 3.0684527,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8543076,
+          "vout_v": 48.3229905,
+          "inductor_a": 3.06158,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8667248,
+          "vout_v": 48.3226165,
+          "inductor_a": 3.0547075,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8791419,
+          "vout_v": 48.3222423,
+          "inductor_a": 3.0478353,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8915591,
+          "vout_v": 48.3218679,
+          "inductor_a": 3.0409632,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9039763,
+          "vout_v": 48.3214933,
+          "inductor_a": 3.0340914,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9163934,
+          "vout_v": 48.3211187,
+          "inductor_a": 3.0272197,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9288106,
+          "vout_v": 48.3207438,
+          "inductor_a": 3.0203483,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9412277,
+          "vout_v": 48.3203688,
+          "inductor_a": 3.0134771,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9536449,
+          "vout_v": 48.3199936,
+          "inductor_a": 3.0066061,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9660621,
+          "vout_v": 48.3196183,
+          "inductor_a": 2.9997352,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9784792,
+          "vout_v": 48.3192428,
+          "inductor_a": 2.9928646,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9908964,
+          "vout_v": 48.3188672,
+          "inductor_a": 2.9859942,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0033136,
+          "vout_v": 48.3184914,
+          "inductor_a": 2.979124,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0157307,
+          "vout_v": 48.3181154,
+          "inductor_a": 2.972254,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0281479,
+          "vout_v": 48.3177393,
+          "inductor_a": 2.9653842,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.040565,
+          "vout_v": 48.317363,
+          "inductor_a": 2.9585146,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0529822,
+          "vout_v": 48.3169866,
+          "inductor_a": 2.9516452,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0653994,
+          "vout_v": 48.31661,
+          "inductor_a": 2.9447761,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0778165,
+          "vout_v": 48.3162332,
+          "inductor_a": 2.9379071,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0902337,
+          "vout_v": 48.3158563,
+          "inductor_a": 2.9310383,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1026508,
+          "vout_v": 48.3154793,
+          "inductor_a": 2.9241698,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.115068,
+          "vout_v": 48.315102,
+          "inductor_a": 2.9173014,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1274852,
+          "vout_v": 48.3147247,
+          "inductor_a": 2.9104333,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1399023,
+          "vout_v": 48.3143471,
+          "inductor_a": 2.9035653,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1523195,
+          "vout_v": 48.3139694,
+          "inductor_a": 2.8966976,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1647366,
+          "vout_v": 48.3135916,
+          "inductor_a": 2.8898301,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1771538,
+          "vout_v": 48.3132136,
+          "inductor_a": 2.8829627,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.189571,
+          "vout_v": 48.3128354,
+          "inductor_a": 2.8760956,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2019881,
+          "vout_v": 48.312457,
+          "inductor_a": 2.8692287,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2144053,
+          "vout_v": 48.3120786,
+          "inductor_a": 2.862362,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2268225,
+          "vout_v": 48.3116999,
+          "inductor_a": 2.8554955,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2392396,
+          "vout_v": 48.3113211,
+          "inductor_a": 2.8486292,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2516568,
+          "vout_v": 48.3109421,
+          "inductor_a": 2.8417631,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2640739,
+          "vout_v": 48.310563,
+          "inductor_a": 2.8348972,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2764911,
+          "vout_v": 48.3101837,
+          "inductor_a": 2.8280316,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2889083,
+          "vout_v": 48.3098043,
+          "inductor_a": 2.8211661,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3013254,
+          "vout_v": 48.3094247,
+          "inductor_a": 2.8143008,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3137426,
+          "vout_v": 48.3090449,
+          "inductor_a": 2.8074358,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3261597,
+          "vout_v": 48.308665,
+          "inductor_a": 2.8005709,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3385769,
+          "vout_v": 48.308285,
+          "inductor_a": 2.7937063,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3509941,
+          "vout_v": 48.3079047,
+          "inductor_a": 2.7868418,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3634112,
+          "vout_v": 48.3075243,
+          "inductor_a": 2.7799776,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3758284,
+          "vout_v": 48.3071438,
+          "inductor_a": 2.7731136,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3882455,
+          "vout_v": 48.3067631,
+          "inductor_a": 2.7662498,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4006627,
+          "vout_v": 48.3063822,
+          "inductor_a": 2.7593862,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4130799,
+          "vout_v": 48.3060012,
+          "inductor_a": 2.7525228,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.425497,
+          "vout_v": 48.30562,
+          "inductor_a": 2.7456596,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4379142,
+          "vout_v": 48.3052387,
+          "inductor_a": 2.7387966,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4503314,
+          "vout_v": 48.3048572,
+          "inductor_a": 2.7319338,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4627485,
+          "vout_v": 48.3044756,
+          "inductor_a": 2.7250712,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4751657,
+          "vout_v": 48.3040937,
+          "inductor_a": 2.7182088,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4875828,
+          "vout_v": 48.3037118,
+          "inductor_a": 2.7113467,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.5,
+          "vout_v": 48.3033297,
+          "inductor_a": 2.7044847,
+          "switch_on": false
+        }
+      ]
+    },
+    {
+      "case": "low_line_tolerance",
+      "vin_v": 21.6,
+      "target_a": 1.6271164596523449,
+      "required_duty": 0.5644854759797453,
+      "max_time_step_ns": 12.488616725215605,
+      "vout_avg_v": 48.24168129698799,
+      "vout_pp_v": 0.24436991377262274,
+      "vout_max_v": 48.386272080499936,
+      "led_current_avg_a": 1.6271182979462504,
+      "led_power_avg_w": 78.10218158226479,
+      "inductor_current_avg_a": 3.73626255645265,
+      "inductor_current_peak_a": 4.081074120516749,
+      "inductor_current_min_a": 3.391388354718889,
+      "is_peak_v": 0.16487539446887664,
+      "input_power_avg_w": 80.70327121937724,
+      "model_loss_w": 2.6010904125325207,
+      "r502_loss_w": 0.39315791167308317,
+      "energy_balance_relative_error": 9.608285479973675e-09,
+      "periodic_current_error_a": 1.2434497875801753e-14,
+      "periodic_voltage_error_v": 4.263256414560601e-14,
+      "current_target_relative_error": 1.1297863128589912e-06,
+      "reference_limit_margin_a": 1.240708057701073,
+      "reference_ovp_margin_v": 6.173727919500067,
+      "waveform": [
+        {
+          "time_us": 0.0,
+          "vout_v": 48.1464917,
+          "inductor_a": 3.3913884,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0124886,
+          "vout_v": 48.146451,
+          "inductor_a": 3.3975007,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0249772,
+          "vout_v": 48.1464104,
+          "inductor_a": 3.4036129,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0374659,
+          "vout_v": 48.1463698,
+          "inductor_a": 3.409725,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0499545,
+          "vout_v": 48.1463292,
+          "inductor_a": 3.4158369,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0624431,
+          "vout_v": 48.1462886,
+          "inductor_a": 3.4219486,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0749317,
+          "vout_v": 48.146248,
+          "inductor_a": 3.4280602,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0874203,
+          "vout_v": 48.1462073,
+          "inductor_a": 3.4341716,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.0999089,
+          "vout_v": 48.1461667,
+          "inductor_a": 3.4402828,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1123976,
+          "vout_v": 48.1461261,
+          "inductor_a": 3.4463939,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1248862,
+          "vout_v": 48.1460855,
+          "inductor_a": 3.4525048,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1373748,
+          "vout_v": 48.1460449,
+          "inductor_a": 3.4586156,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1498634,
+          "vout_v": 48.1460043,
+          "inductor_a": 3.4647262,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.162352,
+          "vout_v": 48.1459636,
+          "inductor_a": 3.4708366,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1748406,
+          "vout_v": 48.145923,
+          "inductor_a": 3.4769469,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1873293,
+          "vout_v": 48.1458824,
+          "inductor_a": 3.4830571,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.1998179,
+          "vout_v": 48.1458418,
+          "inductor_a": 3.489167,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2123065,
+          "vout_v": 48.1458012,
+          "inductor_a": 3.4952768,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2247951,
+          "vout_v": 48.1457606,
+          "inductor_a": 3.5013865,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2372837,
+          "vout_v": 48.1457199,
+          "inductor_a": 3.507496,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2497723,
+          "vout_v": 48.1456793,
+          "inductor_a": 3.5136053,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.262261,
+          "vout_v": 48.1456387,
+          "inductor_a": 3.5197145,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2747496,
+          "vout_v": 48.1455981,
+          "inductor_a": 3.5258235,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2872382,
+          "vout_v": 48.1455575,
+          "inductor_a": 3.5319323,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.2997268,
+          "vout_v": 48.1455169,
+          "inductor_a": 3.538041,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3122154,
+          "vout_v": 48.1454762,
+          "inductor_a": 3.5441495,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.324704,
+          "vout_v": 48.1454356,
+          "inductor_a": 3.5502579,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3371927,
+          "vout_v": 48.145395,
+          "inductor_a": 3.5563661,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3496813,
+          "vout_v": 48.1453544,
+          "inductor_a": 3.5624742,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3621699,
+          "vout_v": 48.1453138,
+          "inductor_a": 3.568582,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3746585,
+          "vout_v": 48.1452732,
+          "inductor_a": 3.5746898,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3871471,
+          "vout_v": 48.1452326,
+          "inductor_a": 3.5807973,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.3996357,
+          "vout_v": 48.1451919,
+          "inductor_a": 3.5869048,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4121244,
+          "vout_v": 48.1451513,
+          "inductor_a": 3.593012,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.424613,
+          "vout_v": 48.1451107,
+          "inductor_a": 3.5991191,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4371016,
+          "vout_v": 48.1450701,
+          "inductor_a": 3.605226,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4495902,
+          "vout_v": 48.1450295,
+          "inductor_a": 3.6113328,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4620788,
+          "vout_v": 48.1449889,
+          "inductor_a": 3.6174394,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4745674,
+          "vout_v": 48.1449482,
+          "inductor_a": 3.6235458,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4870561,
+          "vout_v": 48.1449076,
+          "inductor_a": 3.6296521,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.4995447,
+          "vout_v": 48.144867,
+          "inductor_a": 3.6357583,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5120333,
+          "vout_v": 48.1448264,
+          "inductor_a": 3.6418642,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5245219,
+          "vout_v": 48.1447858,
+          "inductor_a": 3.64797,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5370105,
+          "vout_v": 48.1447452,
+          "inductor_a": 3.6540757,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5494991,
+          "vout_v": 48.1447045,
+          "inductor_a": 3.6601812,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5619878,
+          "vout_v": 48.1446639,
+          "inductor_a": 3.6662865,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5744764,
+          "vout_v": 48.1446233,
+          "inductor_a": 3.6723917,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.586965,
+          "vout_v": 48.1445827,
+          "inductor_a": 3.6784967,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.5994536,
+          "vout_v": 48.1445421,
+          "inductor_a": 3.6846015,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6119422,
+          "vout_v": 48.1445015,
+          "inductor_a": 3.6907062,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6244308,
+          "vout_v": 48.1444609,
+          "inductor_a": 3.6968108,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6369195,
+          "vout_v": 48.1444202,
+          "inductor_a": 3.7029151,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6494081,
+          "vout_v": 48.1443796,
+          "inductor_a": 3.7090193,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6618967,
+          "vout_v": 48.144339,
+          "inductor_a": 3.7151234,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6743853,
+          "vout_v": 48.1442984,
+          "inductor_a": 3.7212273,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6868739,
+          "vout_v": 48.1442578,
+          "inductor_a": 3.727331,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.6993625,
+          "vout_v": 48.1442172,
+          "inductor_a": 3.7334346,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7118512,
+          "vout_v": 48.1441766,
+          "inductor_a": 3.739538,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7243398,
+          "vout_v": 48.1441359,
+          "inductor_a": 3.7456412,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7368284,
+          "vout_v": 48.1440953,
+          "inductor_a": 3.7517443,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.749317,
+          "vout_v": 48.1440547,
+          "inductor_a": 3.7578473,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7618056,
+          "vout_v": 48.1440141,
+          "inductor_a": 3.76395,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7742942,
+          "vout_v": 48.1439735,
+          "inductor_a": 3.7700527,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7867829,
+          "vout_v": 48.1439329,
+          "inductor_a": 3.7761551,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.7992715,
+          "vout_v": 48.1438922,
+          "inductor_a": 3.7822574,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8117601,
+          "vout_v": 48.1438516,
+          "inductor_a": 3.7883595,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8242487,
+          "vout_v": 48.143811,
+          "inductor_a": 3.7944615,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8367373,
+          "vout_v": 48.1437704,
+          "inductor_a": 3.8005633,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8492259,
+          "vout_v": 48.1437298,
+          "inductor_a": 3.806665,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8617146,
+          "vout_v": 48.1436892,
+          "inductor_a": 3.8127665,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8742032,
+          "vout_v": 48.1436486,
+          "inductor_a": 3.8188678,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8866918,
+          "vout_v": 48.1436079,
+          "inductor_a": 3.824969,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.8991804,
+          "vout_v": 48.1435673,
+          "inductor_a": 3.83107,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.911669,
+          "vout_v": 48.1435267,
+          "inductor_a": 3.8371708,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9241576,
+          "vout_v": 48.1434861,
+          "inductor_a": 3.8432715,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9366463,
+          "vout_v": 48.1434455,
+          "inductor_a": 3.8493721,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9491349,
+          "vout_v": 48.1434049,
+          "inductor_a": 3.8554725,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9616235,
+          "vout_v": 48.1433643,
+          "inductor_a": 3.8615727,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9741121,
+          "vout_v": 48.1433236,
+          "inductor_a": 3.8676727,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9866007,
+          "vout_v": 48.143283,
+          "inductor_a": 3.8737726,
+          "switch_on": true
+        },
+        {
+          "time_us": 0.9990893,
+          "vout_v": 48.1432424,
+          "inductor_a": 3.8798724,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.011578,
+          "vout_v": 48.1432018,
+          "inductor_a": 3.8859719,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0240666,
+          "vout_v": 48.1431612,
+          "inductor_a": 3.8920714,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0365552,
+          "vout_v": 48.1431206,
+          "inductor_a": 3.8981706,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0490438,
+          "vout_v": 48.14308,
+          "inductor_a": 3.9042697,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0615324,
+          "vout_v": 48.1430393,
+          "inductor_a": 3.9103687,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.074021,
+          "vout_v": 48.1429987,
+          "inductor_a": 3.9164674,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0865097,
+          "vout_v": 48.1429581,
+          "inductor_a": 3.9225661,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.0989983,
+          "vout_v": 48.1429175,
+          "inductor_a": 3.9286645,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1114869,
+          "vout_v": 48.1428769,
+          "inductor_a": 3.9347628,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1239755,
+          "vout_v": 48.1428363,
+          "inductor_a": 3.940861,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1364641,
+          "vout_v": 48.1427957,
+          "inductor_a": 3.9469589,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1489527,
+          "vout_v": 48.142755,
+          "inductor_a": 3.9530568,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1614414,
+          "vout_v": 48.1427144,
+          "inductor_a": 3.9591544,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.17393,
+          "vout_v": 48.1426738,
+          "inductor_a": 3.9652519,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1864186,
+          "vout_v": 48.1426332,
+          "inductor_a": 3.9713493,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.1989072,
+          "vout_v": 48.1425926,
+          "inductor_a": 3.9774464,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2113958,
+          "vout_v": 48.142552,
+          "inductor_a": 3.9835435,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2238844,
+          "vout_v": 48.1425114,
+          "inductor_a": 3.9896403,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2363731,
+          "vout_v": 48.1424708,
+          "inductor_a": 3.995737,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2488617,
+          "vout_v": 48.1424301,
+          "inductor_a": 4.0018336,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2613503,
+          "vout_v": 48.1423895,
+          "inductor_a": 4.00793,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2738389,
+          "vout_v": 48.1423489,
+          "inductor_a": 4.0140262,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2863275,
+          "vout_v": 48.1423083,
+          "inductor_a": 4.0201222,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.2988161,
+          "vout_v": 48.1422677,
+          "inductor_a": 4.0262182,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3113048,
+          "vout_v": 48.1422271,
+          "inductor_a": 4.0323139,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3237934,
+          "vout_v": 48.1421865,
+          "inductor_a": 4.0384095,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.336282,
+          "vout_v": 48.1421458,
+          "inductor_a": 4.0445049,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3487706,
+          "vout_v": 48.1421052,
+          "inductor_a": 4.0506002,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3612592,
+          "vout_v": 48.1420646,
+          "inductor_a": 4.0566953,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3737478,
+          "vout_v": 48.142024,
+          "inductor_a": 4.0627902,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3862365,
+          "vout_v": 48.1419834,
+          "inductor_a": 4.068885,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.3987251,
+          "vout_v": 48.1419428,
+          "inductor_a": 4.0749797,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.4112137,
+          "vout_v": 48.1419022,
+          "inductor_a": 4.0810741,
+          "switch_on": true
+        },
+        {
+          "time_us": 1.4112137,
+          "vout_v": 48.3862721,
+          "inductor_a": 4.0810741,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4235863,
+          "vout_v": 48.3858628,
+          "inductor_a": 4.0732268,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4359588,
+          "vout_v": 48.3854533,
+          "inductor_a": 4.0653797,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4483314,
+          "vout_v": 48.3850436,
+          "inductor_a": 4.0575329,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.460704,
+          "vout_v": 48.3846338,
+          "inductor_a": 4.0496862,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4730765,
+          "vout_v": 48.3842238,
+          "inductor_a": 4.0418398,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4854491,
+          "vout_v": 48.3838136,
+          "inductor_a": 4.0339936,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.4978217,
+          "vout_v": 48.3834032,
+          "inductor_a": 4.0261477,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5101943,
+          "vout_v": 48.3829926,
+          "inductor_a": 4.018302,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5225668,
+          "vout_v": 48.3825819,
+          "inductor_a": 4.0104565,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5349394,
+          "vout_v": 48.382171,
+          "inductor_a": 4.0026112,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.547312,
+          "vout_v": 48.3817599,
+          "inductor_a": 3.9947662,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5596846,
+          "vout_v": 48.3813486,
+          "inductor_a": 3.9869214,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5720571,
+          "vout_v": 48.3809371,
+          "inductor_a": 3.9790768,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5844297,
+          "vout_v": 48.3805255,
+          "inductor_a": 3.9712324,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.5968023,
+          "vout_v": 48.3801137,
+          "inductor_a": 3.9633883,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6091748,
+          "vout_v": 48.3797017,
+          "inductor_a": 3.9555444,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6215474,
+          "vout_v": 48.3792895,
+          "inductor_a": 3.9477008,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.63392,
+          "vout_v": 48.3788771,
+          "inductor_a": 3.9398573,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6462926,
+          "vout_v": 48.3784646,
+          "inductor_a": 3.9320141,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6586651,
+          "vout_v": 48.3780518,
+          "inductor_a": 3.9241711,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6710377,
+          "vout_v": 48.3776389,
+          "inductor_a": 3.9163284,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6834103,
+          "vout_v": 48.3772258,
+          "inductor_a": 3.9084859,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.6957828,
+          "vout_v": 48.3768126,
+          "inductor_a": 3.9006436,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7081554,
+          "vout_v": 48.3763991,
+          "inductor_a": 3.8928015,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.720528,
+          "vout_v": 48.3759855,
+          "inductor_a": 3.8849597,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7329006,
+          "vout_v": 48.3755717,
+          "inductor_a": 3.8771181,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7452731,
+          "vout_v": 48.3751577,
+          "inductor_a": 3.8692767,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7576457,
+          "vout_v": 48.3747435,
+          "inductor_a": 3.8614356,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7700183,
+          "vout_v": 48.3743292,
+          "inductor_a": 3.8535947,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7823908,
+          "vout_v": 48.3739147,
+          "inductor_a": 3.845754,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.7947634,
+          "vout_v": 48.3735,
+          "inductor_a": 3.8379135,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.807136,
+          "vout_v": 48.3730851,
+          "inductor_a": 3.8300733,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8195086,
+          "vout_v": 48.37267,
+          "inductor_a": 3.8222333,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8318811,
+          "vout_v": 48.3722548,
+          "inductor_a": 3.8143935,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8442537,
+          "vout_v": 48.3718393,
+          "inductor_a": 3.806554,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8566263,
+          "vout_v": 48.3714237,
+          "inductor_a": 3.7987147,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8689988,
+          "vout_v": 48.3710079,
+          "inductor_a": 3.7908756,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.8813714,
+          "vout_v": 48.370592,
+          "inductor_a": 3.7830368,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.893744,
+          "vout_v": 48.3701758,
+          "inductor_a": 3.7751981,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9061166,
+          "vout_v": 48.3697595,
+          "inductor_a": 3.7673598,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9184891,
+          "vout_v": 48.369343,
+          "inductor_a": 3.7595216,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9308617,
+          "vout_v": 48.3689263,
+          "inductor_a": 3.7516837,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9432343,
+          "vout_v": 48.3685094,
+          "inductor_a": 3.743846,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9556068,
+          "vout_v": 48.3680924,
+          "inductor_a": 3.7360085,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9679794,
+          "vout_v": 48.3676751,
+          "inductor_a": 3.7281713,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.980352,
+          "vout_v": 48.3672577,
+          "inductor_a": 3.7203343,
+          "switch_on": false
+        },
+        {
+          "time_us": 1.9927246,
+          "vout_v": 48.3668401,
+          "inductor_a": 3.7124975,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0050971,
+          "vout_v": 48.3664224,
+          "inductor_a": 3.7046609,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0174697,
+          "vout_v": 48.3660044,
+          "inductor_a": 3.6968246,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0298423,
+          "vout_v": 48.3655863,
+          "inductor_a": 3.6889885,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0422148,
+          "vout_v": 48.365168,
+          "inductor_a": 3.6811527,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0545874,
+          "vout_v": 48.3647495,
+          "inductor_a": 3.673317,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.06696,
+          "vout_v": 48.3643308,
+          "inductor_a": 3.6654816,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0793326,
+          "vout_v": 48.363912,
+          "inductor_a": 3.6576465,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.0917051,
+          "vout_v": 48.3634929,
+          "inductor_a": 3.6498115,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1040777,
+          "vout_v": 48.3630737,
+          "inductor_a": 3.6419768,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1164503,
+          "vout_v": 48.3626543,
+          "inductor_a": 3.6341424,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1288228,
+          "vout_v": 48.3622348,
+          "inductor_a": 3.6263081,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1411954,
+          "vout_v": 48.361815,
+          "inductor_a": 3.6184741,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.153568,
+          "vout_v": 48.3613951,
+          "inductor_a": 3.6106403,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1659406,
+          "vout_v": 48.360975,
+          "inductor_a": 3.6028068,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1783131,
+          "vout_v": 48.3605547,
+          "inductor_a": 3.5949735,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.1906857,
+          "vout_v": 48.3601342,
+          "inductor_a": 3.5871404,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2030583,
+          "vout_v": 48.3597135,
+          "inductor_a": 3.5793075,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2154309,
+          "vout_v": 48.3592927,
+          "inductor_a": 3.5714749,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2278034,
+          "vout_v": 48.3588717,
+          "inductor_a": 3.5636425,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.240176,
+          "vout_v": 48.3584505,
+          "inductor_a": 3.5558103,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2525486,
+          "vout_v": 48.3580292,
+          "inductor_a": 3.5479784,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2649211,
+          "vout_v": 48.3576076,
+          "inductor_a": 3.5401467,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2772937,
+          "vout_v": 48.3571859,
+          "inductor_a": 3.5323152,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.2896663,
+          "vout_v": 48.356764,
+          "inductor_a": 3.524484,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3020389,
+          "vout_v": 48.3563419,
+          "inductor_a": 3.516653,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3144114,
+          "vout_v": 48.3559196,
+          "inductor_a": 3.5088222,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.326784,
+          "vout_v": 48.3554972,
+          "inductor_a": 3.5009916,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3391566,
+          "vout_v": 48.3550745,
+          "inductor_a": 3.4931613,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3515291,
+          "vout_v": 48.3546517,
+          "inductor_a": 3.4853313,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3639017,
+          "vout_v": 48.3542287,
+          "inductor_a": 3.4775014,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3762743,
+          "vout_v": 48.3538056,
+          "inductor_a": 3.4696718,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.3886469,
+          "vout_v": 48.3533822,
+          "inductor_a": 3.4618424,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4010194,
+          "vout_v": 48.3529587,
+          "inductor_a": 3.4540132,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.413392,
+          "vout_v": 48.352535,
+          "inductor_a": 3.4461843,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4257646,
+          "vout_v": 48.3521111,
+          "inductor_a": 3.4383556,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4381371,
+          "vout_v": 48.351687,
+          "inductor_a": 3.4305272,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4505097,
+          "vout_v": 48.3512628,
+          "inductor_a": 3.4226989,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4628823,
+          "vout_v": 48.3508384,
+          "inductor_a": 3.4148709,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4752549,
+          "vout_v": 48.3504138,
+          "inductor_a": 3.4070432,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.4876274,
+          "vout_v": 48.349989,
+          "inductor_a": 3.3992157,
+          "switch_on": false
+        },
+        {
+          "time_us": 2.5,
+          "vout_v": 48.349564,
+          "inductor_a": 3.3913884,
+          "switch_on": false
+        }
+      ]
+    }
+  ]
+}

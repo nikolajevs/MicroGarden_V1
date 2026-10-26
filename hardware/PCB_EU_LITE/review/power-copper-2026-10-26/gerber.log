@@ -1,0 +1,10 @@
+15:07:12: Error: schema file '/usr/share/kicad/schemas/api.v1.schema.json' not found
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-F_Cu.gtl'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-In1_Cu.g1'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-In2_Cu.g2'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-B_Cu.gbl'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-F_Silkscreen.gto'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-B_Silkscreen.gbo'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-F_Mask.gts'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-B_Mask.gbs'.
+Plotted to '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-Edge_Cuts.gm1'.

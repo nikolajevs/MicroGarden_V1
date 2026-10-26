@@ -1,0 +1,3 @@
+15:06:50: Error: schema file '/usr/share/kicad/schemas/api.v1.schema.json' not found
+Found 0 violations
+Saved ERC Report to /workspace/scratch/03b1c31685bf/complete-verification/checks/erc.json

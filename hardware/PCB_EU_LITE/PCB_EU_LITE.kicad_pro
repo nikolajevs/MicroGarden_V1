@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "filename": "PCB_EU_LITE.kicad_pro",
+    "version": 3
+  },
+  "board": {
+    "design_settings": {
+      "drc_exclusions": [],
+      "rules": {
+        "min_clearance": 0.2,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_hole_to_hole": 0.25,
+        "min_track_width": 0.2,
+        "min_via_diameter": 0.5,
+        "min_via_annular_width": 0.1,
+        "min_through_hole_diameter": 0.3,
+        "min_text_height": 0.8,
+        "min_text_thickness": 0.15,
+        "min_silk_clearance": 0.15
+      }
+    }
+  },
+  "erc": {
+    "erc_exclusions": [],
+    "meta": {
+      "version": 0
+    }
+  },
+  "schematic": {
+    "meta": {
+      "version": 1
+    }
+  },
+  "text_variables": {
+    "DESIGN_STAGE": "SCHEMATIC_DRAFT"
+  }
+}
