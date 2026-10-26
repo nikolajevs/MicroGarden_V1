@@ -1,0 +1,4 @@
+15:07:13: Error: schema file '/usr/share/kicad/schemas/api.v1.schema.json' not found
+Created file '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-PTH.drl'
+Created file '/workspace/scratch/03b1c31685bf/complete-verification/gerber/PCB_EU_LITE-NPTH.drl'
+Done.

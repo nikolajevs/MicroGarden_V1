@@ -1,0 +1,1242 @@
+{
+  "stage": "ROUTED_DRAFT",
+  "date": "2026-10-25",
+  "board_mm": [
+    100,
+    100
+  ],
+  "copper_layers": 4,
+  "courtyard_gap_mm": 0.15,
+  "opposite_side_tht_joint_guard_mm": 0.5,
+  "top_side_required": [
+    "C101",
+    "C102",
+    "C110",
+    "C508",
+    "D901",
+    "J101",
+    "J201",
+    "J301",
+    "J401",
+    "J403",
+    "J411",
+    "J421",
+    "J501",
+    "J701",
+    "J702",
+    "L101",
+    "L201",
+    "L501",
+    "Q102",
+    "SW201",
+    "SW202",
+    "J502",
+    "J503"
+  ],
+  "placements": {
+    "BT301": {
+      "x": 78.0,
+      "y": 80.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "C101": {
+      "x": 27.4988,
+      "y": 54.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C102": {
+      "x": 41.4988,
+      "y": 54.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C103": {
+      "x": 19.5,
+      "y": 62.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "C104": {
+      "x": 18.5,
+      "y": 57.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C105": {
+      "x": 16.5,
+      "y": 66.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C106": {
+      "x": 26.5,
+      "y": 61.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C107": {
+      "x": 28.25,
+      "y": 70.5,
+      "rotation": 270.0,
+      "side": "B"
+    },
+    "C110": {
+      "x": 36.0,
+      "y": 80.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C111": {
+      "x": 20.5,
+      "y": 80.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C112": {
+      "x": 47,
+      "y": 73.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C115": {
+      "x": 16,
+      "y": 44,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C201": {
+      "x": 34.0,
+      "y": 38.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "C202": {
+      "x": 45.0,
+      "y": 34.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "C203": {
+      "x": 40.7,
+      "y": 31.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C204": {
+      "x": 33.8,
+      "y": 31.5,
+      "rotation": 180.0,
+      "side": "F"
+    },
+    "C205": {
+      "x": 31.0,
+      "y": 36.5,
+      "rotation": 90,
+      "side": "F"
+    },
+    "C206": {
+      "x": 17.0,
+      "y": 10.5,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "C207": {
+      "x": 14.0,
+      "y": 12.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C208": {
+      "x": 14.0,
+      "y": 10.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C209": {
+      "x": 12.0,
+      "y": 14.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C301": {
+      "x": 56.2,
+      "y": 54.2,
+      "rotation": 90.0,
+      "side": "B"
+    },
+    "C302": {
+      "x": 59.7,
+      "y": 54.2,
+      "rotation": 90.0,
+      "side": "B"
+    },
+    "C303": {
+      "x": 58.5,
+      "y": 67.5,
+      "rotation": 0.0,
+      "side": "B"
+    },
+    "C304": {
+      "x": 6.0,
+      "y": 33.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "C305": {
+      "x": 6.0,
+      "y": 37.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "C401": {
+      "x": 43.5,
+      "y": 73.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "C403": {
+      "x": 34.0,
+      "y": 85.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "C501": {
+      "x": 62.5,
+      "y": 36.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C502": {
+      "x": 67.5,
+      "y": 44.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C503": {
+      "x": 63.5,
+      "y": 55.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "C504": {
+      "x": 76.0,
+      "y": 51.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C505": {
+      "x": 70.0,
+      "y": 55.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C506": {
+      "x": 63.0,
+      "y": 47.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C507": {
+      "x": 58.5,
+      "y": 45.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C508": {
+      "x": 76.0,
+      "y": 70.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C509": {
+      "x": 54.0,
+      "y": 48.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C510": {
+      "x": 55.0,
+      "y": 52.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C511": {
+      "x": 79.0,
+      "y": 55.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "C512": {
+      "x": 55.0,
+      "y": 56.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C513": {
+      "x": 57.0,
+      "y": 62.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C514": {
+      "x": 58.0,
+      "y": 65.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "C515": {
+      "x": 76.0,
+      "y": 35.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "D101": {
+      "x": 55.0,
+      "y": 40.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "D102": {
+      "x": 22.45,
+      "y": 74.9,
+      "rotation": 180.0,
+      "side": "F"
+    },
+    "D103": {
+      "x": 13.0,
+      "y": 57.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "D501": {
+      "x": 67.5,
+      "y": 38.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "D701": {
+      "x": 64.5,
+      "y": 83.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "D901": {
+      "x": 18,
+      "y": 90,
+      "rotation": 0,
+      "side": "F"
+    },
+    "F101": {
+      "x": 23.5,
+      "y": 49.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "F102": {
+      "x": 48.0,
+      "y": 86.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "F103": {
+      "x": 57.5,
+      "y": 34.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "F104": {
+      "x": 47.5,
+      "y": 68.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "F105": {
+      "x": 75,
+      "y": 85,
+      "rotation": 0,
+      "side": "F"
+    },
+    "F401": {
+      "x": 16.0,
+      "y": 21.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "J101": {
+      "x": 6.0,
+      "y": 46.0,
+      "rotation": -90,
+      "side": "F"
+    },
+    "J201": {
+      "x": 4.0,
+      "y": 9.75,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "J301": {
+      "x": 16.5,
+      "y": 27.5,
+      "rotation": -90,
+      "side": "F"
+    },
+    "J401": {
+      "x": 90.0,
+      "y": 18.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "J403": {
+      "x": 33.0,
+      "y": 94.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "J411": {
+      "x": 88.2,
+      "y": 32.5,
+      "rotation": 90,
+      "side": "F"
+    },
+    "J421": {
+      "x": 88.2,
+      "y": 46.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "J501": {
+      "x": 94.0,
+      "y": 61.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "J701": {
+      "x": 46.0,
+      "y": 94.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "J702": {
+      "x": 59.0,
+      "y": 94.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "L101": {
+      "x": 35.0,
+      "y": 67.2,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "L201": {
+      "x": 37.3,
+      "y": 32.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "L501": {
+      "x": 65.0,
+      "y": 22.0,
+      "rotation": -90,
+      "side": "F"
+    },
+    "Q102": {
+      "x": 15.5,
+      "y": 53.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "Q411": {
+      "x": 11.5,
+      "y": 25.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "Q421": {
+      "x": 28.5,
+      "y": 39.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "Q501": {
+      "x": 81.96,
+      "y": 42.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "Q701": {
+      "x": 48,
+      "y": 78,
+      "rotation": 0,
+      "side": "F"
+    },
+    "Q702": {
+      "x": 49.0,
+      "y": 82.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "Q703": {
+      "x": 55.0,
+      "y": 84.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "Q704": {
+      "x": 59.0,
+      "y": 82.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "Q901": {
+      "x": 20.0,
+      "y": 80.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "Q902": {
+      "x": 25.5,
+      "y": 80.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "Q903": {
+      "x": 31.0,
+      "y": 80.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R101": {
+      "x": 53.0,
+      "y": 74.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R102": {
+      "x": 24.0,
+      "y": 63.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R103": {
+      "x": 21.5,
+      "y": 85.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R104": {
+      "x": 20.0,
+      "y": 65.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R105": {
+      "x": 25.0,
+      "y": 65.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R106": {
+      "x": 30.0,
+      "y": 65.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R107": {
+      "x": 35.0,
+      "y": 65.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R108": {
+      "x": 11.5,
+      "y": 67.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R111": {
+      "x": 20,
+      "y": 51.7,
+      "rotation": 90,
+      "side": "F"
+    },
+    "R112": {
+      "x": 22.4,
+      "y": 55.5,
+      "rotation": 90,
+      "side": "F"
+    },
+    "R201": {
+      "x": 44.0,
+      "y": 39.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R202": {
+      "x": 44.0,
+      "y": 37.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R203": {
+      "x": 44.0,
+      "y": 41.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R204": {
+      "x": 12.0,
+      "y": 17.5,
+      "rotation": 90,
+      "side": "F"
+    },
+    "R205": {
+      "x": 42.0,
+      "y": 26.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R206": {
+      "x": 42.0,
+      "y": 22.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R207": {
+      "x": 42.0,
+      "y": 19.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R301": {
+      "x": 1.5,
+      "y": 62.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R302": {
+      "x": 8.0,
+      "y": 82.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R303": {
+      "x": 5.0,
+      "y": 92.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R304": {
+      "x": 2.5,
+      "y": 94.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R305": {
+      "x": 11.0,
+      "y": 42.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R306": {
+      "x": 16.0,
+      "y": 42.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R307": {
+      "x": 21.0,
+      "y": 42.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R308": {
+      "x": 26.0,
+      "y": 42.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R309": {
+      "x": 31.0,
+      "y": 42.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R401": {
+      "x": 8.0,
+      "y": 87.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R402": {
+      "x": 42.0,
+      "y": 87.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R403": {
+      "x": 29.0,
+      "y": 86.5,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R404": {
+      "x": 28.0,
+      "y": 83.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R411": {
+      "x": 13.0,
+      "y": 21.5,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R412": {
+      "x": 11.0,
+      "y": 21.5,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "R421": {
+      "x": 26.5,
+      "y": 48.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R422": {
+      "x": 19.5,
+      "y": 35.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "R501": {
+      "x": 82.0,
+      "y": 47.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R502": {
+      "x": 63.0,
+      "y": 42.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "R503": {
+      "x": 76.5,
+      "y": 49.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R504": {
+      "x": 74.0,
+      "y": 60.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R505": {
+      "x": 67.0,
+      "y": 58.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R506": {
+      "x": 72.0,
+      "y": 58.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R507": {
+      "x": 72.5,
+      "y": 43.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R508": {
+      "x": 52.5,
+      "y": 35.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R509": {
+      "x": 65.5,
+      "y": 60.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R510": {
+      "x": 62.0,
+      "y": 52.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R511": {
+      "x": 54.5,
+      "y": 45.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R512": {
+      "x": 75.5,
+      "y": 40.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R513": {
+      "x": 76.0,
+      "y": 38.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R514": {
+      "x": 85.5,
+      "y": 38.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "R515": {
+      "x": 60.0,
+      "y": 56.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R516": {
+      "x": 60.0,
+      "y": 58.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R701": {
+      "x": 45.0,
+      "y": 79.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R702": {
+      "x": 50.0,
+      "y": 79.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R703": {
+      "x": 62.0,
+      "y": 76.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R704": {
+      "x": 62.7,
+      "y": 81.5,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R705": {
+      "x": 59,
+      "y": 86,
+      "rotation": 180,
+      "side": "F"
+    },
+    "R706": {
+      "x": 63.0,
+      "y": 75.5,
+      "rotation": 0,
+      "side": "F"
+    },
+    "R707": {
+      "x": 59.0,
+      "y": 84.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R708": {
+      "x": 59.0,
+      "y": 88.0,
+      "rotation": 0,
+      "side": "B"
+    },
+    "R901": {
+      "x": 20.0,
+      "y": 75.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R902": {
+      "x": 25.5,
+      "y": 75.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R903": {
+      "x": 31.0,
+      "y": 75.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R904": {
+      "x": 20.0,
+      "y": 70.5,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R905": {
+      "x": 25.5,
+      "y": 70.5,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R906": {
+      "x": 31.0,
+      "y": 70.5,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R907": {
+      "x": 20.0,
+      "y": 85.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R908": {
+      "x": 25.5,
+      "y": 85.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "R909": {
+      "x": 31.0,
+      "y": 85.0,
+      "rotation": 90,
+      "side": "B"
+    },
+    "SW201": {
+      "x": 6.0,
+      "y": 60.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "SW202": {
+      "x": 6.0,
+      "y": 72.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "TP01": {
+      "x": 28.0013,
+      "y": 33.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "TP02": {
+      "x": 8.0013,
+      "y": 67.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "TP03": {
+      "x": 47.5013,
+      "y": 71.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "TP04": {
+      "x": 50.0013,
+      "y": 72.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "TP05": {
+      "x": 54.5,
+      "y": 71.5,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "U101": {
+      "x": 24.0,
+      "y": 67.3,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "U102": {
+      "x": 19.5,
+      "y": 45.2,
+      "rotation": 90,
+      "side": "F"
+    },
+    "U201": {
+      "x": 38.5,
+      "y": 38.0,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "U202": {
+      "x": 28.5,
+      "y": 14.0,
+      "rotation": 0.0,
+      "side": "F"
+    },
+    "U301": {
+      "x": 61.0,
+      "y": 61.5,
+      "rotation": 270.0,
+      "side": "B"
+    },
+    "U401": {
+      "x": 16.5,
+      "y": 83.5,
+      "rotation": 90.0,
+      "side": "F"
+    },
+    "U501": {
+      "x": 70.0,
+      "y": 50.0,
+      "rotation": 0,
+      "side": "F"
+    },
+    "Y301": {
+      "x": 57.2,
+      "y": 49.5,
+      "rotation": 0.0,
+      "side": "B"
+    },
+    "J502": {
+      "x": 94.0,
+      "y": 74.0,
+      "rotation": 90,
+      "side": "F"
+    },
+    "J503": {
+      "x": 94.0,
+      "y": 87.0,
+      "rotation": 90,
+      "side": "F"
+    }
+  },
+  "bottom_side_allowed": [
+    "BT301",
+    "C107",
+    "C301",
+    "C302",
+    "C303",
+    "C304",
+    "C305",
+    "C403",
+    "C503",
+    "Q901",
+    "Q902",
+    "Q903",
+    "R104",
+    "R105",
+    "R106",
+    "R107",
+    "R305",
+    "R306",
+    "R307",
+    "R308",
+    "R309",
+    "R701",
+    "R702",
+    "R703",
+    "R704",
+    "R707",
+    "R708",
+    "R901",
+    "R902",
+    "R903",
+    "R904",
+    "R905",
+    "R906",
+    "R907",
+    "R908",
+    "R909",
+    "U301",
+    "Y301"
+  ],
+  "edge_ports": {
+    "J101": {
+      "edge": "left",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J411": {
+      "edge": "right",
+      "local_access_box": [
+        -1.77,
+        10.8,
+        9.39,
+        30.8
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J421": {
+      "edge": "right",
+      "local_access_box": [
+        -1.77,
+        10.8,
+        9.39,
+        30.8
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J501": {
+      "edge": "right",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J702": {
+      "edge": "bottom",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J401": {
+      "edge": "right",
+      "local_access_box": [
+        -2.95,
+        9.2,
+        10.45,
+        29.2
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J403": {
+      "edge": "bottom",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J701": {
+      "edge": "bottom",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J301": {
+      "edge": "left",
+      "local_access_box": [
+        -0.5,
+        15.45,
+        14.5,
+        35.45
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J502": {
+      "edge": "right",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    },
+    "J503": {
+      "edge": "right",
+      "local_access_box": [
+        -3.0,
+        4.6,
+        8.0,
+        24.6
+      ],
+      "max_edge_gap_mm": 2
+    }
+  },
+  "bottom_smd_groups": {
+    "RGB": {
+      "refs": [
+        "R901",
+        "R902",
+        "R903",
+        "R904",
+        "R905",
+        "R906",
+        "R907",
+        "R908",
+        "R909",
+        "Q901",
+        "Q902",
+        "Q903"
+      ],
+      "purpose": "RGB drive near D901; frees the area beside the LED power stage"
+    },
+    "SD_RTC": {
+      "refs": [
+        "R305",
+        "R306",
+        "R307",
+        "R308",
+        "R309",
+        "C304",
+        "C305"
+      ],
+      "purpose": "SD and I2C pull-ups plus card decoupling; frees the input power corridor"
+    },
+    "AUX_ENABLE": {
+      "refs": [
+        "R104",
+        "R105",
+        "R106",
+        "R107"
+      ],
+      "purpose": "Low-current enable divider; input and bootstrap capacitors stay on top"
+    },
+    "LOAD_CONTROL": {
+      "refs": [
+        "R701",
+        "R702",
+        "R703",
+        "R704",
+        "R707",
+        "R708",
+        "C403"
+      ],
+      "purpose": "Low-current load control and float filter; power switches and PTC gate resistor stay on top"
+    },
+    "RTC": {
+      "refs": [
+        "U301",
+        "Y301",
+        "C301",
+        "C302",
+        "C303"
+      ],
+      "purpose": "RTC oscillator, load capacitors and local decoupling beside the battery on B.Cu"
+    },
+    "AUX_BYPASS": {
+      "refs": ["C107"],
+      "purpose": "Local VIN bypass for U101; ground returns to its ground pad via the plane"
+    },
+    "LED_BYPASS": {
+      "refs": [
+        "C503"
+      ],
+      "purpose": "LED VCC bypass beside its existing B.Cu routing"
+    }
+  },
+  "bottom_courtyard_gap_mm": 1.0,
+  "bottom_battery_access_gap_mm": 2.0
+}

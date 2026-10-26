@@ -1,0 +1,9 @@
+# Keep text and saved report hashes consistent across operating systems
+* text=auto eol=lf
+
+# Preserve original vendor model bytes and recorded SHA-256 values
+*.step -text -diff
+*.stp -text -diff
+
+# Fabrication manifests hash the exact native KiCad output, including CRLF.
+hardware/PCB_EU_LITE/fabrication/**/gerber/* -text whitespace=cr-at-eol
