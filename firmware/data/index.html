@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MicroGarden V1</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Три элемента шапки: на телефоне время и кнопка остаются в первой строке,
+             а значки состояния переносятся под них и не выталкивают кнопку за край экрана -->
+        <header>
+            <span class="status-badge time-badge" id="box-time">Загрузка</span>
+            <div class="header-status">
+                <span id="cycle-str" class="status-badge cycle-badge day-badge" aria-live="polite">
+                    <span id="cycle-phase">Загрузка</span>
+                    <span id="cycle-divider" class="cycle-divider" aria-hidden="true">·</span>
+                    <span id="cycle-day">Загрузка</span>
+                </span>
+                <a id="clock-warning" href="/settings" class="status-badge offline-badge" hidden></a>
+            </div>
+            <a href="/settings" class="btn-nav">Настройки</a>
+        </header>
+
+        <div class="grid" id="live-grid">
+            <div class="card">
+                <div class="card-heading">
+                    <h3>Датчик климата</h3>
+                    <span id="sensor-status-badge" class="status-badge offline-badge" style="display: none; padding: 2px 8px;">офлайн</span>
+                </div>
+                <div class="metrics-row">
+                    <div class="metric-box">
+                        <span class="label">Температура</span>
+                        <div class="value" id="t-val">--.-<span class="unit">°C</span></div>
+                    </div>
+                    <div class="metric-box">
+                        <span class="label">Влажность</span>
+                        <div class="value" id="h-val" style="color: var(--primary)">--.-<span class="unit">%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Вентиляция</h3>
+                <div class="metrics-row">
+                    <div class="metric-box">
+                        <span class="label">Вентилятор 1</span>
+                        <div class="value" id="fan1-val" style="color: var(--success)">--<span class="unit">%</span></div>
+                    </div>
+                    <div class="metric-box">
+                        <span class="label">Вентилятор 2</span>
+                        <div class="value" id="fan2-val" style="color: var(--success)">--<span class="unit">%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INA238 на плате: вся мощность от блока питания 24 В (свет, обогрев, вентиляторы, насос) -->
+            <div class="card">
+                <h3>Потребление и освещение</h3>
+                <div class="metrics-row growing-pair">
+                    <div class="metric-box">
+                        <span class="label">Потребление</span>
+                        <div class="value" id="power-val" style="color: var(--warning)">--<span class="unit">Вт</span></div>
+                        <div class="metric-sub" id="power-details">-- В · -- А</div>
+                        <div class="metric-sub" id="energy-val">Сегодня: -- кВт·ч</div>
+                        <div class="metric-sub warn" id="power-warning" hidden></div>
+                    </div>
+                    <div class="metric-box" data-growing-only>
+                        <span class="label">Лампа</span>
+                        <div class="value" id="led-val" style="color: var(--warning)">--<span class="unit">%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Силовые цепи</h3>
+                <div class="metrics-row growing-pair">
+                    <!-- В режиме сушки насос скрывается -->
+                    <div class="metric-box" data-growing-only>
+                        <span class="label">Статус насоса</span>
+                        <div class="value" id="pump-val" style="color: var(--text-muted)">--</div>
+                        <div class="metric-sub" id="water-level">Вода: --</div>
+                        <div class="metric-sub" id="last-water">Полив по расписанию: --</div>
+                    </div>
+                    <div class="metric-box">
+                        <span class="label">Обогреватель</span>
+                        <div class="value" id="heater-val" style="color: var(--text-muted)">--</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="analytics-section">
+            <div class="chart-header-row">
+                <div class="chart-title">Архивные графики параметров</div>
+                <input type="date" id="chart-date-selector" style="max-width: 180px; padding: 6px 10px; background: #1f2937; color: #fff; border: 1px solid var(--card-border); border-radius: 8px;">
+            </div>
+            <div class="chart-container">
+                <svg id="svgChart" viewBox="0 0 1000 400"></svg>
+                <div id="chart-tooltip" class="chart-tooltip"></div>
+            </div>
+            <!-- Средняя мощность за каждые 10 минут (колонка power_w в CSV). Скрыт, если данных нет -->
+            <div class="chart-title chart-subtitle" id="power-chart-title" hidden>Мощность, Вт</div>
+            <svg id="powerChart" viewBox="0 0 1000 200" hidden></svg>
+        </div>
+
+    </div>
+    <script src="/script.js"></script>
+</body>
+</html>

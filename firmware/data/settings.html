@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrowBox Settings</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <div>
+                <h1>Параметры</h1>
+            </div>
+            <a href="/" class="btn-nav">← К мониторингу</a>
+        </header>
+
+        <div id="save-banner" class="form-ok" role="status" hidden>Настройки сохранены.</div>
+
+        <form action="/save-settings" method="POST" id="operation-mode-form" class="mode-selection">
+            <label for="operation_mode">Режим</label>
+            <select id="operation_mode" name="operation_mode" required>
+                <option value="0">Growing — выращивание</option>
+                <option value="1">Drying — сушка</option>
+            </select>
+        </form>
+
+        <div class="tabs" id="settings-tabs">
+            <button type="button" class="tab-btn active" data-tab="tab-climate" data-modes="growing,drying">Климат</button>
+            <button type="button" class="tab-btn" data-tab="tab-light" data-modes="growing">Освещение</button>
+            <button type="button" class="tab-btn" data-tab="tab-fans" data-modes="growing,drying">Вентиляция</button>
+            <button type="button" class="tab-btn" data-tab="tab-watering" data-modes="growing">Полив</button>
+            <button type="button" class="tab-btn" data-tab="tab-heater" data-modes="growing,drying">Обогрев</button>
+            <button type="button" class="tab-btn" data-tab="tab-network" data-modes="growing,drying">WiFi / Ubidots</button>
+            <button type="button" class="tab-btn" data-tab="tab-general" data-modes="growing,drying">Общее</button>
+            <button type="button" class="tab-btn" data-tab="tab-console" data-modes="growing,drying">Консоль</button>
+        </div>
+
+        <!-- ОБЩЕЕ -->
+        <div class="tab-panel" id="tab-general">
+            <div class="form-section">
+                <h3>Синхронизация RTC модуля</h3>
+                <div style="font-size: 14px; margin-bottom: 15px; color: var(--text-muted)">
+                    Текущие дата и время на плате: <strong style="color: var(--warning)" id="rtc-time-label">Загрузка...</strong>
+                </div>
+                <div id="time-error-banner" class="form-error" style="display: none;">
+                    Плата отклонила дату: ожидается формат ГГГГ-ММ-ДДTЧЧ:ММ. Время не изменено.
+                </div>
+                <!-- Итог записи в MCP7940N: плата пишет и проверяет часы за несколько секунд после отправки -->
+                <div id="time-result-banner" class="form-hint" style="margin-bottom: 15px;" hidden></div>
+                <form action="/set-time" method="POST" id="time-form">
+                    <!-- Синхронизация берёт время телефона в момент нажатия, с секундами. Раньше в плату
+                         уходило значение поля, заполненное при открытии страницы, и без секунд. -->
+                    <button type="button" class="btn-action btn-sync" onclick="syncTimeFromBrowser()">Синхронизировать с этим устройством</button>
+                    <div class="form-hint" style="margin: 16px 0 8px;">Или задать вручную:</div>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                        <input type="datetime-local" id="datetime" name="datetime" step="1" required style="flex: 1; min-width: 200px;">
+                        <button type="submit" class="btn-action">Установить это время</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="form-section" data-mode-only="growing">
+                <h3>Гровинг</h3>
+                <div id="date-error-banner" class="form-error" style="display: none;">
+                    Плата отклонила дату начала: ожидается формат ГГГГ-ММ-ДД, год от 2024. Дата не изменена.
+                </div>
+                <form action="/save-settings" method="POST">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="start_date">Дата начала гровинга</label>
+                            <input type="date" id="start_date" name="start_date">
+                        </div>
+                    </div>
+                    <div class="form-hint" style="margin-bottom: 15px;">Пустая дата — цикл не начат.</div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+
+            <div class="form-section">
+                <h3>Измерение мощности (INA238)</h3>
+                <form action="/save-settings" method="POST">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="power_cal_pct">Поправка тока, %</label>
+                            <input type="number" id="power_cal_pct" name="power_cal_pct" min="-20" max="20" step="0.1">
+                        </div>
+                    </div>
+                    <div class="form-hint" style="margin-bottom: 15px;">
+                        Без поправки показания точны примерно до ±5%. Сравните ток с мультиметром, включённым
+                        в разрыв провода 24 В: если мультиметр показывает на 3% больше — впишите 3.
+                        Бытовой ваттметр в розетке для этого не годится: он показывает больше из-за потерь
+                        в блоке питания.
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+
+            <div class="form-section">
+                <h3>Обслуживание SD-карты</h3>
+                <div class="status-row"><span>Занято:</span><span id="sd-status" class="status-badge">Запрос...</span></div>
+                <div class="status-row"><span>Свободно:</span><strong id="sd-free">--</strong></div>
+                <div class="sd-bar"><div id="sd-bar-fill" class="sd-bar-fill"></div></div>
+                <button type="button" class="btn-action btn-danger" style="margin-top: 15px;" onclick="clearSDLogs()">Очистить все накопленные логи</button>
+            </div>
+
+            <div class="form-section">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">Файлы на SD-карте</h3>
+                    <button type="button" class="btn-action" onclick="loadSdFiles()">Обновить</button>
+                </div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Последние 10 файлов в корне карты (для проверки логирования).</div>
+                <div id="sd-files-list" class="sd-files">Запрос...</div>
+            </div>
+        </div>
+
+        <!-- КЛИМАТ -->
+        <div class="tab-panel active" id="tab-climate">
+            <div data-mode-only="growing">
+            <div class="form-section">
+                <h3>Температура и влажность</h3>
+                <form action="/save-settings" method="POST" id="climate-form">
+                    <div id="climate-error-banner" class="form-error" style="display: none;"></div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Дневная целевая температура, °C</label>
+                            <input type="number" step="0.1" min="0" max="50" id="temp_target" name="temp_target" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Ночная целевая температура, °C</label>
+                            <input type="number" step="0.1" min="0" max="50" id="temp_target_night" name="temp_target_night" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Гистерезис (Дельта ±), °C</label>
+                            <input type="number" step="0.1" min="0.1" max="20" id="temp_delta" name="temp_delta" required>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; margin-top: 10px; color: var(--text-muted)">
+                        В Growing вентиляторы управляются температурой круглосуточно: днём используется дневная цель, ночью — ночная. Гистерезис общий. Пока обогреватель включён, вентиляторы держатся на минимуме, чтобы не выдувать тепло. Расписание обогревателя — на вкладке «Обогрев».
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+            </div>
+
+            <div class="form-section" data-mode-only="drying">
+                <h3>Климат сушки</h3>
+                <form action="/save-settings" method="POST" id="drying-climate-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Целевая температура, °C</label>
+                            <input type="number" step="0.1" min="0" max="50" id="drying_temp_target" name="drying_temp_target" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Гистерезис нагрева, ± °C</label>
+                            <input type="number" step="0.1" min="0.1" max="20" id="drying_temp_delta" name="drying_temp_delta" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Целевая влажность, % RH</label>
+                            <input type="number" step="1" min="0" max="100" id="drying_hum_target" name="drying_hum_target" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Диапазон разгона вентиляторов, % RH</label>
+                            <input type="number" step="0.1" min="0.1" max="25" id="drying_hum_band" name="drying_hum_band" required>
+                        </div>
+                    </div>
+                    <div class="mode-note">Нагреватель поддерживает заданную температуру по термостату: включается на гистерезис ниже цели и выключается на гистерезис выше. Если на вкладке «Обогрев» выбрано «Никогда», в сушке он тоже не включается. Вентиляторы плавно разгоняются выше целевой влажности и достигают максимума у верхней границы диапазона. Если температура превысит цель на два гистерезиса, вентиляторы также переходят на максимум. Свет и автополив в режиме Drying выключены.</div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить климат сушки</button>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- ОСВЕЩЕНИЕ -->
+        <div class="tab-panel" id="tab-light" data-modes="growing">
+            <div class="form-section">
+                <h3>Освещение</h3>
+                <form action="/save-settings" method="POST" id="light-form">
+                    <div id="light-error-banner" class="form-error" style="display: none;"></div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Время включения света</label>
+                            <input type="time" id="led_on_time" required>
+                            <input type="hidden" id="led_on_hour" name="led_on_hour">
+                            <input type="hidden" id="led_on_minute" name="led_on_minute">
+                        </div>
+                        <div class="form-group">
+                            <label>Время выключения света</label>
+                            <input type="time" id="led_off_time" required>
+                            <input type="hidden" id="led_off_hour" name="led_off_hour">
+                            <input type="hidden" id="led_off_minute" name="led_off_minute">
+                        </div>
+                        <div class="form-group">
+                            <label>Мин. мощность лампы, %</label>
+                            <input type="number" min="0" max="100" id="led_min_limit" name="led_min_limit" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Макс. мощность лампы, %</label>
+                            <input type="number" min="0" max="100" id="led_max_limit" name="led_max_limit" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ВЕНТИЛЯЦИЯ -->
+        <div class="tab-panel" id="tab-fans">
+            <div class="form-section">
+                <h3>Лимиты вентиляторов</h3>
+                <form action="/save-settings" method="POST" id="fans-limits-form">
+                    <div id="fans-limits-error-banner" class="form-error" style="display: none;"></div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Вентилятор 1: мин., % (0-100)</label>
+                            <input type="number" min="0" max="100" id="fan1_min_limit" name="fan1_min_limit" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Вентилятор 1: макс., % (0-100)</label>
+                            <input type="number" min="0" max="100" id="fan1_max_limit" name="fan1_max_limit" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Вентилятор 2: мин., % (0-100)</label>
+                            <input type="number" min="0" max="100" id="fan2_min_limit" name="fan2_min_limit" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Вентилятор 2: макс., % (0-100)</label>
+                            <input type="number" min="0" max="100" id="fan2_max_limit" name="fan2_max_limit" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- ПОЛИВ -->
+        <div class="tab-panel" id="tab-watering" data-modes="growing">
+            <div class="form-section">
+                <h3>Автополив</h3>
+                <form action="/save-settings" method="POST" id="watering-form">
+                    <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 15px;">
+                        <label class="check-label"><input type="checkbox" id="wd_mon"> Пн</label>
+                        <label class="check-label"><input type="checkbox" id="wd_tue"> Вт</label>
+                        <label class="check-label"><input type="checkbox" id="wd_wed"> Ср</label>
+                        <label class="check-label"><input type="checkbox" id="wd_thu"> Чт</label>
+                        <label class="check-label"><input type="checkbox" id="wd_fri"> Пт</label>
+                        <label class="check-label"><input type="checkbox" id="wd_sat"> Сб</label>
+                        <label class="check-label"><input type="checkbox" id="wd_sun"> Вс</label>
+                    </div>
+                    <input type="hidden" id="watering_days" name="watering_days">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <!-- Выбор времени, как у света; в плату по-прежнему уходят час и минута -->
+                            <label for="watering_time">Время полива</label>
+                            <input type="time" id="watering_time" required>
+                            <input type="hidden" id="watering_hour" name="watering_hour">
+                            <input type="hidden" id="watering_minute" name="watering_minute">
+                        </div>
+                        <div class="form-group">
+                            <label for="watering_duration">Длительность полива, сек</label>
+                            <input type="number" min="1" max="3600" id="watering_duration" name="watering_duration" required>
+                        </div>
+                    </div>
+                    <label class="check-label" style="margin-top: 15px;">
+                        <input type="checkbox" id="water_sensor_checkbox">
+                        Учитывать датчик уровня воды (не поливать/прервать полив, если воды в баке нет)
+                    </label>
+                    <input type="hidden" id="water_sensor_enabled" name="water_sensor_enabled" value="0">
+                    <div class="form-hint" style="margin-top: 12px;">
+                        Если плата в назначенное время была без питания или перезагружалась, полив начнётся с опозданием — в пределах 4 часов. Позже пропущенный полив уже не догоняется.
+                    </div>
+                    <button type="submit" class="btn-action btn-sync" style="margin-top: 15px;">Сохранить настройки полива</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ОБОГРЕВ -->
+        <div class="tab-panel" id="tab-heater" data-modes="growing,drying">
+            <div class="form-section">
+                <h3>Обогрев</h3>
+                <form action="/save-settings" method="POST">
+                    <div class="form-group">
+                        <label for="heater_mode">Режим работы обогревателя</label>
+                        <select id="heater_mode" name="heater_mode" required>
+                            <option value="0">Только днём</option>
+                            <option value="1">Только ночью</option>
+                            <option value="2">Всегда</option>
+                            <option value="3">Никогда</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 13px; margin-top: 10px; color: var(--text-muted)">
+                        Целевая температура (днём и ночью) и гистерезис — на вкладке «Климат».
+                    </div>
+                    <div class="mode-note" data-mode-only="drying">
+                        В режиме Drying нет дня и ночи, поэтому расписание не действует: нагреватель работает по термостату сушки при любом выборе, кроме «Никогда».
+                    </div>
+                    <button type="submit" class="btn-action btn-sync" style="margin-top: 15px;">Сохранить режим обогрева</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- WIFI / UBIDOTS -->
+        <div class="tab-panel" id="tab-network">
+            <div class="form-section">
+                <h3>Точка доступа платы (локальный WiFi)</h3>
+                <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
+                    Сеть, к которой подключается твой телефон/ноутбук для доступа к этой странице.
+                    После сохранения текущее подключение к плате оборвётся — переподключись с новыми данными.
+                </div>
+                <div id="ap-error-banner" class="form-error" style="display: none;">
+                    Не удалось сохранить часть настроек точки доступа: имя от 1 до 32 символов, новый пароль от 8 до 63 символов. Пустое поле сохраняет прежний пароль.
+                </div>
+                <form action="/save-settings" method="POST" id="ap-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Имя сети (SSID)</label>
+                            <input type="text" id="ap_ssid" name="ap_ssid" autocomplete="off" required minlength="1" maxlength="32">
+                        </div>
+                        <div class="form-group">
+                            <label>Пароль (пусто = не менять)</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="password" id="ap_pass" name="ap_pass" autocomplete="off" minlength="8" maxlength="63" style="flex: 1;">
+                                <button type="button" class="btn-action" onclick="togglePasswordField('ap_pass')">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить точку доступа</button>
+                </form>
+            </div>
+
+            <div class="form-section">
+                <h3>WiFi роутера (для выгрузки в облако)</h3>
+                <div id="wifi-error-banner" class="form-error" style="display: none;">
+                    Не удалось сохранить WiFi роутера: имя сети — до 32 символов, пароль — пусто (открытая сеть) или от 8 до 63 символов. Изменения не применены.
+                </div>
+                <form action="/save-settings" method="POST" id="wifi-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>SSID сети</label>
+                            <input type="text" id="wifi_ssid" name="wifi_ssid" autocomplete="off" maxlength="32">
+                        </div>
+                        <div class="form-group">
+                            <label>Пароль сети (пусто = не менять)</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="password" id="wifi_pass" name="wifi_pass" autocomplete="off" minlength="8" maxlength="63" style="flex: 1;">
+                                <button type="button" class="btn-action" onclick="togglePasswordField('wifi_pass')">👁</button>
+                            </div>
+                            <label class="check-label muted" style="margin-top: 8px;">
+                                <input type="checkbox" id="wifi_pass_clear" name="wifi_pass_clear" value="1"> Сеть без пароля
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить WiFi</button>
+                </form>
+            </div>
+
+            <div class="form-section">
+                <h3>Ubidots</h3>
+                <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
+                    Токен и лейбл устройства для API Ubidots.
+                </div>
+                <form action="/save-settings" method="POST">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Device label</label>
+                            <input type="text" id="device_label" name="device_label" autocomplete="off" maxlength="64">
+                        </div>
+                        <div class="form-group">
+                            <label>API токен (пусто = не менять)</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="password" id="ubidots_token" name="ubidots_token" autocomplete="off" maxlength="128" style="flex: 1;">
+                                <button type="button" class="btn-action" onclick="togglePasswordField('ubidots_token')">👁</button>
+                            </div>
+                            <label class="check-label muted" style="margin-top: 8px;">
+                                <input type="checkbox" id="ubidots_token_clear" name="ubidots_token_clear" value="1"> Отключить облако: удалить токен
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить Ubidots</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="tab-console">
+            <div class="analytics-section">
+                <div class="chart-header-row">
+                    <div class="chart-title">Serial-консоль платы</div>
+                    <label class="check-label muted">
+                        <input type="checkbox" id="console-autoscroll" checked> автопрокрутка
+                    </label>
+                </div>
+                <pre id="serial-console" class="serial-console">Загрузка лога...</pre>
+            </div>
+        </div>
+    </div>
+    <script src="/settings.js"></script>
+</body>
+</html>
