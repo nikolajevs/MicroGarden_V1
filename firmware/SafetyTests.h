@@ -198,8 +198,13 @@ static_assert(!ledSupplyNext(false, false, 24) && !ledSupplyNext(true, false, 24
               !ledSupplyNext(true, true, 21.59f) && ledSupplyNext(true, true, 21.6f) &&
               !ledSupplyNext(false, true, 22.49f) && ledSupplyNext(false, true, 22.5f) &&
               !ledSupplyNext(true, true, __builtin_nanf("")), "LED supply cutoff, hysteresis and invalid data");
-static_assert(statusColor(200, false, true, true, true, true, true, true, true, true) == StatusColor::Red &&
-              statusColor(200, true, true, true, true, true, true, true, true, true) == StatusColor::Purple &&
-              statusColor(200, true, true, false, true, true, true, false, true, false) == StatusColor::Cyan &&
-              statusColor(700, true, true, false, false, true, true, false, false, false) == StatusColor::Blue,
-              "Status LED faults take priority over process flashes");
+// Порядок приоритетов: датчик/часы, просадка шины, затем SD и данные питания.
+static_assert(statusColor(false, true, true, false, false) == StatusColor::Red &&
+              statusColor(true, false, false, true, true) == StatusColor::Red &&
+              statusColor(true, true, true, false, false) == StatusColor::Purple,
+              "Heavier status LED faults take priority over lighter ones");
+// Жёлтый — пропала SD или данные INA238; зелёный — исправная плата.
+static_assert(statusColor(true, true, false, false, true) == StatusColor::Yellow &&
+              statusColor(true, true, false, true, false) == StatusColor::Yellow &&
+              statusColor(true, true, false, true, true) == StatusColor::Green,
+              "Yellow marks missing SD or power data, green marks a healthy board");

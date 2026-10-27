@@ -110,7 +110,7 @@ function setSecretPlaceholder(id, isSet) {
 // Галочка "сеть без пароля" — единственный способ стереть сохранённый пароль,
 // раз пустое поле теперь означает "не менять"
 function attachClearPassToggles() {
-    [['wifi_pass_clear', 'wifi_pass'], ['ubidots_token_clear', 'ubidots_token']].forEach(([cbId, inputId]) => {
+    [['wifi_pass_clear', 'wifi_pass']].forEach(([cbId, inputId]) => {
         const cb = document.getElementById(cbId);
         const input = document.getElementById(inputId);
         if (!cb || !input) return;
@@ -302,10 +302,8 @@ async function loadCurrentSettings() {
         }
 
         document.getElementById('wifi_ssid').value = data.wifi_ssid;
-        document.getElementById('device_label').value = data.device_label;
         document.getElementById('ap_ssid').value = data.ap_ssid;
         setSecretPlaceholder('wifi_pass', data.wifi_pass_set);
-        setSecretPlaceholder('ubidots_token', data.ubidots_token_set);
         setSecretPlaceholder('ap_pass', data.ap_pass_set);
 
         // Плата хранит полночь выбранной даты без часового пояса, поэтому и разбираем её как UTC.

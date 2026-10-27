@@ -31,7 +31,7 @@
             <button type="button" class="tab-btn" data-tab="tab-fans" data-modes="growing,drying">Вентиляция</button>
             <button type="button" class="tab-btn" data-tab="tab-watering" data-modes="growing">Полив</button>
             <button type="button" class="tab-btn" data-tab="tab-heater" data-modes="growing,drying">Обогрев</button>
-            <button type="button" class="tab-btn" data-tab="tab-network" data-modes="growing,drying">WiFi / Ubidots</button>
+            <button type="button" class="tab-btn" data-tab="tab-network" data-modes="growing,drying">WiFi</button>
             <button type="button" class="tab-btn" data-tab="tab-general" data-modes="growing,drying">Общее</button>
             <button type="button" class="tab-btn" data-tab="tab-console" data-modes="growing,drying">Консоль</button>
         </div>
@@ -300,7 +300,7 @@
             </div>
         </div>
 
-        <!-- WIFI / UBIDOTS -->
+        <!-- WIFI -->
         <div class="tab-panel" id="tab-network">
             <div class="form-section">
                 <h3>Точка доступа платы (локальный WiFi)</h3>
@@ -330,7 +330,7 @@
             </div>
 
             <div class="form-section">
-                <h3>WiFi роутера (для выгрузки в облако)</h3>
+                <h3>WiFi роутера (доступ к интерфейсу из домашней сети)</h3>
                 <div id="wifi-error-banner" class="form-error" style="display: none;">
                     Не удалось сохранить WiFi роутера: имя сети — до 32 символов, пароль — пусто (открытая сеть) или от 8 до 63 символов. Изменения не применены.
                 </div>
@@ -352,32 +352,6 @@
                         </div>
                     </div>
                     <button type="submit" class="btn-action btn-sync">Сохранить WiFi</button>
-                </form>
-            </div>
-
-            <div class="form-section">
-                <h3>Ubidots</h3>
-                <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
-                    Токен и лейбл устройства для API Ubidots.
-                </div>
-                <form action="/save-settings" method="POST">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Device label</label>
-                            <input type="text" id="device_label" name="device_label" autocomplete="off" maxlength="64">
-                        </div>
-                        <div class="form-group">
-                            <label>API токен (пусто = не менять)</label>
-                            <div style="display: flex; gap: 8px;">
-                                <input type="password" id="ubidots_token" name="ubidots_token" autocomplete="off" maxlength="128" style="flex: 1;">
-                                <button type="button" class="btn-action" onclick="togglePasswordField('ubidots_token')">👁</button>
-                            </div>
-                            <label class="check-label muted" style="margin-top: 8px;">
-                                <input type="checkbox" id="ubidots_token_clear" name="ubidots_token_clear" value="1"> Отключить облако: удалить токен
-                            </label>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-action btn-sync">Сохранить Ubidots</button>
                 </form>
             </div>
         </div>
