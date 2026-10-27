@@ -110,7 +110,7 @@ function setSecretPlaceholder(id, isSet) {
 // Галочка "сеть без пароля" — единственный способ стереть сохранённый пароль,
 // раз пустое поле теперь означает "не менять"
 function attachClearPassToggles() {
-    [['wifi_pass_clear', 'wifi_pass']].forEach(([cbId, inputId]) => {
+    [['wifi_pass_clear', 'wifi_pass'], ['telemetry_token_clear', 'telemetry_token']].forEach(([cbId, inputId]) => {
         const cb = document.getElementById(cbId);
         const input = document.getElementById(inputId);
         if (!cb || !input) return;
@@ -136,6 +136,10 @@ function showServerErrors() {
     }
     if (errors.includes('wifi')) {
         document.getElementById('wifi-error-banner').style.display = 'block';
+        document.querySelector('[data-tab="tab-network"]').click();
+    }
+    if (errors.includes('telemetry')) {
+        document.getElementById('telemetry-error-banner').style.display = 'block';
         document.querySelector('[data-tab="tab-network"]').click();
     }
     if (errors.includes('time')) {
@@ -303,7 +307,10 @@ async function loadCurrentSettings() {
 
         document.getElementById('wifi_ssid').value = data.wifi_ssid;
         document.getElementById('ap_ssid').value = data.ap_ssid;
+        document.getElementById('telemetry_url').value = data.telemetry_url;
+        document.getElementById('device_label').value = data.device_label;
         setSecretPlaceholder('wifi_pass', data.wifi_pass_set);
+        setSecretPlaceholder('telemetry_token', data.telemetry_token_set);
         setSecretPlaceholder('ap_pass', data.ap_pass_set);
 
         // Плата хранит полночь выбранной даты без часового пояса, поэтому и разбираем её как UTC.
