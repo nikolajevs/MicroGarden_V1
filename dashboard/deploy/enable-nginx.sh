@@ -39,8 +39,15 @@ if ! nginx -t; then
 fi
 systemctl reload nginx
 
-# Проверка через nginx локально: нужный Host попадает именно на этот хост.
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "Host: ${DOMAIN}" http://127.0.0.1/healthz || true)"
+# Проверка через nginx локально: нужный Host попадает именно на этот хост. reload
+# асинхронный: первые мгновения отвечают старые рабочие процессы со старой конфигурацией
+# (вместо 200 приходит 404 от хоста по умолчанию), поэтому до 10 секунд повторяем.
+code=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "Host: ${DOMAIN}" http://127.0.0.1/healthz || true)"
+  [ "$code" = "200" ] && break
+  sleep 1
+done
 if [ "$code" = "200" ]; then
   echo "✓ nginx проксирует ${DOMAIN} на сервер телеметрии (/healthz = 200)"
 else
