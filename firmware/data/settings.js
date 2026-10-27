@@ -298,6 +298,8 @@ async function loadCurrentSettings() {
         document.getElementById('drying_hum_target').value = data.drying_hum_target;
         document.getElementById('drying_hum_band').value = data.drying_hum_band;
         document.getElementById('power_cal_pct').value = data.power_cal_pct;
+        document.getElementById('rgb_brightness').value = data.rgb_brightness;
+        document.getElementById('rgb_night_mode').value = data.rgb_night_mode;
         applySettingsMode(data.operation_mode);
         if (!activeTabRestored) {
             // После сохранения возвращаемся на вкладку, с которой сохраняли

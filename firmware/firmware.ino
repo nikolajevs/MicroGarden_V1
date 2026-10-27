@@ -106,6 +106,10 @@ struct Settings {
   // Поправка показаний тока INA238, %: шунт 1% и усилитель дают ±3–5% без калибровки
   float power_cal_pct;
 
+  // RGB-индикатор состояния платы
+  int rgb_brightness;           // %, 0 = выключен
+  int rgb_night_mode;           // 0 = как днём, 1 = ночью только неисправности, 2 = ночью выключен
+
   // Автополив
   uint8_t watering_days;       // Битовая маска: бит0=Пн, бит1=Вт, ... бит6=Вс
   int watering_hour, watering_minute;
@@ -385,7 +389,7 @@ AsyncWebServer server(80);
 Preferences preferences;
 
 // RGB channels share the 1 kHz nDIM timer, never the 25 kHz fan timer.
-void setStatusColor(StatusColor color) {
+void setStatusColor(StatusColor color, uint8_t duty = RGB_DUTY) {
   if (!rgb_ready) return;
   // Каждый канал только включён или выключен — промежуточных яркостей больше нет,
   // поэтому цвета не уползают от разброса светодиодов и видны при ярком свете.
@@ -393,15 +397,18 @@ void setStatusColor(StatusColor color) {
                    color == StatusColor::Yellow;
   const bool green = color == StatusColor::Green || color == StatusColor::Yellow;
   const bool blue = color == StatusColor::Blue || color == StatusColor::Purple;
-  ledcWrite(RGB_RED_PIN, red ? RGB_DUTY : 0);
-  ledcWrite(RGB_GREEN_PIN, green ? RGB_DUTY : 0);
-  ledcWrite(RGB_BLUE_PIN, blue ? RGB_DUTY : 0);
+  ledcWrite(RGB_RED_PIN, red ? duty : 0);
+  ledcWrite(RGB_GREEN_PIN, green ? duty : 0);
+  ledcWrite(RGB_BLUE_PIN, blue ? duty : 0);
 }
 
-void updateStatusLed() {
-  setStatusColor(statusColor(state.sht_online, state.clock_trusted,
-                 state.power_ok && state.led_supply_blocked,
-                 sd_online, state.power_ok));
+// Яркость и ночной режим берутся из настроек (страница «Общее»). Ночью — вне расписания света.
+void updateStatusLed(const Settings &cfg) {
+  const StatusColor color = statusColor(state.sht_online, state.clock_trusted,
+                                        state.power_ok && state.led_supply_blocked,
+                                        sd_online, state.power_ok);
+  setStatusColor(rgbVisibleColor(color, state.is_day, cfg.rgb_night_mode),
+                 rgbDutyForPercent(cfg.rgb_brightness));
 }
 
 void stopPumpAtDeadline() {
@@ -571,6 +578,9 @@ static const SettingDef SETTING_DEFS[] = {
   SET_INT  ("heater_mode",         "heater_mode",     heater_mode,           0,    3,     3),
   // --- Измерение мощности (INA238) ---
   SET_FLOAT("power_cal_pct",       "pwr_cal_pct",     power_cal_pct,         -20,  20,    0),
+  // --- RGB-индикатор ---
+  SET_INT  ("rgb_brightness",      "rgb_bright",      rgb_brightness,        0,    100,   RGB_BRIGHTNESS_DEFAULT_PCT),
+  SET_INT  ("rgb_night_mode",      "rgb_night",       rgb_night_mode,        RGB_NIGHT_SAME, RGB_NIGHT_OFF, RGB_NIGHT_SAME),
   // --- Автополив ---
   SET_U8   ("watering_days",       "watering_days",   watering_days,         0,    127,   0),
   SET_INT  ("watering_hour",       "watering_hour",   watering_hour,         0,    23,    8),
@@ -2226,7 +2236,7 @@ void loop() {
     }
   }
 
-  updateStatusLed();
+  updateStatusLed(cfg);
   publishState(); // Сравнение с опубликованной копией; если ничего не менялось — no-op
   esp_task_wdt_reset();
   delay(1); // Yield to the monitored idle task.

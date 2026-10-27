@@ -266,3 +266,24 @@ static_assert(telemetryReportDue(0, 200, 5000, 0, TELEMETRY_REPORT_REPEAT_MS) &&
               telemetryReportDue(-1, -1, TELEMETRY_REPORT_REPEAT_MS, 0, TELEMETRY_REPORT_REPEAT_MS) &&
               telemetryReportDue(-1, 401, 60000, 0, TELEMETRY_REPORT_REPEAT_MS),      // код изменился
               "telemetry results must be logged on change, not every minute");
+
+// --- RGB-индикатор: яркость и ночной режим ---------------------------------------------------
+static_assert(rgbDutyForPercent(RGB_BRIGHTNESS_DEFAULT_PCT) == RGB_DUTY,
+              "default brightness must equal the previous fixed RGB_DUTY");
+static_assert(rgbDutyForPercent(0) == 0 && rgbDutyForPercent(-5) == 0 && rgbDutyForPercent(1) == 3 &&
+              rgbDutyForPercent(50) == 128 && rgbDutyForPercent(100) == 255 && rgbDutyForPercent(500) == 255,
+              "brightness percent must map to 0..255 and saturate at both ends");
+static_assert(rgbVisibleColor(StatusColor::Green, true, RGB_NIGHT_OFF) == StatusColor::Green &&        // днём ночной режим не действует
+              rgbVisibleColor(StatusColor::Red, true, RGB_NIGHT_OFF) == StatusColor::Red &&
+              rgbVisibleColor(StatusColor::Green, false, RGB_NIGHT_SAME) == StatusColor::Green &&      // «как днём»
+              rgbVisibleColor(StatusColor::Red, false, RGB_NIGHT_SAME) == StatusColor::Red &&
+              rgbVisibleColor(StatusColor::Green, false, 7) == StatusColor::Green,                     // неизвестный режим не гасит индикатор
+              "the night mode must not change anything by day or in 'same as day' mode");
+static_assert(rgbVisibleColor(StatusColor::Green, false, RGB_NIGHT_FAULTS_ONLY) == StatusColor::Off && // норма ночью не светит
+              rgbVisibleColor(StatusColor::Red, false, RGB_NIGHT_FAULTS_ONLY) == StatusColor::Red &&   // неисправности видны
+              rgbVisibleColor(StatusColor::Purple, false, RGB_NIGHT_FAULTS_ONLY) == StatusColor::Purple &&
+              rgbVisibleColor(StatusColor::Yellow, false, RGB_NIGHT_FAULTS_ONLY) == StatusColor::Yellow,
+              "'faults only' must hide the healthy colour at night and keep every fault visible");
+static_assert(rgbVisibleColor(StatusColor::Green, false, RGB_NIGHT_OFF) == StatusColor::Off &&
+              rgbVisibleColor(StatusColor::Red, false, RGB_NIGHT_OFF) == StatusColor::Off,
+              "'off' must switch the indicator off at night");
