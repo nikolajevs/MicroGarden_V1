@@ -44,7 +44,23 @@ test('питание: низкое напряжение, потеря измер
   assert.match(meterSilent[0].text, /без защиты/);
   const dark = collectAlerts(healthy({power_ok: false, led_supply_blocked: true}));
   assert.equal(dark[0].level, 'bad');
-  assert.match(dark[0].text, /Свет выключен/);
+  assert.match(dark[0].text, /Свет выключен: нет данных питания и нет времени/);
+  assert.doesNotMatch(dark[0].text, /датчик/i); // датчик температуры причиной выключения света не считается
+});
+
+test('измеритель и датчик молчат: свет на минимуме, это предупреждение, а не «свет выключен»', () => {
+  const alerts = collectAlerts(healthy({power_ok: false, sht_online: false, led_supply_blocked: false}));
+  assert.deepEqual(ids(alerts), ['sht', 'power-lost']);
+  const lost = alerts.find(a => a.id === 'power-lost');
+  assert.equal(lost.level, 'warn');
+  assert.match(lost.text, /минимальном уровне/);
+  assert.match(alerts.find(a => a.id === 'sht').text, /свет на минимальном уровне/);
+  // если свет заблокирован (нет времени), про минимум не пишем
+  const blocked = collectAlerts(healthy({sht_online: false, led_supply_blocked: true, power_ok: false}));
+  assert.doesNotMatch(blocked.find(a => a.id === 'sht').text, /свет на минимальном/);
+  // в сушке света нет
+  const dry = collectAlerts(healthy({operation_mode: 1, sht_online: false}));
+  assert.doesNotMatch(dry.find(a => a.id === 'sht').text, /свет/);
 });
 
 test('вода, пропущенный полив и SD-карта: предупреждения', () => {

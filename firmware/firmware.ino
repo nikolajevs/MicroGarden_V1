@@ -1948,7 +1948,7 @@ void loop() {
   const bool freshPower = state.power_ok && power_last_sample_ms != 0 &&
                           elapsedMs(currentMillis, power_last_sample_ms) <= POWER_FRESH_MS;
   led_supply_allowed = ledSupplyAllowed(led_supply_allowed, freshPower, state.bus_v, power_online,
-                                        state.clock_usable, state.sht_online);
+                                        state.clock_usable);
   state.led_supply_blocked = !led_supply_allowed;
   // Lite has no hardware UVLO/PGOOD gate. Apply cutoff every loop, outside the 10 s climate update.
   if (!led_supply_allowed && state.led_pwm != 0) {
