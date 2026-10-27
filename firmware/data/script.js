@@ -120,10 +120,13 @@ function renderStatus(data) {
     document.querySelectorAll('[data-growing-only]').forEach(el => { el.hidden = drying; });
     document.getElementById('live-grid').classList.toggle('drying', drying);
 
-    // Без доверенных часов прошивка не начинает полив. Раньше любая проблема с часами
+    // Полив идёт по RTC или по программному таймеру, выставленному из RTC либо вручную с момента
+    // запуска (clock_usable). Если времени нет совсем, полив выключен. Раньше любая проблема с часами
     // показывалась как "Часы не выставлены", даже когда микросхема RTC просто не отвечала.
     const warnEl = document.getElementById('clock-warning');
-    const wateringNote = drying ? '' : ' — полив выключен';
+    const wateringNote = drying ? '' : data.clock_usable
+        ? ' — время идёт по программному таймеру до перезагрузки, полив работает'
+        : ' — время не выставлено, полив выключен';
     if (data.clock_trusted) {
         warnEl.hidden = true;
     } else {
