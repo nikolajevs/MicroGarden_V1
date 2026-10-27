@@ -718,14 +718,26 @@ void appendSettingsJson(String &json, const Settings &s) {
   }
 }
 
+// Пауза перед первым выходом в эфир и штатный период телеметрии.
+static const uint32_t UBIDOTS_FIRST_DELAY_MS = 5000;
+static const uint32_t UBIDOTS_PERIOD_MS      = 120000;
+
 // Фоновая задача на Core 0 для работы с облаком Ubidots
 void vUbidotsTask(void *pvParameters) {
   // С какими данными роутера поднято текущее STA-соединение
   char connectedSsid[WIFI_SSID_MAX + 1] = "";
   char connectedPass[WIFI_PASS_MAX + 1] = "";
 
+  // Первый заход делаем через 5 с после старта, дальше спим по 2 минуты. Раньше
+  // сон стоял в начале цикла без исключений, и Wi-Fi поднимался только через две
+  // минуты после включения — всё это время RGB мигал синим.
+  // Ждём уведомление, а не просто таймаут: сохранение настроек Wi-Fi/Ubidots
+  // будит задачу сразу, не дожидаясь конца сна.
+  TickType_t sleepTicks = pdMS_TO_TICKS(UBIDOTS_FIRST_DELAY_MS);
+
   for (;;) {
-    vTaskDelay(pdMS_TO_TICKS(120000)); // 2 минуты сна
+    ulTaskNotifyTake(pdTRUE, sleepTicks);
+    sleepTicks = pdMS_TO_TICKS(UBIDOTS_PERIOD_MS);
 
     logPrintln("[Core 0] Пробуждение задачи Ubidots...");
 
@@ -1235,6 +1247,17 @@ bool authorize(AsyncWebServerRequest *request) {
   return true;
 }
 
+// Фатальная ошибка инициализации: выходы к этому моменту выключены, продолжать
+// старт нельзя. Останавливаемся навсегда, но WDT сбрасываем — иначе плата
+// уходит в перезагрузку каждые 15 с и бесконечно повторяет неудачный старт.
+static void haltOnFatalError(const char *reason) {
+  if (reason != NULL) Serial.println(reason);
+  for (;;) {
+    esp_task_wdt_reset();
+    delay(1000);
+  }
+}
+
 void setup() {
   // FIRST: MicroGarden_V1 power outputs off, before Serial, buses, NVS, WiFi or PWM.
   // Preload LOW before enabling outputs, even if a software reset left a HIGH latch.
@@ -1289,8 +1312,7 @@ void setup() {
       digitalWrite(pin, LOW);
     }
     digitalWrite(RGB_RED_PIN, HIGH);
-    Serial.println("PWM initialization failed: LED/PTC/pump off, fans at full speed.");
-    while (true) { esp_task_wdt_reset(); delay(1000); }
+    haltOnFatalError("PWM initialization failed: LED/PTC/pump off, fans at full speed.");
   }
   rgb_ready = true;
   setStatusColor(StatusColor::Blue);
@@ -1305,23 +1327,20 @@ void setup() {
 
   WiFi.mode(WIFI_STA); // RF entropy before generating passwords, no open AP.
   if (!preferences.begin("grow-box", false)) {
-    Serial.println("Cannot initialize settings; outputs remain off.");
-    while (true) delay(1000);
+    haltOnFatalError("Cannot initialize settings; outputs remain off.");
   }
   // A one-time upgrade rotates the old publicly documented AP password.
   if (!preferences.getBool("security_v1", false)) {
     String generated = randomPassword();
     if (!preferences.putString("ap_pass", generated) || !preferences.putBool("security_v1", true)) {
-      Serial.println("Cannot persist AP password");
-      while (true) delay(1000);
+      haltOnFatalError("Cannot persist AP password");
     }
   }
   admin_password = preferences.getString("admin_pass", "");
   if (admin_password.length() != 8) {
     admin_password = randomPassword();
     if (!preferences.putString("admin_pass", admin_password)) {
-      Serial.println("Cannot persist admin password");
-      while (true) delay(1000);
+      haltOnFatalError("Cannot persist admin password");
     }
   }
   csrf_token = randomSecret();
@@ -1330,10 +1349,10 @@ void setup() {
   if (!preferences.getBool("short_pass_v1", false)) {
     String previous = preferences.getString("ap_pass", "");
     if (isLegacyGeneratedPassword(previous) && !preferences.putString("ap_pass", randomPassword())) {
-      Serial.println("Cannot persist AP password"); while (true) delay(1000);
+      haltOnFatalError("Cannot persist AP password");
     }
     if (!preferences.putBool("short_pass_v1", true)) {
-      Serial.println("Cannot persist password migration"); while (true) delay(1000);
+      haltOnFatalError("Cannot persist password migration");
     }
   }
 
@@ -1343,7 +1362,7 @@ void setup() {
     String generated = randomPassword();
     strlcpy(cfg.ap_pass, generated.c_str(), sizeof(cfg.ap_pass));
     if (!preferences.putString("ap_pass", cfg.ap_pass)) {
-      Serial.println("Cannot persist AP password"); while (true) delay(1000);
+      haltOnFatalError("Cannot persist AP password");
     }
   }
   // USB only: credentials never enter the HTTP console buffer.
@@ -1496,7 +1515,7 @@ void setup() {
   server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest *request){
     Settings cfg = settingsSnapshot();
     DateTime now = getWebDateTime();
-    char buf[24]; snprintf(buf, sizeof(buf), "%02d.%02d.%04d %02d:%02d:%02d", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
+    char buf[32]; snprintf(buf, sizeof(buf), "%02d.%02d.%04d %02d:%02d:%02d", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
 
     String json = "{";
     appendSettingsJson(json, cfg);
@@ -1539,6 +1558,16 @@ void setup() {
 
     saveChangedSettings(prev, next);
     publishSettings(next);
+
+    // Новые данные роутера или Ubidots — будим фоновую задачу, чтобы она не ждала
+    // до двух минут в своём сне и переподключилась сразу после сохранения.
+    if (UbidotsTaskHandle != NULL &&
+        (strcmp(prev.wifi_ssid, next.wifi_ssid) != 0 ||
+         strcmp(prev.wifi_pass, next.wifi_pass) != 0 ||
+         strcmp(prev.ubidots_token, next.ubidots_token) != 0 ||
+         strcmp(prev.device_label, next.device_label) != 0)) {
+      xTaskNotifyGive(UbidotsTaskHandle);
+    }
 
     // Новые SSID/пароль точки доступа применяем сразу, без перезагрузки платы.
     // Текущие клиенты при этом отключатся и должны подключиться заново с новыми данными.
