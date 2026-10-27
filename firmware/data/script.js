@@ -121,22 +121,8 @@ function renderStatus(data) {
     document.querySelectorAll('[data-growing-only]').forEach(el => { el.hidden = drying; });
     document.getElementById('live-grid').classList.toggle('drying', drying);
 
-    // Полив идёт по RTC или по программному таймеру, выставленному из RTC либо вручную с момента
-    // запуска (clock_usable). Если времени нет совсем, полив выключен. Раньше любая проблема с часами
-    // показывалась как "Часы не выставлены", даже когда микросхема RTC просто не отвечала.
-    const warnEl = document.getElementById('clock-warning');
-    const wateringNote = drying ? '' : data.clock_usable
-        ? ' — время идёт по программному таймеру до перезагрузки, полив работает'
-        : ' — время не выставлено, полив выключен';
-    if (data.clock_trusted) {
-        warnEl.hidden = true;
-    } else {
-        warnEl.textContent = (data.rtc_status === 'no_response' ? 'Часы RTC не отвечают'
-            : data.rtc_status === 'not_set' ? 'Часы не выставлены'
-            : 'Проверка часов') + wateringNote; // RTC снова читается, доверие вернётся через ~1 мин
-        warnEl.hidden = false;
-    }
-
+    // Неисправность часов (RTC не отвечает, время не выставлено, полив на программном таймере или выключен)
+    // показывает колокольчик: правила и тексты в alerts.js.
     renderAlerts(Alerts.collectAlerts(data));
 }
 
