@@ -193,3 +193,13 @@ test('serial console polls only while its settings tab is active', async () => {
   assert.equal(requests, 1);
   assert.equal(p.fields.get('serial-console').textContent, 'board log');
 });
+
+test('RGB legend lists exactly the status colours of the firmware', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const header = fs.readFileSync(path.join(__dirname, '../firmware/LiteControl.h'), 'utf8');
+  const body = header.match(/enum class StatusColor[^{]*\{([^}]*)\}/)[1];
+  const firmwareColours = body.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).sort();
+  const legendColours = [...html.matchAll(/class="rgb-dot rgb-(\w+)"/g)].map(m => m[1]).sort();
+  assert.deepEqual(legendColours, firmwareColours,
+    'a colour added to or removed from StatusColor must be added to or removed from the legend');
+});
