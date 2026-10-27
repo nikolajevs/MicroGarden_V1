@@ -199,6 +199,24 @@ static_assert(!ledSupplyNext(false, false, 24) && !ledSupplyNext(true, false, 24
               !ledSupplyNext(true, true, 21.59f) && ledSupplyNext(true, true, 21.6f) &&
               !ledSupplyNext(false, true, 22.49f) && ledSupplyNext(false, true, 22.5f) &&
               !ledSupplyNext(true, true, __builtin_nanf("")), "LED supply cutoff, hysteresis and invalid data");
+// Решение о свете: измеренное напряжение главнее всего; одиночный сбой чтения держит прежнее решение;
+// молчащий измеритель не гасит свет, пока есть время и датчик SHT4x.
+static_assert(!ledSupplyAllowed(true, true, 21.59f, true, true, true) &&       // измерено низкое: выключить, даже при часах и датчике
+              !ledSupplyAllowed(true, true, 21.59f, false, true, true) &&
+              ledSupplyAllowed(true, true, 21.6f, true, false, false) &&      // гистерезис и пороги те же, что у ledSupplyNext
+              !ledSupplyAllowed(false, true, 22.49f, true, true, true) &&
+              ledSupplyAllowed(false, true, 22.5f, true, false, false) &&
+              !ledSupplyAllowed(true, true, __builtin_nanf(""), true, true, true),
+              "a measured low supply must cut the LED whatever the clock and sensor say");
+static_assert(ledSupplyAllowed(true, false, 0, true, false, false) &&          // измеритель на связи, отсчёта нет: решение держится
+              !ledSupplyAllowed(false, false, 0, true, true, true),            // и холодный пуск ждёт первого измерения
+              "a single missed INA238 sample must not change the LED decision");
+static_assert(ledSupplyAllowed(false, false, 0, false, true, true) &&          // измерителя нет: светим, если время и датчик в порядке
+              ledSupplyAllowed(true, false, 0, false, true, true) &&
+              !ledSupplyAllowed(true, false, 0, false, false, true) &&         // время недостоверно
+              !ledSupplyAllowed(true, false, 0, false, true, false) &&         // датчик не отвечает
+              !ledSupplyAllowed(true, false, 0, false, false, false),
+              "without a power meter the LED runs only with a trusted clock and a working SHT4x");
 // Порядок приоритетов: датчик/часы, просадка шины, затем SD и данные питания.
 static_assert(statusColor(false, true, true, false, false) == StatusColor::Red &&
               statusColor(true, false, false, true, true) == StatusColor::Red &&

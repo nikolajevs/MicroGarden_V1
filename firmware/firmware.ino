@@ -140,7 +140,8 @@ struct State {
   bool is_day;
   bool sht_online;
   bool rtc_online;
-  bool clock_trusted;
+  bool clock_trusted;      // RTC отвечает и время в нём достоверно
+  bool clock_usable;       // clock_trusted, либо программный таймер выставлен из RTC или вручную с момента запуска
   bool pump_active;
   bool heater_active;
   uint8_t rtc_status;      // RtcStatus of the last RTC read
@@ -247,10 +248,20 @@ void logPrintf(const char *fmt, ...) {
   char buf[192];
   va_list args;
   va_start(args, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, args);
+  const int written = vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
+  size_t len = written < 0 ? 0 : (size_t)written;
+  if (len >= sizeof(buf)) {
+    // Строка не поместилась. Режем так, чтобы не оставить обрывок русской буквы (UTF-8 из двух
+    // байт) и вернуть потерянный перевод строки: иначе обрывок попал бы в журнал и в запрос
+    // телеметрии, а следующая строка приклеилась бы к этой.
+    len = sizeof(buf) - 2;
+    while (len > 0 && ((uint8_t)buf[len] & 0xC0) == 0x80) --len;
+    buf[len++] = '\n';
+    buf[len] = '\0';
+  }
   Serial.print(buf);
-  logRaw(buf, strlen(buf));
+  logRaw(buf, len);
 }
 
 // Возвращает содержимое буфера в правильном хронологическом порядке одной строкой.
@@ -369,6 +380,10 @@ const int RTC_RECOVERY_STREAK_NEEDED = 3;          // Сколько подря�
 // Переменные для программного дублирования времени (на случай отказа RTC)
 uint32_t backup_unixtime = 1774838400; // Дефолтный 2026 год, если RTC умер сразу при старте
 uint32_t last_rtc_check_ms = 0;
+// Программный таймер можно считать временем, только если он был выставлен настоящим источником
+// (чтение RTC или ввод времени владельцем) с момента запуска. Дефолтная дата выше источником не
+// является: пока флаг не поднят, полив и свет без измерителя питания по таймеру не работают.
+static bool backup_clock_synced = false;
 
 // Время и запросы к RTC трогает только loop(). Веб-обработчики крутятся в задаче
 // AsyncWebServer (другое ядро): раньше они звали getSafeDateTime() и rtcAdjust() напрямую,
@@ -1218,13 +1233,17 @@ DateTime getSafeDateTime() {
       state.clock_trusted = true;
       backup_unixtime = now.unixtime(); // Синхронизируем бэкап
       last_rtc_check_ms = millis();     // ...и точку отсчёта программного таймера
+      backup_clock_synced = true;
       return now;
     }
     logPrintln("[КРИТИКА] RTC вернул некорректную дату! Переход на программный таймер.");
     state.rtc_online = false;
   }
 
-  // Backup time keeps the UI/climate/CSV running, but cannot authorize watering.
+  // Программный таймер идёт от последнего чтения RTC или от времени, введённого владельцем (точность
+  // порядка секунд в сутки). Пока он выставлен таким источником (backup_clock_synced), на нём работают
+  // и расписание полива, и свет без измерителя питания; clock_trusted при этом остаётся false, чтобы
+  // RGB и страница показывали отказ RTC.
   state.clock_trusted = false;
   advanceBackupClock(millis(), last_rtc_check_ms, backup_unixtime);
   return DateTime(backup_unixtime);
@@ -1258,6 +1277,7 @@ void tryRecoverRTC(unsigned long currentMillis) {
         state.clock_trusted = true;
         backup_unixtime = now.unixtime();
         last_rtc_check_ms = millis();
+        backup_clock_synced = true;
         rtc_recovery_streak = 0;
         logPrintf("[RTC] %s восстановлен, выходим из программного таймера.\n", rtcName());
       }
@@ -1559,6 +1579,7 @@ void setup() {
     if (rtcBegin() && readRTC(initialTime)) {
       backup_unixtime = initialTime.unixtime();
       last_rtc_check_ms = millis();
+      backup_clock_synced = true;
       state.clock_trusted = true;
       state.rtc_online = true;
     } else {
@@ -1599,6 +1620,7 @@ void setup() {
   WiFi.softAP(cfg.ap_ssid, cfg.ap_pass[0] ? cfg.ap_pass : NULL);
 
   cached_unixtime = getSafeDateTime().unixtime(); // Веб-обработчики читают только этот снимок
+  state.clock_usable = state.clock_trusted || backup_clock_synced;
   publishState(); // Первое состояние — до старта задач, которые его читают
 
   // 4 КБ хватает: с уходом телеметрии из задачи пропал mbedTLS, которому было мало 8.
@@ -1645,6 +1667,7 @@ void setup() {
     json += "\"sht_online\":" + String(st.sht_online ? "true" : "false") + ","; // Передаем статус в UI
     json += "\"rtc_online\":" + String(st.rtc_online ? "true" : "false") + ",";
     json += "\"clock_trusted\":" + String(st.clock_trusted ? "true" : "false") + ",";
+    json += "\"clock_usable\":" + String(st.clock_usable ? "true" : "false") + ","; // RTC или выставленный программный таймер
     static const char *const RTC_STATUS_NAMES[] = {"ok", "not_set", "no_response"};
     json += "\"rtc_status\":\"" + String(RTC_STATUS_NAMES[st.rtc_status <= RTC_NO_RESPONSE ? st.rtc_status : uint8_t(RTC_NO_RESPONSE)]) + "\",";
     static const char *const TIME_SET_NAMES[] = {"none", "pending", "ok", "failed"};
@@ -1858,6 +1881,7 @@ void loop() {
   if (lastTimeRead == 0 || currentMillis - lastTimeRead >= 1000) {
     lastTimeRead = currentMillis;
     now = getSafeDateTime();
+    state.clock_usable = state.clock_trusted || backup_clock_synced;
     cached_unixtime = now.unixtime(); // Снимок, который отдают веб-обработчики
 
     Settings fresh = settingsSnapshot();
@@ -1907,12 +1931,14 @@ void loop() {
     rtc_recovery_streak = 0;
     backup_unixtime = requested;
     last_rtc_check_ms = millis();
+    backup_clock_synced = true; // Владелец ввёл время: программный таймер идёт от него
+    state.clock_usable = true;
     now = userTime;
     cached_unixtime = requested;
     watering_armed_from = requested; // Полив, "пропущенный" по новым часам, не догоняем
     logPrintln(state.rtc_online ? "[RTC] MCP7940N: время записано и проверено."
-                               : "[RTC] Установка не удалась, часы остановлены; новый полив заблокирован, "
-                                 "время в интерфейсе резервное. Повторите установку.");
+                               : "[RTC] Установка в RTC не удалась, часы остановлены; время идёт по программному таймеру "
+                                 "до перезагрузки, полив работает по нему. Проверьте RTC и повторите установку.");
   }
   // An untrusted clock only blocks new waterings. A running one still ends by millis()
   // (stopPumpAtDeadline), so a brief RTC glitch no longer costs the day's watering.
@@ -1920,12 +1946,27 @@ void loop() {
   updatePowerMeter(currentMillis, now.unixtime() / 86400, cfg.power_cal_pct); // Self-limits to 1 s
   const bool freshPower = state.power_ok && power_last_sample_ms != 0 &&
                           elapsedMs(currentMillis, power_last_sample_ms) <= POWER_FRESH_MS;
-  led_supply_allowed = ledSupplyNext(led_supply_allowed, freshPower, state.bus_v);
+  led_supply_allowed = ledSupplyAllowed(led_supply_allowed, freshPower, state.bus_v, power_online,
+                                        state.clock_usable, state.sht_online);
   state.led_supply_blocked = !led_supply_allowed;
   // Lite has no hardware UVLO/PGOOD gate. Apply cutoff every loop, outside the 10 s climate update.
   if (!led_supply_allowed && state.led_pwm != 0) {
     state.led_pwm = 0;
     ledcWrite(LED_PWM_PIN, 0);
+  }
+  // Измеритель молчит, а свет разрешён по часам и датчику: защиты от просадки питания нет. Пишем
+  // об этом один раз, если так длится дольше 30 с, чтобы одиночный сбой не засорял журнал.
+  static uint32_t unmeasuredSinceMs = 0;
+  static bool unmeasuredReported = false;
+  if (led_supply_allowed && !freshPower && !power_online) {
+    if (unmeasuredSinceMs == 0) unmeasuredSinceMs = currentMillis ? currentMillis : 1;
+    if (!unmeasuredReported && elapsedMs(currentMillis, unmeasuredSinceMs) >= 30000) {
+      unmeasuredReported = true;
+      logPrintln("[Power] Нет связи с измерителем питания (INA238): свет работает без защиты от низкого напряжения.");
+    }
+  } else {
+    unmeasuredSinceMs = 0;
+    unmeasuredReported = false;
   }
 
 
@@ -2174,7 +2215,7 @@ void loop() {
     // Отметка "последний полив" из будущего (часы когда-то стояли неверно, а потом их поправили)
     // раньше блокировала полив до той самой даты — хоть на год. Сдвигаем её на сегодня:
     // сегодня повтора не будет, с завтрашнего дня полив идёт как обычно.
-    uint32_t reconciled = reconcileWateringMark(state.clock_trusted, today_code, last_watering_day);
+    uint32_t reconciled = reconcileWateringMark(state.clock_usable, today_code, last_watering_day);
     if (reconciled != last_watering_day) {
       last_watering_day = reconciled;
       preferences.putUInt("last_water", reconciled);
@@ -2200,7 +2241,7 @@ void loop() {
       // в эту минуту быть без питания или перезагружаться — и день оставался без полива.
       uint32_t scheduled = today_code * 86400UL + (uint32_t)cfg.watering_hour * 3600UL + (uint32_t)cfg.watering_minute * 60UL;
       if (day_enabled && wateringDue(now.unixtime(), scheduled, watering_armed_from, WATERING_CATCHUP_SEC) &&
-          wateringDayAllowed(state.clock_trusted, today_code, last_watering_day)) {
+          wateringDayAllowed(state.clock_usable, today_code, last_watering_day)) {
         uint32_t late_min = (now.unixtime() - scheduled) / 60;
         // Persist before energizing the pump; reboot during this minute must not repeat it.
         last_watering_day = today_code;
@@ -2212,8 +2253,11 @@ void loop() {
           pump_start_ms = millis();
           pump_duration_ms = uint32_t(cfg.watering_duration_sec) * 1000U;
           digitalWrite(PUMP_PIN, HIGH);
-          if (late_min > 0) logPrintf("[ПОЛИВ] Старт автополива с опозданием на %u мин (плата была недоступна)\n", (unsigned)late_min);
-          else logPrintln("[ПОЛИВ] Старт автополива");
+          // Через String, а не logPrintf: русская строка с пометкой длиннее его буфера в 192 байта.
+          String startMsg = "[ПОЛИВ] Старт автополива";
+          if (late_min > 0) startMsg += " с опозданием на " + String((unsigned)late_min) + " мин (плата была недоступна)";
+          if (!state.clock_trusted) startMsg += " (время по программному таймеру, RTC не отвечает)";
+          logPrintln(startMsg);
         } else {
           state.last_skip_day = today_code;
           logPrintln("[ПОЛИВ] Пропущен: датчик не видит воду в баке");

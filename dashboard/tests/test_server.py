@@ -251,6 +251,16 @@ class HttpTests(unittest.TestCase):
         status, _, body = self.request("GET", "/api/devices")
         self.assertIn("http-m", [d["device"] for d in json.loads(body)["devices"]])
 
+    def test_ingest_survives_broken_utf8(self):
+        # Строка журнала, обрезанная посреди русской буквы, не должна вызывать 400 на каждый повтор.
+        broken = '{"device":"utf8-m","log":{"boot":"u","from":0,"text":"ОШИБКА: обрыв '.encode("utf-8") + b"\xd0" + '\\nдальше\\n"}}'.encode("utf-8")
+        status, _, body = self.ingest(None, raw=broken)
+        self.assertEqual(status, 200, body)
+        status, _, body = self.request("GET", "/api/logs?device=utf8-m&level=all")
+        lines = [row["line"] for row in json.loads(body)["rows"]]
+        self.assertIn("дальше", lines)
+        self.assertTrue(any(line.startswith("ОШИБКА: обрыв") for line in lines))
+
     def test_ingest_rejects_bad_requests(self):
         self.assertEqual(self.ingest(None, raw=b"{oops")[0], 400)
         self.assertEqual(self.ingest(None, raw=b"[1,2]")[0], 400)

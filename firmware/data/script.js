@@ -120,10 +120,13 @@ function renderStatus(data) {
     document.querySelectorAll('[data-growing-only]').forEach(el => { el.hidden = drying; });
     document.getElementById('live-grid').classList.toggle('drying', drying);
 
-    // Без доверенных часов прошивка не начинает полив. Раньше любая проблема с часами
+    // Полив идёт по RTC или по программному таймеру, выставленному из RTC либо вручную с момента
+    // запуска (clock_usable). Если времени нет совсем, полив выключен. Раньше любая проблема с часами
     // показывалась как "Часы не выставлены", даже когда микросхема RTC просто не отвечала.
     const warnEl = document.getElementById('clock-warning');
-    const wateringNote = drying ? '' : ' — полив выключен';
+    const wateringNote = drying ? '' : data.clock_usable
+        ? ' — время идёт по программному таймеру до перезагрузки, полив работает'
+        : ' — время не выставлено, полив выключен';
     if (data.clock_trusted) {
         warnEl.hidden = true;
     } else {
@@ -147,7 +150,11 @@ function renderPower(data) {
     } else {
         valueEl.innerHTML = '--<span class="unit">Вт</span>';
         detailsEl.textContent = 'нет данных';
-        warnEl.textContent = 'Свет выключен: нет достоверных данных питания';
+        // Без данных измерителя свет гасится только если плата не знает время или у неё не отвечает датчик
+        // SHT4x; иначе он работает по расписанию, но без защиты от просадки питания.
+        warnEl.textContent = data.led_supply_blocked
+            ? 'Свет выключен: нет данных питания, а часы или датчик температуры не в порядке'
+            : 'Измеритель питания не отвечает: свет работает по расписанию, защиты от низкого напряжения нет';
         warnEl.hidden = false;
     }
     const energyEl = document.getElementById('energy-val');
