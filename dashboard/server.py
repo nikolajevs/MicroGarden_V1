@@ -527,7 +527,9 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(length))
         self.close_connection = False  # тело прочитано целиком, соединение можно держать
         try:
-            body = json.loads(raw)
+            # Обрезанная прошивкой строка не должна навсегда блокировать приём: битые байты UTF-8
+            # заменяются знаком, а не ломают весь запрос (строгое чтение дало бы 400 на каждый повтор).
+            body = json.loads(raw.decode("utf-8", errors="replace"))
         except ValueError:
             return self._error(400, "это не JSON")
         if not isinstance(body, dict):
