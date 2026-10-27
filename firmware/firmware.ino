@@ -12,26 +12,20 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Preferences.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <vector>
 #include <atomic>
 #include <esp_random.h>
-#include <time.h>
 #include "Board.h"
 #include "Safety.h"
 #include "SafetyTests.h"
 #include "Ina238.h"
 #include "LiteControl.h"
-#include "UbidotsCA.h"
 
-// --- Настройки подключения к домашнему роутеру и Ubidots ---
+// --- Настройки подключения к домашнему роутеру ---
 // Значения по умолчанию используются только при первой прошивке / если NVS пуст.
-// Реальные значения хранятся в Preferences и редактируются на вкладке "WiFi / Ubidots".
+// Реальные значения хранятся в Preferences и редактируются на вкладке "WiFi".
 #define DEFAULT_WIFI_SSID ""
 #define DEFAULT_WIFI_PASS ""
-#define DEFAULT_UBIDOTS_TOKEN ""
-#define DEFAULT_DEVICE_LABEL  "microgarden-v1"
 #define DEFAULT_AP_SSID       "MicroGarden_V1"
 #define DEFAULT_AP_PASS ""
 
@@ -49,20 +43,18 @@ static bool rgb_ready = false;
 // --- Ограничения длины строковых настроек ---
 #define WIFI_SSID_MAX 32   // стандарт 802.11
 #define WIFI_PASS_MAX 63   // WPA2
-#define TOKEN_MAX     128
-#define LABEL_MAX     64
 
 // =====================================================================================
 // ДАННЫЕ ПРОШИВКИ: НАСТРОЙКИ И СОСТОЯНИЕ
 // =====================================================================================
 // Раньше это были ~50 отдельных глобальных переменных, которые три задачи на двух ядрах
-// (loop, веб-сервер, Ubidots) читали и писали кто как, — отсюда была большая часть гонок.
+// (loop, веб-сервер, задача Wi-Fi) читали и писали кто как, — отсюда была большая часть гонок.
 // Теперь правило одно:
 //   * Settings — то, что задал пользователь. Меняет только обработчик /save-settings:
 //     разбирает форму в свою копию и публикует её целиком (publishSettings()).
 //     Все остальные работают со своей копией (settingsSnapshot()).
 //   * State — то, что происходит сейчас. Пишет только loop() в рабочую копию `state`
-//     и публикует её (publishState()); веб и Ubidots читают stateSnapshot().
+//     и публикует её (publishState()); веб читает stateSnapshot().
 // Обе структуры — простые данные без String и указателей, поэтому копируются одним memcpy
 // под спинлоком: без аллокаций, без таймаутов и без 503 на ровном месте.
 //
@@ -110,8 +102,6 @@ struct Settings {
   // Сеть и облако
   char wifi_ssid[WIFI_SSID_MAX + 1];
   char wifi_pass[WIFI_PASS_MAX + 1];
-  char ubidots_token[TOKEN_MAX + 1];
-  char device_label[LABEL_MAX + 1];
   char ap_ssid[WIFI_SSID_MAX + 1];   // Точка доступа платы — к ней подключается телефон/ноутбук
   char ap_pass[WIFI_PASS_MAX + 1];   // WPA2 only; empty form means keep existing password
 };
@@ -196,7 +186,7 @@ void logRaw(const char *data, size_t len) {
 }
 
 // Замена logPrintln()/logPrintf() — пишет и на аппаратный UART, и в буфер для веба.
-// Core 0 (задача Ubidots) и Core 1 (loop/setup) могут писать одновременно, поэтому буфер
+// Core 0 (задача Wi-Fi) и Core 1 (loop/setup) могут писать одновременно, поэтому буфер
 // защищён спинлоком (portENTER_CRITICAL), а не мьютексом — запись короткая и частая.
 void logPrintln(const String &msg) {
   Serial.println(msg);
@@ -339,7 +329,7 @@ std::atomic<uint32_t> pending_time_set{0}; // Запрос "выставить �
 std::atomic<uint8_t> time_set_result{TIME_SET_NONE}; // Итог последней установки часов для страницы настроек
 
 // --- Хендлы FreeRTOS для многоядерности ---
-TaskHandle_t UbidotsTaskHandle = NULL;
+TaskHandle_t WifiTaskHandle = NULL;
 
 // --- Инициализация объектов ---
 Adafruit_SHT4x sht40 = Adafruit_SHT4x();
@@ -542,12 +532,10 @@ static const SettingDef SETTING_DEFS[] = {
   SET_BOOL ("water_sensor_enabled","water_sensor",    water_sensor_enabled,               false),
   // --- Цикл выращивания: из формы приходит строкой start_date, разбирается в /save-settings ---
   SET_U32_NOFORM("start_time",     "start_time",      start_timestamp),
-  // --- Сеть и облако. Мин./макс. — допустимая длина непустого значения ---
+  // --- Сеть. Мин./макс. — допустимая длина непустого значения ---
   //        param                  ключ NVS           поле            мин  макс            по умолч.              флаги                баннер
   SET_STR  ("wifi_ssid",           "wifi_ssid",       wifi_ssid,      0,   WIFI_SSID_MAX,  DEFAULT_WIFI_SSID,     SF_TRIM,             "wifi"),
   SET_STR  ("wifi_pass",           "wifi_pass",       wifi_pass,      8,   WIFI_PASS_MAX,  DEFAULT_WIFI_PASS,     SF_SECRET,           "wifi"),
-  SET_STR  ("ubidots_token",       "ubidots_token",   ubidots_token,  1,   TOKEN_MAX,      DEFAULT_UBIDOTS_TOKEN, SF_SECRET | SF_TRIM, nullptr),
-  SET_STR  ("device_label",        "device_label",    device_label,   0,   LABEL_MAX,      DEFAULT_DEVICE_LABEL,  SF_TRIM,             nullptr),
   SET_STR  ("ap_ssid",             "ap_ssid",         ap_ssid,        1,   WIFI_SSID_MAX,  DEFAULT_AP_SSID,       SF_TRIM,             "ap"),
   SET_STR  ("ap_pass",             "ap_pass",         ap_pass,        8,   WIFI_PASS_MAX,  DEFAULT_AP_PASS,       SF_SECRET,           "ap"),
 };
@@ -715,36 +703,32 @@ void appendSettingsJson(String &json, const Settings &s) {
   }
 }
 
-// Пауза перед первым выходом в эфир и штатный период телеметрии.
-static const uint32_t UBIDOTS_FIRST_DELAY_MS = 5000;
-static const uint32_t UBIDOTS_PERIOD_MS      = 120000;
+// Пауза перед первой попыткой подключиться к роутеру и период повторных попыток.
+static const uint32_t WIFI_FIRST_DELAY_MS = 5000;
+static const uint32_t WIFI_RETRY_MS       = 120000;
 
-// Фоновая задача на Core 0 для работы с облаком Ubidots
-void vUbidotsTask(void *pvParameters) {
+// Фоновая задача на Core 0: держит STA-подключение к домашнему роутеру, чтобы
+// веб-интерфейс был доступен не только через точку доступа платы. Наружу ничего
+// не отправляет — телеметрия в облако из прошивки убрана.
+void vWifiTask(void *pvParameters) {
   // С какими данными роутера поднято текущее STA-соединение
   char connectedSsid[WIFI_SSID_MAX + 1] = "";
   char connectedPass[WIFI_PASS_MAX + 1] = "";
 
-  // Первый заход делаем через 5 с после старта, дальше спим по 2 минуты. Раньше
-  // сон стоял в начале цикла без исключений, и Wi-Fi поднимался только через две
-  // минуты после включения — всё это время RGB мигал синим.
-  // Ждём уведомление, а не просто таймаут: сохранение настроек Wi-Fi/Ubidots
-  // будит задачу сразу, не дожидаясь конца сна.
-  TickType_t sleepTicks = pdMS_TO_TICKS(UBIDOTS_FIRST_DELAY_MS);
+  // Первую попытку делаем через 5 с после старта, дальше повторяем раз в 2 минуты.
+  // Ждём уведомление, а не просто таймаут: сохранение настроек Wi-Fi будит задачу
+  // сразу, не дожидаясь конца сна.
+  TickType_t sleepTicks = pdMS_TO_TICKS(WIFI_FIRST_DELAY_MS);
 
   for (;;) {
     ulTaskNotifyTake(pdTRUE, sleepTicks);
-    sleepTicks = pdMS_TO_TICKS(UBIDOTS_PERIOD_MS);
+    sleepTicks = pdMS_TO_TICKS(WIFI_RETRY_MS);
 
-    logPrintln("[Core 0] Пробуждение задачи Ubidots...");
-
-    // Свои копии: глобальные данные других задач здесь напрямую не читаются
+    // Своя копия: глобальные данные других задач здесь напрямую не читаются
     Settings cfg = settingsSnapshot();
-    State st = stateSnapshot();
 
     if (cfg.wifi_ssid[0] == '\0') {
       if (WiFi.status() == WL_CONNECTED) WiFi.disconnect();
-      logPrintln("[Core 0] Wi-Fi роутера не настроен — телеметрия пропущена.");
       continue;
     }
 
@@ -757,66 +741,28 @@ void vUbidotsTask(void *pvParameters) {
       vTaskDelay(pdMS_TO_TICKS(200));
     }
 
+    if (WiFi.status() == WL_CONNECTED) continue;
+
     // Режим AP+STA поднят один раз в setup() и больше не переключается. Раньше задача
     // каждые 2 минуты делала mode()/disconnect(true), из-за чего точка доступа
     // передёргивалась и телефон отваливался от веб-интерфейса прямо во время работы.
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
-      strlcpy(connectedSsid, cfg.wifi_ssid, sizeof(connectedSsid));
-      strlcpy(connectedPass, cfg.wifi_pass, sizeof(connectedPass));
-      int attempts = 0;
-      while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        attempts++;
-      }
+    WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
+    strlcpy(connectedSsid, cfg.wifi_ssid, sizeof(connectedSsid));
+    strlcpy(connectedPass, cfg.wifi_pass, sizeof(connectedPass));
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+      vTaskDelay(pdMS_TO_TICKS(500));
+      attempts++;
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
+      logPrintf("[Core 0] Роутер: подключено, веб-интерфейс на http://%s/\n",
+                WiFi.localIP().toString().c_str());
+    } else {
       // Останавливаем поиск сети до следующей попытки. Пока STA сканирует эфир, радио уходит
       // с канала точки доступа, и веб-интерфейс у подключённого телефона работает с обрывами.
       WiFi.disconnect();
-      logPrintln("[Core 0] Нет связи с роутером — телеметрия пропущена.");
-      continue;
-    }
-
-    String payload = "{";
-    if (st.sht_online) {
-      payload += "\"temperature\":" + String(st.temp, 2) + ",";
-      payload += "\"humidity\":" + String(st.hum, 2) + ",";
-    }
-    payload += "\"led-power\":" + String(round(st.led_pwm / 2.55)) + ",";
-    payload += "\"fan1-power\":" + String(round(st.fan1_pwm / 2.55)) + ",";
-    payload += "\"fan2-power\":" + String(round(st.fan2_pwm / 2.55)) + ",";
-    if (st.power_ok) payload += "\"power\":" + String(st.power_w, 1) + ",";
-    payload += "\"sensor-status\":" + String(st.sht_online ? 1 : 0); // Статус датчика в облако
-    payload += "}";
-
-    if (!cfg.ubidots_token[0] || !cfg.device_label[0]) continue;
-    // System UTC for certificate validation; never modifies the local RTC schedule.
-    // SNTP is (re)started only while the clock is still unset: calling configTime() on every
-    // cycle restarted it each two minutes even after a successful sync.
-    if (time(nullptr) < 1704067200) {
-      configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
-      for (int i = 0; time(nullptr) < 1704067200 && i < 40; ++i) vTaskDelay(pdMS_TO_TICKS(250));
-    }
-    if (time(nullptr) < 1704067200) { logPrintln("[TLS] Waiting for UTC time; telemetry skipped."); continue; }
-    WiFiClientSecure client;
-    client.setCACert(UBIDOTS_ROOT_CA);
-    client.setHandshakeTimeout(15);
-    HTTPClient http;
-    http.setTimeout(10000);
-
-    if (http.begin(client, String("https://industrial.api.ubidots.com/api/v1.6/devices/") + cfg.device_label)) {
-      http.addHeader("Content-Type", "application/json");
-      http.addHeader("X-Auth-Token", cfg.ubidots_token);
-      int code = http.POST(payload);
-      // Раньше код ответа присваивался и молча выбрасывался — узнать, дошла ли
-      // телеметрия и не протух ли токен, было невозможно
-      if (code > 0) logPrintf("[Core 0] Ubidots: HTTP %d\n", code);
-      else          logPrintf("[Core 0] Ubidots: ошибка отправки (%d)\n", code);
-      http.end();
-    } else {
-      logPrintln("[Core 0] Ubidots: не удалось открыть соединение.");
+      logPrintln("[Core 0] Нет связи с роутером — повторим через 2 минуты.");
     }
   }
 }
@@ -1435,7 +1381,8 @@ void setup() {
   cached_unixtime = getSafeDateTime().unixtime(); // Веб-обработчики читают только этот снимок
   publishState(); // Первое состояние — до старта задач, которые его читают
 
-  xTaskCreatePinnedToCore(vUbidotsTask, "UbidotsTask", 12288, NULL, 1, &UbidotsTaskHandle, 0); // 12 КБ: mbedTLS не влезает в 8
+  // 4 КБ хватает: с уходом телеметрии из задачи пропал mbedTLS, которому было мало 8.
+  xTaskCreatePinnedToCore(vWifiTask, "WifiTask", 4096, NULL, 1, &WifiTaskHandle, 0);
 
   // The same guard covers pages, static assets, APIs and future routes.
   server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
@@ -1530,7 +1477,7 @@ void setup() {
 
   server.on("/save-settings", HTTP_POST, [](AsyncWebServerRequest *request){
     // Работаем с копией: разбираем форму, проверяем, пишем в NVS и только потом публикуем
-    // целиком — loop() и Ubidots никогда не видят наполовину применённые настройки.
+    // целиком — loop() и задача Wi-Fi никогда не видят наполовину применённые настройки.
     // Обработчики AsyncWebServer выполняются по одному, так что два сохранения
     // одновременно не случаются и изменения друг друга не затирают.
     Settings prev = settingsSnapshot();
@@ -1555,14 +1502,12 @@ void setup() {
     saveChangedSettings(prev, next);
     publishSettings(next);
 
-    // Новые данные роутера или Ubidots — будим фоновую задачу, чтобы она не ждала
-    // до двух минут в своём сне и переподключилась сразу после сохранения.
-    if (UbidotsTaskHandle != NULL &&
+    // Новые данные роутера — будим фоновую задачу, чтобы она не ждала до двух минут
+    // в своём сне и переподключилась сразу после сохранения.
+    if (WifiTaskHandle != NULL &&
         (strcmp(prev.wifi_ssid, next.wifi_ssid) != 0 ||
-         strcmp(prev.wifi_pass, next.wifi_pass) != 0 ||
-         strcmp(prev.ubidots_token, next.ubidots_token) != 0 ||
-         strcmp(prev.device_label, next.device_label) != 0)) {
-      xTaskNotifyGive(UbidotsTaskHandle);
+         strcmp(prev.wifi_pass, next.wifi_pass) != 0)) {
+      xTaskNotifyGive(WifiTaskHandle);
     }
 
     // Новые SSID/пароль точки доступа применяем сразу, без перезагрузки платы.
