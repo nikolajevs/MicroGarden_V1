@@ -1,0 +1,72 @@
+EU-LITE schematic connectivity review (from design.json, no KiCad)
+Revision: EU-LITE-0.1-DRAFT
+PASS: 58 checks
+Fitted electrical components: 158
+Stock pieces: 115 in 38 rows; purchased pieces: 46 in 35 rows
+Purchases incl. VAT 32.62 EUR + delivery 5.87 EUR = 38.49 EUR (catalogue 2026-10-23; RGB owner quote 2026-10-25), including CSD19531KCS and OSTAPA57E2A
+Stock lines used up completely (no spare, a mounting error means a repurchase): EEEFT1E821AP, EEVFK1J471M, INA238AIDGSR, IRL2505, id12
+
+PASS 01 | Part references are unique
+PASS 02 | No one-pin orphan nets
+PASS 03 | Intentional NC pins are exactly the documented ones (PG, ALERT, MFP, LM3429 pin 8, fan tach, SD detect, unused ESP32 pins)
+PASS 04 | Every part with a purchasable source has a footprint
+PASS 05 | No passive SMD footprint is smaller than 0603
+PASS 06 | Input terminal polarity, main fuse and TVS
+PASS 07 | Reverse polarity: Q102 IRL2505 drain on PSU return, source on the shunt; PSU_RTN touches only J101.2 and Q102
+PASS 08 | Q102 gate clamp: 12 V zener keeps Vgs below the IRL2505 16 V limit up to the 42 V TVS clamp; >= 10 V enhancement at 21.6 V; R108 1206 power at 42 V <= 0.125 W
+PASS 09 | Power monitor: INA238 U102 at I2C 0x40 (A0=A1=GND), 3.5 mOhm low-side shunt carries all return current
+PASS 10 | INA238 ADCRANGE=1 (+-40.96 mV): full scale >= 1.3 x the 9 A board-current envelope with 75 W LEDs; each shunt dissipates <= 0.5 W at 11.7 A
+PASS 11 | INA238 VBUS is on the 85 V-rated bus directly: TVS clamp (42 V) below 85 V; supply decoupled
+PASS 12 | All four 24 V load branches are separately fused from +24V_FUSED
+PASS 13 | Fan branch fuse is on the 12 V rail
+PASS 14 | ST1S14 pin map: VIN 7 on fused +24V_AUX, EN1 3 and GND 6/EP 9 on GND, EN2 5, FB 4, SW 8, BOOT 1, PG 2 open
+PASS 15 | ST1S14 power stage: bootstrap 100n BOOT-SW, 22 uH to +12V, SS56 catch diode (cathode SW), 820 uF + 10 uF + 100 nF output
+PASS 16 | +12V = 1.222 V x (1 + 88.2k/10k) = 12.00 V (11.8-12.2 V over VFB 1.202-1.239 V)
+PASS 17 | ST1S14 EN2 divider 3 x 150k / 47k: threshold 15.9 V (start of the 12 V rail; the board runs from 21.6 V), 2.04 V at 21.6 V
+PASS 18 | L101 22 uH at 850 kHz: ripple 0.33 A at 25 V in, peak at 1.1 A load 1.27 A below the 3 A part limit
+PASS 19 | ST1S10 pin map: VIN_A 1, INH 2 and VIN_SW 6 on +12V, VFB 3, AGND 4, SYNC 5 on GND (900 kHz), SW 7, PGND 8, EP 9
+PASS 20 | +3V3 = 0.8 V x (1 + 100k / (47k||100k)) = 3.30 V (3.24-3.37 V); ESP32 needs 3.0-3.6 V
+PASS 21 | ST1S10 with 2.2 uH: ripple 1.21 A (datasheet window 0.6-1.2 A at 3 A rating), peak at 1 A 1.60 A < Isat 2.7 A, LC corner 21 kHz (datasheet design 18.7 kHz)
+PASS 22 | ESP32 GPIO map is the EU-0.1 map; all four ground contacts, 3V3 and EN are consistent; GPIO34/35 have 10k pull-ups and no connector signal (tach removed)
+PASS 23 | GPIO34/35 sit on 10k pull-ups only (nets reach no connector); the strapping pins 2/5/12/15 (module 24/29/14/23) carry no external load
+PASS 24 | UART service connector has the EU-0.1 3.3 V pin order
+PASS 25 | BOOT / EN have external pull-ups and active-low buttons; EN delay 10k / 2.2u (Espressif: 10k / 1u or more)
+PASS 26 | RTC battery is isolated from 3.3 V; MCP7940N pin 3 VBAT / pin 8 VCC; MFP unused
+PASS 27 | All five SD CMD/DAT lines have external 10k pull-ups to +3V3
+PASS 28 | SD SPI pin mapping and shell ground follow the GCT MEM2061 drawing; SCK/MOSI have 100 R series resistors
+PASS 29 | I2C has 4.7k pull-ups; SHT4x header: 1 +3V3, 2 GND, 3 SDA, 4 SCL behind 100 R and USBLC6 U401 (ref pin 5 on +3V3)
+PASS 30 | Float input: series 1k, 10k pull-up and 100n filter to GPIO14; no USBLC6 on this line (documented trade-off)
+PASS 31 | Fan1: AO3422 source pin 2 grounded, 100k reset pull-down, 1k gate; header 1 GND, 2 +12 V, 3 tach NC, 4 PWM; no tach signal, no ESD part
+PASS 32 | Fan2: AO3422 source pin 2 grounded, 100k reset pull-down, 1k gate; header 1 GND, 2 +12 V, 3 tach NC, 4 PWM; no tach signal, no ESD part
+PASS 33 | LM3429 pin map: VIN on its fused 24 V, nDIM shared net, EP/PGND/AGND on GND, GATE_RAW, VCC, IS, HSP, HSN
+PASS 34 | Boost power stage: 47 uH from fused 24 V to SW, SBRT15U100SP5 cathode on OUT, BSC146N10LS5 drain SW / gate / source on the IS shunt to GND
+PASS 35 | LED return is GND; output bank (470u/63V + six 4u7/100V + 100n/100V) is before the high-side LED shunt; HSP/HSN use equal 1k filters
+PASS 36 | J501/J502/J503 are parallel stock KF301 terminals after R502, sharing one current-controlled LED output without bypassing its shunt
+PASS 37 | 75 W-class LED output: 1.235 V x 1k / (5.32k x 0.15 R) = 1.548 A total, 74.29 W at 48 V, shared by J501/J502/J503
+PASS 38 | R502 output shunt: nominal 0.359 W, modeled high-current loss 0.401 W below the 2 W part rating
+PASS 39 | OVP = 1.24 V x 44 = 54.56 V: above the 48 V maximum Vf, below the 63 V electrolytic and 100 V parts
+PASS 40 | RCT: 56k + 6k2 from SW, 1 nF C0G (same frequency network as EU-0.1 LED1); COMP 22u, VCC 4u7
+PASS 41 | IS minimum 215 mV / (0.040 R +1%) = 5.32 A versus modeled peak 4.36 A (1.26 V CSH, 1% setpoint resistors, 21.6 V, Vf 48 V, 43.5 uH, 400 kHz, 90% efficiency): >=1.2x headroom for the 75 W design
+PASS 42 | F103 is the 6.3 A USI fast fuse 3413.0224.11; modeled input peak 4.36 A is below the steady-current allowance, NOT proof of inrush/I2t coordination
+PASS 43 | Gate: two 10 R in parallel (5 R) from GATE_RAW, 100k gate pull-down; GATE_RAW touches only U501.10 and the two resistors
+PASS 44 | nDIM: GPIO series 5.1k + one 10k pull-down: HIGH 2.19 V (> 1.6 V hysteresis threshold), Hi-Z 0.60 V (< 1.24 V); correct net names, no capacitor on nDIM
+PASS 45 | Required firmware setting for the 75 W design: at least 5 PWM counts at 1 kHz/8 bit (19.53 us) exceeds modeled LM3429 startup 15.74 us at 21.6 V/48 V/47 uH; firmware implementation remains pending
+PASS 46 | RGB status LED D901 (common anode on +12V, OSTAPA57E2A lead order G/B/A/R): per channel GPIO -> 4k7 -> BC847B base, 100k pull-down, collector -> 2k -> cathode; 4.9/4.4/4.4 mA R/G/B (3-8 mA, below the 20 mA rating), base current saturates the NPN (hFE >= 100), resistor <= 0.125 W
+PASS 47 | RGB channels sit on GPIO4 / GPIO16 / GPIO17 (module pins 26/27/28: not strapping pins, not used by flash or PSRAM on WROOM-32E-N4); each GPIO net reaches only the ESP32 and its base resistor
+PASS 48 | PTC driver defaults off: separate NPN and PNP stages, PNP emitter on +12V, 12 V gate drive of CSD19531KCS (1=G, 2=D/tab, 3=S), J701 return = drain
+PASS 49 | PTC stays off with the ESP32 internal pull-up (30k worst case) on GPIO32: base 0.40 V < 0.45 V even with 5 % R702; HIGH drive 0.26 mA saturates the NPN
+PASS 50 | PTC gate swing 11.4 V from the PNP, 100 R gate resistor, 2k pull-down (CSD19531KCS rated ±20 V gate)
+PASS 51 | Q703 conduction loss at the 25 V PSU limit (4.34 A): 0.22 W with RDS(on) max x 1.5 hot; F102 8 A
+PASS 52 | Pump AO3422: 1 gate / 2 source / 3 drain, reset pull-down 100k, SS56 flyback with cathode on fused +24V_PUMP
+PASS 53 | 24 V budget with 75 W-class LEDs plus PTC/pump/12 V loads: 8.69 A at 21.6 V / 8.67 A at 25 V under the modeled LED corners; within the 9 A envelope, F101 15 A and PSU 10 A
+PASS 54 | Every stock source exists in the owner CSV, is not archived, and the stock covers the fitted quantity (no hidden shortage)
+PASS 55 | Stock rows in BOM_allocated.json match the design counts and the remaining stock
+PASS 56 | Every purchased MPN is bought at least in the fitted quantity, respecting the shop minimum and multiple, from an allowed shop, with URL and price date
+PASS 57 | Purchase prices equal the frozen catalogue snapshot (procurement_lite.json); all lines including the owner-quoted OSTAPA57E2A have prices; unpriced ()
+PASS 58 | Purchases + delivery 38.49 EUR (unpriced allowance 0.00 EUR) stay under the 100 EUR ceiling and the ~80 EUR target; cheaper than the ~81 EUR of EU-0.1 (81.17 EUR by BOM lines)
+
+Limitations: these checks establish pin/net, calculated-value and BOM consistency of the specification, not an ERC of the written .kicad_sch files
+or analog stability, power sequencing, component temperature, EMC/ESD immunity or manufacturing readiness.
+Pin tables: ST1S14 and ST1S10 from ../cheap-version (checked there against the datasheets; the ST1S14 table also matched a datasheet excerpt found by web search),
+INA238 from a TI datasheet translation and a third-party listing found by web search; no primary datasheet PDF could be fetched in this session.
+For separate KiCad/PCB checks see README; physical fit and prototype tests remain pending.

@@ -1,0 +1,4 @@
+09:55:33: Error: schema file '/usr/share/kicad/schemas/api.v1.schema.json' not found
+Created file '/workspace/scratch/48d09a96ab5c/MicroGarden_V1/work/recheck-2026-10-27/gerber/PCB_EU_LITE-PTH.drl'
+Created file '/workspace/scratch/48d09a96ab5c/MicroGarden_V1/work/recheck-2026-10-27/gerber/PCB_EU_LITE-NPTH.drl'
+Done.
