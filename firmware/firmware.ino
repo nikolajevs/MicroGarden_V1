@@ -12,11 +12,15 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Preferences.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <vector>
 #include <atomic>
 #include <esp_random.h>
 #include "Board.h"
 #include "Safety.h"
+#include "Telemetry.h"
+#include "DashCA.h"
 #include "SafetyTests.h"
 #include "Ina238.h"
 #include "LiteControl.h"
@@ -28,6 +32,11 @@
 #define DEFAULT_WIFI_PASS ""
 #define DEFAULT_AP_SSID       "MicroGarden_V1"
 #define DEFAULT_AP_PASS ""
+// Панель телеметрии (dashboard/). Пустой токен — отправка выключена.
+#define DEFAULT_TELEMETRY_URL   "https://dash.dvinsk.lat/api/ingest"
+#define DEFAULT_TELEMETRY_TOKEN ""
+#define DEFAULT_DEVICE_LABEL    "microgarden-v1"
+#define FIRMWARE_ID             "lite-1"
 
 String admin_password; // Immutable after setup, never returned through HTTP.
 String csrf_token;
@@ -104,6 +113,11 @@ struct Settings {
   char wifi_pass[WIFI_PASS_MAX + 1];
   char ap_ssid[WIFI_SSID_MAX + 1];   // Точка доступа платы — к ней подключается телефон/ноутбук
   char ap_pass[WIFI_PASS_MAX + 1];   // WPA2 only; empty form means keep existing password
+
+  // Отправка на сервер панели телеметрии
+  char telemetry_url[TELEMETRY_URL_MAX + 1];
+  char telemetry_token[TELEMETRY_TOKEN_MAX + 1];  // пусто = отправка выключена; наружу не отдаётся
+  char device_label[DEVICE_LABEL_MAX + 1];
 };
 
 struct State {
@@ -173,6 +187,9 @@ static portMUX_TYPE settingsMux = portMUX_INITIALIZER_UNLOCKED;
 static char logBuffer[LOG_BUFFER_SIZE];
 static volatile size_t logHead = 0;
 static volatile bool logWrapped = false;
+// Сколько байт журнала записано с момента запуска (не обнуляется при переполнении кольца).
+// По нему сервер панели отличает новое от уже принятого и замечает потерянные байты.
+static volatile uint32_t logTotal = 0;
 static portMUX_TYPE logMux = portMUX_INITIALIZER_UNLOCKED;
 
 void logRaw(const char *data, size_t len) {
@@ -182,7 +199,29 @@ void logRaw(const char *data, size_t len) {
     logHead = (logHead + 1) % LOG_BUFFER_SIZE;
     if (logHead == 0) logWrapped = true;
   }
+  logTotal = logTotal + (uint32_t)len;
   portEXIT_CRITICAL(&logMux);
+}
+
+// Копия хранящейся части журнала для задачи телеметрии, по порядку записи. Возвращает длину
+// и позицию первого байта в потоке с момента запуска. Под спинлоком только memcpy, как в
+// getLogSnapshot().
+static size_t logCopyWindow(char *dst, uint32_t &windowStart) {
+  portENTER_CRITICAL(&logMux);
+  const size_t head = logHead;
+  size_t len;
+  if (!logWrapped) {
+    memcpy(dst, logBuffer, head);
+    len = head;
+  } else {
+    const size_t tailLen = LOG_BUFFER_SIZE - head;
+    memcpy(dst, logBuffer + head, tailLen);
+    memcpy(dst + tailLen, logBuffer, head);
+    len = LOG_BUFFER_SIZE;
+  }
+  windowStart = logTotal - (uint32_t)len;
+  portEXIT_CRITICAL(&logMux);
+  return len;
 }
 
 // Замена logPrintln()/logPrintf() — пишет и на аппаратный UART, и в буфер для веба.
@@ -330,6 +369,8 @@ std::atomic<uint8_t> time_set_result{TIME_SET_NONE}; // Итог последн�
 
 // --- Хендлы FreeRTOS для многоядерности ---
 TaskHandle_t WifiTaskHandle = NULL;
+TaskHandle_t TelemetryTaskHandle = NULL;
+static char boot_id[9] = ""; // Случайный номер запуска: по нему сервер отличает перезагрузку от повтора порции
 
 // --- Инициализация объектов ---
 Adafruit_SHT4x sht40 = Adafruit_SHT4x();
@@ -538,6 +579,10 @@ static const SettingDef SETTING_DEFS[] = {
   SET_STR  ("wifi_pass",           "wifi_pass",       wifi_pass,      8,   WIFI_PASS_MAX,  DEFAULT_WIFI_PASS,     SF_SECRET,           "wifi"),
   SET_STR  ("ap_ssid",             "ap_ssid",         ap_ssid,        1,   WIFI_SSID_MAX,  DEFAULT_AP_SSID,       SF_TRIM,             "ap"),
   SET_STR  ("ap_pass",             "ap_pass",         ap_pass,        8,   WIFI_PASS_MAX,  DEFAULT_AP_PASS,       SF_SECRET,           "ap"),
+  // --- Отправка телеметрии (ключи NVS не длиннее 15 символов) ---
+  SET_STR  ("telemetry_url",       "telem_url",       telemetry_url,  TELEMETRY_URL_MIN, TELEMETRY_URL_MAX, DEFAULT_TELEMETRY_URL, SF_TRIM,    "telemetry"),
+  SET_STR  ("telemetry_token",     "telem_token",     telemetry_token, TELEMETRY_TOKEN_MIN, TELEMETRY_TOKEN_MAX, DEFAULT_TELEMETRY_TOKEN, SF_SECRET | SF_TRIM, "telemetry"),
+  SET_STR  ("device_label",        "device_label",    device_label,   1,   DEVICE_LABEL_MAX, DEFAULT_DEVICE_LABEL, SF_TRIM,            "telemetry"),
 };
 static const size_t SETTING_DEFS_COUNT = sizeof(SETTING_DEFS) / sizeof(SETTING_DEFS[0]);
 
@@ -554,7 +599,12 @@ const uint8_t *fieldAddr(const Settings &s, const SettingDef &d) {
 bool settingStringValid(const SettingDef &d, const char *v) {
   size_t len = strlen(v);
   if (len == 0) return strcmp(d.param, "ap_pass") != 0 && (d.lo == 0 || (d.flags & SF_SECRET));
-  return len >= (size_t)d.lo && len <= (size_t)d.hi;
+  if (len < (size_t)d.lo || len > (size_t)d.hi) return false;
+  // Эти три значения уходят на сервер, где проверяются теми же правилами (см. Telemetry.h).
+  if (strcmp(d.param, "telemetry_url") == 0) return telemetryUrlValid(v);
+  if (strcmp(d.param, "telemetry_token") == 0) return telemetryTokenValid(v);
+  if (strcmp(d.param, "device_label") == 0) return deviceLabelValid(v);
+  return true;
 }
 
 void orderRange(int &lo, int &hi) {
@@ -764,6 +814,160 @@ void vWifiTask(void *pvParameters) {
       WiFi.disconnect();
       logPrintln("[Core 0] Нет связи с роутером — повторим через 2 минуты.");
     }
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// ОТПРАВКА ТЕЛЕМЕТРИИ НА СЕРВЕР ПАНЕЛИ (dashboard/, формат — dashboard/README.md)
+// ---------------------------------------------------------------------------------------
+// Текст в JSON с сохранением переводов строк: jsonEscape() для настроек заменяет их пробелами,
+// а строки журнала должны дойти до сервера по одной.
+static void appendJsonText(String &out, const char *s, size_t len) {
+  static const char hex[] = "0123456789abcdef";
+  for (size_t i = 0; i < len; i++) {
+    const uint8_t c = (uint8_t)s[i];
+    switch (c) {
+      case '"':  out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:
+        if (c < 0x20) { out += "\\u00"; out += hex[c >> 4]; out += hex[c & 15]; }
+        else out += (char)c;
+    }
+  }
+}
+
+static void addNumber(String &p, const char *key, float v, int digits) {
+  if (!finiteFloat(v)) return; // NaN или бесконечность в JSON недопустимы: поле просто не уходит
+  p += ",\""; p += key; p += "\":"; p += String(v, digits);
+}
+
+static void addInteger(String &p, const char *key, long v) {
+  p += ",\""; p += key; p += "\":"; p += String(v);
+}
+
+static void addFlag(String &p, const char *key, bool v) {
+  p += ",\""; p += key; p += v ? "\":true" : "\":false";
+}
+
+// Тело запроса: показания и (если есть) новая порция журнала. window — копия кольцевого
+// буфера, chunk — выбранная часть (позиции считаются от windowStart).
+static String buildTelemetryPayload(const Settings &cfg, const State &st, const char *window,
+                                    uint32_t windowStart, const LogChunk &chunk) {
+  String p;
+  p.reserve(900 + chunk.len + chunk.len / 8);
+  p += "{\"device\":\"";
+  appendJsonText(p, cfg.device_label, strlen(cfg.device_label));
+  p += "\",\"sample\":{\"led\":";
+  p += String(st.led_pwm);
+  if (st.sht_online) {
+    addNumber(p, "temp", st.temp, 2);
+    addNumber(p, "hum", st.hum, 2);
+  }
+  addInteger(p, "fan1", st.fan1_pwm);
+  addInteger(p, "fan2", st.fan2_pwm);
+  if (st.power_ok) {
+    addNumber(p, "power_w", st.power_w, 1);
+    addNumber(p, "bus_v", st.bus_v, 2);
+    addNumber(p, "current_a", st.current_a, 3);
+  }
+  addNumber(p, "energy_kwh", st.energy_wh / 1000.0f, 3);
+  addFlag(p, "pump", st.pump_active);
+  addFlag(p, "heater", st.heater_active);
+  addFlag(p, "led_blocked", st.led_supply_blocked);
+  addFlag(p, "sht_ok", st.sht_online);
+  addFlag(p, "rtc_ok", st.rtc_online);
+  addFlag(p, "clock_trusted", st.clock_trusted);
+  addFlag(p, "sd_ok", sd_online);
+  addFlag(p, "power_ok", st.power_ok);
+  addFlag(p, "water_sensor", cfg.water_sensor_enabled);
+  addFlag(p, "water_present", st.water_present);
+  addInteger(p, "rssi", WiFi.RSSI());
+  addInteger(p, "heap_free", (long)ESP.getFreeHeap());
+  addInteger(p, "uptime_s", (long)(millis() / 1000));
+  p += ",\"fw\":\"" FIRMWARE_ID "\"}";
+  if (chunk.len > 0) {
+    p += ",\"log\":{\"boot\":\"";
+    p += boot_id;
+    p += "\",\"from\":";
+    p += String((unsigned long)chunk.from);
+    p += ",\"text\":\"";
+    appendJsonText(p, window + (chunk.from - windowStart), chunk.len);
+    p += "\"}";
+  }
+  p += "}";
+  return p;
+}
+
+// Код ответа сервера или отрицательный код ошибки HTTPClient. Сертификат сервера проверяется
+// по закреплённому корню (DashCA.h), для этого нужно время UTC.
+static int postTelemetry(const Settings &cfg, const String &payload) {
+  WiFiClientSecure client;
+  client.setCACert(DASH_ROOT_CA);
+  client.setHandshakeTimeout(15);
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.setReuse(false);
+  if (!http.begin(client, String(cfg.telemetry_url))) return -101;
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", String("Bearer ") + cfg.telemetry_token);
+  const int code = http.POST(payload);
+  http.end();
+  return code;
+}
+
+// Фоновая задача на Core 0: раз в минуту шлёт показания и новую часть журнала. Отправка
+// только читает снимки состояния и настроек и в работу платы не вмешивается: сбой сети,
+// сервера или сертификата никак не влияет на свет, вентиляторы, нагрев и полив.
+void vTelemetryTask(void *pvParameters) {
+  static char logWindow[LOG_BUFFER_SIZE]; // копия кольцевого буфера: 4 КБ на стеке не нужны
+  uint32_t logSent = 0;                   // сколько байт журнала сервер уже принял
+  int lastCode = 0;
+  uint32_t lastReportMs = 0;
+  TickType_t sleepTicks = pdMS_TO_TICKS(TELEMETRY_FIRST_DELAY_MS);
+
+  for (;;) {
+    // Будильник — уведомление при сохранении настроек телеметрии, иначе таймаут.
+    ulTaskNotifyTake(pdTRUE, sleepTicks);
+    sleepTicks = pdMS_TO_TICKS(TELEMETRY_PERIOD_MS);
+
+    const Settings cfg = settingsSnapshot();
+    if (cfg.telemetry_token[0] == '\0' || WiFi.status() != WL_CONNECTED) continue;
+
+    int code;
+    uint32_t sentTo = logSent;
+    if (time(nullptr) < UTC_2024) {
+      // Системные часы (UTC) нужны только для проверки срока сертификата; RTC платы они не трогают.
+      configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
+      for (int i = 0; time(nullptr) < UTC_2024 && i < 40; ++i) vTaskDelay(pdMS_TO_TICKS(250));
+    }
+    if (time(nullptr) < UTC_2024) {
+      code = -100;
+    } else {
+      const State st = stateSnapshot();
+      uint32_t windowStart = 0;
+      const size_t n = logCopyWindow(logWindow, windowStart);
+      const LogChunk chunk = chooseLogChunk(logWindow, n, windowStart, logSent, TELEMETRY_MAX_LOG_CHUNK);
+      code = postTelemetry(cfg, buildTelemetryPayload(cfg, st, logWindow, windowStart, chunk));
+      if (code == 200 && chunk.len > 0) sentTo = chunk.from + (uint32_t)chunk.len;
+    }
+    if (code == 200) logSent = sentTo;
+
+    // Итог пишем в журнал платы при смене результата и раз в полчаса при затянувшейся ошибке;
+    // строки доходят до сервера, когда связь вернётся.
+    const uint32_t now = millis();
+    if (telemetryReportDue(lastCode, code, now, lastReportMs, TELEMETRY_REPORT_REPEAT_MS)) {
+      lastReportMs = now;
+      if (code == 200) logPrintln(lastCode == 0 ? "[Telemetry] Отправка на сервер работает."
+                                                : "[Telemetry] Отправка восстановилась.");
+      else if (code == -100) logPrintln("[Telemetry] Ошибка отправки: нет времени UTC, сертификат сервера не проверить.");
+      else if (code > 0) logPrintf("[Telemetry] Ошибка отправки: сервер ответил HTTP %d%s\n", code,
+                                   code == 401 ? " (проверьте токен в настройках)" : "");
+      else logPrintf("[Telemetry] Ошибка отправки: нет соединения с сервером (код %d)\n", code);
+    }
+    lastCode = code;
   }
 }
 
@@ -1383,6 +1587,9 @@ void setup() {
 
   // 4 КБ хватает: с уходом телеметрии из задачи пропал mbedTLS, которому было мало 8.
   xTaskCreatePinnedToCore(vWifiTask, "WifiTask", 4096, NULL, 1, &WifiTaskHandle, 0);
+  // Номер запуска нужен серверу панели, чтобы отличить перезагрузку платы от повторной отправки.
+  snprintf(boot_id, sizeof(boot_id), "%08x", (unsigned)esp_random());
+  xTaskCreatePinnedToCore(vTelemetryTask, "TelemetryTask", 12288, NULL, 1, &TelemetryTaskHandle, 0); // 12 КБ: mbedTLS не влезает в 8
 
   // The same guard covers pages, static assets, APIs and future routes.
   server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
@@ -1508,6 +1715,13 @@ void setup() {
         (strcmp(prev.wifi_ssid, next.wifi_ssid) != 0 ||
          strcmp(prev.wifi_pass, next.wifi_pass) != 0)) {
       xTaskNotifyGive(WifiTaskHandle);
+    }
+    // Новые адрес, токен или имя платы — отправляем сразу, не дожидаясь следующей минуты.
+    if (TelemetryTaskHandle != NULL &&
+        (strcmp(prev.telemetry_url, next.telemetry_url) != 0 ||
+         strcmp(prev.telemetry_token, next.telemetry_token) != 0 ||
+         strcmp(prev.device_label, next.device_label) != 0)) {
+      xTaskNotifyGive(TelemetryTaskHandle);
     }
 
     // Новые SSID/пароль точки доступа применяем сразу, без перезагрузки платы.

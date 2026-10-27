@@ -2,6 +2,7 @@
 #include "Safety.h"
 #include "Board.h"
 #include "LiteControl.h"
+#include "Telemetry.h"
 #include "Ina238Tests.h"
 
 // Compile-time regressions: every firmware build checks these, with no runtime cost.
@@ -208,3 +209,60 @@ static_assert(statusColor(true, true, false, false, true) == StatusColor::Yellow
               statusColor(true, true, false, true, false) == StatusColor::Yellow &&
               statusColor(true, true, false, true, true) == StatusColor::Green,
               "Yellow marks missing SD or power data, green marks a healthy board");
+
+// --- Отправка телеметрии: выбор порции журнала и проверка настроек ---------------------------
+constexpr bool logChunkRegression() {
+  // Обычный случай: сервер принял всё до sent, дальше две целые строки и обрывок третьей.
+  constexpr char text[] = "one\ntwo\nthr";
+  LogChunk c = chooseLogChunk(text, 11, 0, 0, 100);
+  if (c.from != 0 || c.len != 8) return false;                       // "one\ntwo\n", обрывок остаётся
+  c = chooseLogChunk(text, 11, 0, 4, 100);
+  if (c.from != 4 || c.len != 4) return false;                       // только "two\n"
+  c = chooseLogChunk(text, 11, 0, 8, 100);
+  if (c.len != 0) return false;                                      // целой строки пока нет
+  c = chooseLogChunk(text, 11, 0, 11, 100);
+  if (c.len != 0) return false;                                      // всё отправлено
+  c = chooseLogChunk(text, 11, 0, 0, 6);
+  if (c.from != 0 || c.len != 4) return false;                       // порция режется по концу строки
+  // Кольцевой буфер затёр начало: окно с позиции 100 начинается с обрывка, берём первую целую строку.
+  constexpr char lost[] = "ail\nnext\nmore";
+  c = chooseLogChunk(lost, 13, 100, 0, 100);
+  if (c.from != 104 || c.len != 5) return false;                     // "next\n"; "more" без перевода строки не уходит
+  c = chooseLogChunk("no newline here", 15, 100, 0, 100);
+  if (c.len != 0) return false;
+  // Отправленное раньше начала окна и отправленное давно дают одну и ту же порцию после затирания.
+  c = chooseLogChunk(lost, 13, 100, 50, 100);
+  return c.from == 104 && c.len == 5;
+}
+static_assert(logChunkRegression(), "log chunk must start and end on line boundaries and survive buffer overwrite");
+
+constexpr bool logChunkUtf8Regression() {
+  // Строка из пяти букв «я» (по два байта) длиннее порции в 5 байт: режем между буквами.
+  constexpr char text[] = {char(0xD1), char(0x8F), char(0xD1), char(0x8F), char(0xD1), char(0x8F),
+                           char(0xD1), char(0x8F), char(0xD1), char(0x8F)};
+  const LogChunk c = chooseLogChunk(text, 10, 0, 0, 5);
+  if (c.from != 0 || c.len != 4) return false;
+  // Окно, начавшееся посреди буквы после затирания, пропускает обрывок вместе с хвостом строки.
+  constexpr char torn[] = {char(0x8F), 'a', '\n', char(0xD1), char(0x8F), '\n'};
+  const LogChunk d = chooseLogChunk(torn, 6, 10, 0, 100);
+  return d.from == 13 && d.len == 3 && uint8_t(torn[d.from - 10]) == 0xD1;
+}
+static_assert(logChunkUtf8Regression(), "log chunk must never split a UTF-8 character");
+
+static_assert(deviceLabelValid("microgarden-v1") && deviceLabelValid("a") && deviceLabelValid("Box_1.2-b") &&
+              !deviceLabelValid("") && !deviceLabelValid("two words") && !deviceLabelValid("box/1") &&
+              !deviceLabelValid("\xD0\xBA\xD0\xB8\xD1\x80") && !deviceLabelValid("0123456789012345678901234567890123"),
+              "device label must satisfy the server rule: 1-32 characters of [A-Za-z0-9_.-]");
+static_assert(telemetryUrlValid("https://dash.dvinsk.lat/api/ingest") && !telemetryUrlValid("http://dash.dvinsk.lat/api/ingest") &&
+              !telemetryUrlValid("https://") && !telemetryUrlValid("https://a b.lat/x") && !telemetryUrlValid(""),
+              "telemetry URL must be https without spaces");
+static_assert(telemetryTokenValid("0123456789abcdef0123456789abcdef") && !telemetryTokenValid("short") &&
+              !telemetryTokenValid("0123456789abcdef01234567 9abcdef"),
+              "telemetry token must be 24-128 printable characters without spaces");
+static_assert(telemetryReportDue(0, 200, 5000, 0, TELEMETRY_REPORT_REPEAT_MS) &&      // первая успешная отправка
+              !telemetryReportDue(200, 200, 999999, 0, TELEMETRY_REPORT_REPEAT_MS) &&  // успех не повторяется
+              telemetryReportDue(200, -1, 5000, 0, TELEMETRY_REPORT_REPEAT_MS) &&      // отказ после успеха
+              !telemetryReportDue(-1, -1, 60000, 0, TELEMETRY_REPORT_REPEAT_MS) &&     // тот же отказ молчит
+              telemetryReportDue(-1, -1, TELEMETRY_REPORT_REPEAT_MS, 0, TELEMETRY_REPORT_REPEAT_MS) &&
+              telemetryReportDue(-1, 401, 60000, 0, TELEMETRY_REPORT_REPEAT_MS),      // код изменился
+              "telemetry results must be logged on change, not every minute");

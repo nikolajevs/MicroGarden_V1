@@ -354,6 +354,40 @@
                     <button type="submit" class="btn-action btn-sync">Сохранить WiFi</button>
                 </form>
             </div>
+
+            <div class="form-section">
+                <h3>Телеметрия (панель с графиками)</h3>
+                <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
+                    Раз в минуту плата отправляет показания и новые строки консоли на сервер панели. Работает через WiFi роутера;
+                    пока токен не задан, ничего не отправляется. Токен выдаёт сервер панели.
+                </div>
+                <div id="telemetry-error-banner" class="form-error" style="display: none;">
+                    Не удалось сохранить телеметрию: адрес — только https, имя платы — латиница, цифры и _ . - (до 32 символов), токен — от 24 до 128 символов без пробелов. Изменения не применены.
+                </div>
+                <form action="/save-settings" method="POST" id="telemetry-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Адрес приёма</label>
+                            <input type="text" id="telemetry_url" name="telemetry_url" autocomplete="off" required minlength="12" maxlength="96">
+                        </div>
+                        <div class="form-group">
+                            <label>Имя платы</label>
+                            <input type="text" id="device_label" name="device_label" autocomplete="off" required maxlength="32" pattern="[A-Za-z0-9_.\-]{1,32}">
+                        </div>
+                        <div class="form-group">
+                            <label>Токен приёма (пусто = не менять)</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="password" id="telemetry_token" name="telemetry_token" autocomplete="off" minlength="24" maxlength="128" style="flex: 1;">
+                                <button type="button" class="btn-action" onclick="togglePasswordField('telemetry_token')">👁</button>
+                            </div>
+                            <label class="check-label muted" style="margin-top: 8px;">
+                                <input type="checkbox" id="telemetry_token_clear" name="telemetry_token_clear" value="1"> Выключить отправку: удалить токен
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить телеметрию</button>
+                </form>
+            </div>
         </div>
 
         <div class="tab-panel" id="tab-console">
