@@ -17,6 +17,7 @@ function setLinkLost(lost) {
     if (lost) {
         timeEl.innerText = 'Нет связи';
         timeEl.className = "status-badge offline-badge";
+        renderAlerts([Alerts.LINK_LOST_ALERT]); // без связи остальные оповещения недостоверны
     } else {
         timeEl.className = "status-badge time-badge";
     }
@@ -135,7 +136,63 @@ function renderStatus(data) {
             : 'Проверка часов') + wateringNote; // RTC снова читается, доверие вернётся через ~1 мин
         warnEl.hidden = false;
     }
+
+    renderAlerts(Alerts.collectAlerts(data));
 }
+
+// Колокольчик в шапке: число активных оповещений и их список (правила — в alerts.js).
+// Оповещения — текущие неисправности; они исчезают, когда причина устранена.
+let lastAlertCount = null; // null — первый показ после загрузки страницы: качать нечего
+
+function renderAlerts(alerts) {
+    const { count, level } = Alerts.summarizeAlerts(alerts);
+    const badge = document.getElementById('alerts-count');
+    badge.hidden = count === 0;
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.className = 'bell-count' + (level === 'warn' ? ' warn' : '');
+    const bell = document.getElementById('alerts-bell');
+    bell.setAttribute('aria-label', count ? `Оповещений: ${count}` : 'Оповещений нет');
+    bell.classList.toggle('is-bad', level === 'bad'); // цвет значка — по самому тяжёлому оповещению
+    bell.classList.toggle('is-warn', level === 'warn');
+    if (count > lastAlertCount && lastAlertCount !== null) { // новое оповещение: колокольчик качнётся
+        bell.classList.remove('ring');
+        void bell.offsetWidth; // перезапуск анимации
+        bell.classList.add('ring');
+    }
+    lastAlertCount = count;
+    document.title = (count ? `(${count}) ` : '') + 'MicroGarden V1';
+
+    const list = document.getElementById('alerts-list');
+    list.textContent = '';
+    for (const alert of alerts) {
+        const item = document.createElement('li');
+        const dot = document.createElement('span');
+        dot.className = 'alert-dot ' + alert.level;
+        const text = document.createElement('span');
+        text.textContent = alert.text; // текст только из alerts.js, но вставляем как текст
+        item.appendChild(dot);
+        item.appendChild(text);
+        list.appendChild(item);
+    }
+    document.getElementById('alerts-empty').hidden = count > 0;
+}
+
+function setAlertsPanel(open) {
+    document.getElementById('alerts-panel').hidden = !open;
+    document.getElementById('alerts-bell').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+document.getElementById('alerts-bell').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setAlertsPanel(document.getElementById('alerts-panel').hidden);
+});
+document.addEventListener('click', (e) => {
+    const panel = document.getElementById('alerts-panel');
+    if (!panel.hidden && !panel.contains(e.target)) setAlertsPanel(false);
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setAlertsPanel(false);
+});
 
 function renderPower(data) {
     const valueEl = document.getElementById('power-val');

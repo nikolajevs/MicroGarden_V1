@@ -1668,6 +1668,7 @@ void setup() {
     json += "\"rtc_online\":" + String(st.rtc_online ? "true" : "false") + ",";
     json += "\"clock_trusted\":" + String(st.clock_trusted ? "true" : "false") + ",";
     json += "\"clock_usable\":" + String(st.clock_usable ? "true" : "false") + ","; // RTC или выставленный программный таймер
+    json += "\"sd_ok\":" + String(sd_online ? "true" : "false") + ","; // Оповещение главной страницы: SD-карта не найдена
     static const char *const RTC_STATUS_NAMES[] = {"ok", "not_set", "no_response"};
     json += "\"rtc_status\":\"" + String(RTC_STATUS_NAMES[st.rtc_status <= RTC_NO_RESPONSE ? st.rtc_status : uint8_t(RTC_NO_RESPONSE)]) + "\",";
     static const char *const TIME_SET_NAMES[] = {"none", "pending", "ok", "failed"};

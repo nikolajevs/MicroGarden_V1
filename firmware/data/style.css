@@ -296,3 +296,51 @@ select { appearance: none; cursor: pointer; }
 .rgb-green { background: #10b981; border-color: #10b981; }
 .rgb-blue { background: #3b82f6; border-color: #3b82f6; }
 .rgb-off { background: transparent; border-color: var(--text-muted); }
+
+/* Колокольчик оповещений в шапке главной страницы */
+header { position: relative; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.bell {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border: 0; border-radius: 50%; cursor: pointer;
+    background: #eef2e1; color: #1f2937; transition: background 0.15s, color 0.15s;
+}
+.bell:hover { background: #e2e9cf; }
+.bell:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.bell.is-warn { background: #fdecc8; color: #b45309; }
+.bell.is-bad { background: #fde0e0; color: #b91c1c; }
+/* Общее правило svg выше оформляет графики (тёмная плашка с рамкой на всю ширину): значку оно не подходит */
+.bell svg {
+    width: 24px; height: 24px; background: none; border: 0; border-radius: 0;
+    transform-origin: 50% 12%;
+}
+.bell.ring svg { animation: bell-ring 0.9s ease-in-out; }
+@keyframes bell-ring {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); }
+    45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 75% { transform: rotate(2deg); }
+}
+@media (prefers-reduced-motion: reduce) { .bell.ring svg { animation: none; } }
+.bell-count {
+    position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; padding: 0 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 11px; background: var(--danger); color: #fff; font-size: 12px; font-weight: 800;
+    border: 2px solid var(--bg-color); pointer-events: none;
+}
+.bell-count.warn { background: var(--warning); color: #111827; }
+.alerts-panel {
+    position: absolute; top: calc(100% + 10px); right: 0; z-index: 20;
+    width: min(380px, calc(100vw - 32px)); padding: 14px;
+    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.alerts-panel h4 { font-size: 14px; margin-bottom: 10px; }
+.alerts-list { list-style: none; display: grid; gap: 10px; margin-bottom: 10px; }
+.alerts-list:empty { display: none; }
+.alerts-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.4; }
+.alert-dot { flex: 0 0 auto; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; }
+.alert-dot.bad { background: var(--danger); }
+.alert-dot.warn { background: var(--warning); }
+.alerts-empty { color: var(--success); font-size: 13px; margin-bottom: 10px; }
+.alerts-note { color: var(--text-muted); font-size: 12px; }
+.alerts-note a { color: var(--primary); }
