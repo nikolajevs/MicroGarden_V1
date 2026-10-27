@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Телеметрия</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>MicroGarden V1</h1>
+      <p class="sub" id="sub">Телеметрия платы</p>
+    </div>
+    <div class="top-right">
+      <select id="device" class="select" aria-label="Плата" hidden></select>
+      <span id="pill" class="pill pill-wait" role="status">Загрузка…</span>
+    </div>
+  </header>
+
+  <section class="toolbar" aria-label="Период и выгрузка">
+    <div class="seg" id="range-group" role="group" aria-label="Период графиков">
+      <button type="button" data-range="6h">6 ч</button>
+      <button type="button" data-range="24h" class="on">24 ч</button>
+      <button type="button" data-range="7d">7 дней</button>
+      <button type="button" data-range="30d">30 дней</button>
+    </div>
+    <a class="btn" id="csv" href="/api/export.csv" download>Выгрузить CSV</a>
+  </section>
+
+  <section class="cards" id="cards" aria-label="Текущие показания">
+    <div class="card"><span class="label">Температура</span><span class="val"><b id="v-temp">—</b><i>°C</i></span><span class="note" id="n-temp">&nbsp;</span></div>
+    <div class="card"><span class="label">Влажность</span><span class="val"><b id="v-hum">—</b><i>%</i></span><span class="note">&nbsp;</span></div>
+    <div class="card"><span class="label">Свет</span><span class="val"><b id="v-led">—</b><i>%</i></span><span class="note" id="n-led">&nbsp;</span></div>
+    <div class="card"><span class="label">Вентиляторы</span><span class="val"><b id="v-fan">—</b><i>%</i></span><span class="note">1 / 2</span></div>
+    <div class="card"><span class="label">Мощность</span><span class="val"><b id="v-power">—</b><i>Вт</i></span><span class="note" id="n-power">&nbsp;</span></div>
+    <div class="card"><span class="label">Энергия за сутки</span><span class="val"><b id="v-energy">—</b><i>кВт·ч</i></span><span class="note">с полуночи платы</span></div>
+    <div class="card"><span class="label">Помпа</span><span class="val small"><b id="v-pump">—</b></span><span class="note" id="n-water">&nbsp;</span></div>
+    <div class="card"><span class="label">Нагреватель</span><span class="val small"><b id="v-heater">—</b></span><span class="note">&nbsp;</span></div>
+  </section>
+
+  <section class="health" id="health" aria-label="Состояние платы"></section>
+
+  <section class="panel">
+    <h2>Температура и влажность</h2>
+    <div class="chart" id="chart-climate"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Свет и вентиляторы</h2>
+    <div class="chart" id="chart-light"></div>
+    <p class="legend-note"><span class="swatch band-pump"></span>помпа включена <span class="swatch band-heater"></span>нагреватель включён</p>
+  </section>
+
+  <section class="panel">
+    <h2>Питание</h2>
+    <div class="chart" id="chart-power"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Сообщения платы (Serial)</h2>
+      <div class="seg" id="level-group" role="group" aria-label="Какие сообщения показывать">
+        <button type="button" data-level="error" class="on">Ошибки <span id="cnt-error" class="cnt"></span></button>
+        <button type="button" data-level="warn">+ Предупреждения</button>
+        <button type="button" data-level="all">Все</button>
+      </div>
+    </div>
+    <ol class="log" id="log"></ol>
+    <p class="empty" id="log-empty" hidden></p>
+    <button type="button" class="btn ghost" id="more" hidden>Показать ещё</button>
+    <p class="legend-note">Время — когда сервер принял строку: плата присылает журнал раз в минуту.</p>
+  </section>
+
+  <footer class="foot">Плата присылает показания и журнал по HTTPS раз в минуту.</footer>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

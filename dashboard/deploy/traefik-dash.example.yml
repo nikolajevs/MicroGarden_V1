@@ -1,0 +1,20 @@
+# ПРИМЕР маршрута Traefik для dash.dvinsk.lat. Traefik работает на хосте 93.127.143.133,
+# а не на VPS, поэтому файл не применяется автоматически: его нужно перенести в конфигурацию
+# Traefik на том хосте. Самый надёжный способ — скопировать существующий маршрут todo.dvinsk.lat
+# и заменить в нём Host и имя службы. Названия точки входа и резолвера сертификатов ниже
+# выдуманы: возьмите настоящие из маршрута todo.
+http:
+  routers:
+    dash:
+      rule: Host(`dash.dvinsk.lat`)
+      entryPoints:
+        - websecure          # как у todo
+      service: dash
+      tls:
+        certResolver: letsencrypt   # как у todo
+  services:
+    dash:
+      loadBalancer:
+        servers:
+          # Адрес гостя с nginx внутри сети 192.168.122.0/24 — тот же, что у todo.
+          - url: http://192.168.122.X:80
