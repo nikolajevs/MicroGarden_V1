@@ -181,26 +181,28 @@ def main():
     iled = 1.235 * val('R503') / (rcsh * val('R502'))
     iled_high = 1.26 * val('R503') * 1.01 / (rcsh * 0.99 * val('R502') * 0.99)
     led_power = iled * 48
-    check(f'75 W-class LED output: 1.235 V x 1k / (5.32k x 0.15 R) = {iled:.3f} A total, {led_power:.2f} W at 48 V, shared by J501/J502/J503',
+    check(f'69 W-class LED output: 1.235 V x 1k / (5.7k x 0.15 R) = {iled:.3f} A total, {led_power:.2f} W at 48 V, shared by J501/J502/J503',
           two('R505', 'LED_CSH', 'LED_CSH_MID') and two('R506', 'LED_CSH_MID', 'GND')
-          and val('R505') == 4700 and val('R506') == 620 and 1.54 <= iled <= 1.58 and 74 <= led_power <= 76)
+          and val('R505') == 4700 and val('R506') == 1000 and 1.43 <= iled <= 1.46 and 68 <= led_power <= 70.5)
     shunt_loss = iled ** 2 * val('R502')
     shunt_loss_high = iled_high ** 2 * val('R502') * 1.01
     check(f'R502 output shunt: nominal {shunt_loss:.3f} W, modeled high-current loss {shunt_loss_high:.3f} W below the 2 W part rating',
           p['R502']['mpn'] == 'CS2512-0R15-1%-HP' and shunt_loss_high < 1.0)
     ovp = 1.24 * (val('R509') + val('R510') + val('R511')) / val('R511')
     check(f'OVP = 1.24 V x 44 = {ovp:.2f} V: above the 48 V maximum Vf, below the 63 V electrolytic and 100 V parts', two('R509', 'LED_OUT', 'LED_OVP_MID') and two('R510', 'LED_OVP_MID', 'LED_OVP') and two('R511', 'LED_OVP', 'GND') and 50 < ovp < 60)
-    check('RCT: 56k + 6k2 from SW, 1 nF C0G (same frequency network as EU-0.1 LED1); COMP 22u, VCC 4u7',
-          two('R507', 'LED_SW', 'LED_RT_MID') and two('R508', 'LED_RT_MID', 'LED_RCT') and val('R507') == 56e3 and val('R508') == 6.2e3 and pins('C506', {1: 'LED_RCT', 2: 'GND'}) and pins('C505', {1: 'LED_COMP', 2: 'GND'}) and pins('C504', {1: 'LED_VCC', 2: 'GND'}) and pins('C507', {1: 'LED_OVP', 2: 'GND'}))
+    # TI LM3429 Rev H, equation 6: f = 25 / ((R507 + R508) x C506). EU-0.1 LED1 used 56k = 402 kHz.
+    f_sw = 25 / ((val('R507') + val('R508')) * 1e-9)
+    check(f'RCT: 82k + 6k2 from SW, 1 nF C0G = {f_sw / 1e3:.2f} kHz nominal (below the DC-300 kHz storage range Feryster states for L501); COMP 22u, VCC 4u7',
+          two('R507', 'LED_SW', 'LED_RT_MID') and two('R508', 'LED_RT_MID', 'LED_RCT') and val('R507') == 82e3 and val('R508') == 6.2e3 and 275e3 <= f_sw <= 295e3 and pins('C506', {1: 'LED_RCT', 2: 'GND'}) and pins('C505', {1: 'LED_COMP', 2: 'GND'}) and pins('C504', {1: 'LED_VCC', 2: 'GND'}) and pins('C507', {1: 'LED_OVP', 2: 'GND'}))
     ipk = {}
     for vin in (21.6, 24.0, 25.0):
-        vo = 48.0; d = 1 - vin / vo; iin = iled_high / (1 - d) / 0.90; dil = vin * d / (43.5e-6 * 400e3)
+        vo = 48.0; d = 1 - vin / vo; iin = iled_high / (1 - d) / 0.90; dil = vin * d / (43.5e-6 * f_sw)
         ipk[vin] = iin + dil / 2
     # Use the guaranteed minimum comparator threshold and the high 1% R501
     # tolerance. The modeled corners are explicit; analog offsets, actual L,
     # layout noise and temperature still require prototype qualification.
     ilim = 0.215 / (val('R501') * 1.01)
-    check(f'IS minimum 215 mV / (0.040 R +1%) = {ilim:.2f} A versus modeled peak {max(ipk.values()):.2f} A (1.26 V CSH, 1% setpoint resistors, 21.6 V, Vf 48 V, 43.5 uH, 400 kHz, 90% efficiency): >=1.2x headroom for the 75 W design',
+    check(f'IS minimum 215 mV / (0.040 R +1%) = {ilim:.2f} A versus modeled peak {max(ipk.values()):.2f} A (1.26 V CSH, 1% setpoint resistors, 21.6 V, Vf 48 V, 43.5 uH, {f_sw / 1e3:.2f} kHz, 90% efficiency): >=1.2x headroom for the 69 W design',
           ilim >= 1.2 * max(ipk.values()) and max(ipk.values()) < 6.3 * 0.73 and p['L501']['src'] == 'S12')
     check(f'F103 is the 6.3 A USI fast fuse 3413.0224.11; modeled input peak {max(ipk.values()):.2f} A is below the steady-current allowance, NOT proof of inrush/I2t coordination',
           p['F103']['mpn'] == '3413.0224.11' and p['F103']['value'] == '6.3 A fast' and max(ipk.values()) < 6.3 * 0.73)
@@ -214,8 +216,10 @@ def main():
 
     tmin = 2 * iled_high * 48 * 47e-6 / 21.6 ** 2
     required_pwm_pulse = 5 / (1000 * 256)
-    check(f'Required firmware setting for the 75 W design: at least 5 PWM counts at 1 kHz/8 bit ({required_pwm_pulse * 1e6:.2f} us) exceeds modeled LM3429 startup {tmin * 1e6:.2f} us at 21.6 V/48 V/47 uH; firmware implementation remains pending',
-          15e-6 < tmin < required_pwm_pulse and required_pwm_pulse > 3 / (1000 * 256))
+    # The 69 W setpoint lowers the modeled startup pulse; the firmware minimum of 5 counts is kept
+    # unchanged and stays above it, so the bound below only requires that ordering.
+    check(f'Required firmware setting for the 69 W design: at least 5 PWM counts at 1 kHz/8 bit ({required_pwm_pulse * 1e6:.2f} us) exceeds modeled LM3429 startup {tmin * 1e6:.2f} us at 21.6 V/48 V/47 uH; firmware implementation remains pending',
+          10e-6 < tmin < required_pwm_pulse and required_pwm_pulse > 3 / (1000 * 256))
 
     # ---- RGB status LED (common anode on +12V, three NPN low-side switches)
     vf = {'R': 2.0, 'G': 3.1, 'B': 3.1}
@@ -246,7 +250,7 @@ def main():
     check('Pump AO3422: 1 gate / 2 source / 3 drain, reset pull-down 100k, SS56 flyback with cathode on fused +24V_PUMP',
           pins('Q704', {1: 'PUMP_GATE', 2: 'GND', 3: 'PUMP_DRAIN'}) and pins('D701', {1: '+24V_PUMP', 2: 'PUMP_DRAIN'}) and two('R708', 'PUMP_GATE', 'GND') and val('R708') == 100e3 and p['D701']['mpn'] == 'SS56' and pins('J702', {1: '+24V_PUMP', 2: 'PUMP_DRAIN'}))
     lo_i = {v: 100 * (v / 24) ** 2 / v + iled_high * 48 / 0.90 / v + 12 * 1.1 / 0.88 / v + 6 / 24 * (v / 24) for v in (21.6, 25.0)}
-    check(f'24 V budget with 75 W-class LEDs plus PTC/pump/12 V loads: {lo_i[21.6]:.2f} A at 21.6 V / {lo_i[25.0]:.2f} A at 25 V under the modeled LED corners; within the 9 A envelope, F101 15 A and PSU 10 A',
+    check(f'24 V budget with 69 W-class LEDs plus PTC/pump/12 V loads: {lo_i[21.6]:.2f} A at 21.6 V / {lo_i[25.0]:.2f} A at 25 V under the modeled LED corners; within the 9 A envelope, F101 15 A and PSU 10 A',
           max(lo_i.values()) <= i_max and max(lo_i.values()) < 10 and max(lo_i.values()) < 15 * 0.73)
 
     # ---- sources and BOM

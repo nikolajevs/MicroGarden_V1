@@ -14613,7 +14613,7 @@
 				)
 			)
 		)
-		(property "Value" "620R 1%"
+		(property "Value" "1k 1%"
 			(at 0 1.83 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -16429,7 +16429,7 @@
 				)
 			)
 		)
-		(property "Value" "56k 1%"
+		(property "Value" "82k 1%"
 			(at 0 1.83 0)
 			(layer "F.Fab")
 			(hide yes)
