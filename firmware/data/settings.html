@@ -97,6 +97,33 @@
             </div>
 
             <div class="form-section">
+                <h3>RGB-индикатор</h3>
+                <form action="/save-settings" method="POST">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="rgb_brightness">Яркость, %</label>
+                            <input type="number" id="rgb_brightness" name="rgb_brightness" min="0" max="100" step="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="rgb_night_mode">Ночью</label>
+                            <select id="rgb_night_mode" name="rgb_night_mode" required>
+                                <option value="0">Как днём</option>
+                                <option value="1">Только неисправности</option>
+                                <option value="2">Выключен</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-hint" style="margin-bottom: 15px;">
+                        Яркость 0 выключает индикатор совсем; неисправности тогда видны только на этой странице.
+                        «Ночью» — это время вне расписания света (вкладка «Освещение»), тёмный период растений.
+                        «Только неисправности» гасит зелёный (всё в норме), а красный, пурпурный и жёлтый оставляет.
+                        Значения применяются сразу после сохранения.
+                    </div>
+                    <button type="submit" class="btn-action btn-sync">Сохранить</button>
+                </form>
+            </div>
+
+            <div class="form-section">
                 <h3>Обслуживание SD-карты</h3>
                 <div class="status-row"><span>Занято:</span><span id="sd-status" class="status-badge">Запрос...</span></div>
                 <div class="status-row"><span>Свободно:</span><strong id="sd-free">--</strong></div>

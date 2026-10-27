@@ -48,6 +48,7 @@ function page() {
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
         operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
         drying_hum_target: 55, drying_hum_band: 5,
+        rgb_brightness: 19, rgb_night_mode: 1,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
         telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
         led_on_hour: 6, led_on_minute: 0, led_off_hour: 18, led_off_minute: 0,
@@ -64,6 +65,8 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   const p = page();
   await vm.runInContext('loadCurrentSettings()', p.context);
   assert.equal(p.fields.get('wifi_ssid').value, 'Box"\\Lab');
+  assert.equal(p.fields.get('rgb_brightness').value, 19);
+  assert.equal(p.fields.get('rgb_night_mode').value, 1);
   assert.equal(p.fields.get('operation_mode').value, '0');
   assert.equal(p.fields.get('drying_temp_target').value, 18);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
