@@ -280,3 +280,19 @@ select { appearance: none; cursor: pointer; }
     .mode-selection { width: 100%; margin-bottom: 14px; }
     .mode-selection select { font-size: 16px; }
 }
+
+/* Легенда цветов RGB-индикатора на странице настроек */
+.rgb-legend { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--card-border); }
+.rgb-legend h4 { font-size: 14px; margin-bottom: 10px; }
+.rgb-legend ul { list-style: none; display: grid; gap: 8px; margin-bottom: 10px; }
+.rgb-legend li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.4; }
+.rgb-dot {
+    flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%;
+    border: 1px solid var(--card-border);
+}
+.rgb-red { background: #ef4444; border-color: #ef4444; }
+.rgb-purple { background: #c026d3; border-color: #c026d3; }
+.rgb-yellow { background: #facc15; border-color: #facc15; }
+.rgb-green { background: #10b981; border-color: #10b981; }
+.rgb-blue { background: #3b82f6; border-color: #3b82f6; }
+.rgb-off { background: transparent; border-color: var(--text-muted); }

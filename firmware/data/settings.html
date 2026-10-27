@@ -121,6 +121,22 @@
                     </div>
                     <button type="submit" class="btn-action btn-sync">Сохранить</button>
                 </form>
+
+                <div class="rgb-legend" id="rgb-legend">
+                    <h4>Что означают цвета</h4>
+                    <ul>
+                        <li><span class="rgb-dot rgb-red"></span><b>Красный</b> — датчик SHT4x не отвечает или часам RTC нет доверия</li>
+                        <li><span class="rgb-dot rgb-purple"></span><b>Пурпурный</b> — просадка питания: измерено ниже 21,6 В, свет заблокирован до 22,5 В</li>
+                        <li><span class="rgb-dot rgb-yellow"></span><b>Жёлтый</b> — нет SD-карты или нет данных измерителя питания (INA238)</li>
+                        <li><span class="rgb-dot rgb-green"></span><b>Зелёный</b> — всё в норме</li>
+                        <li><span class="rgb-dot rgb-blue"></span><b>Синий</b> — идёт запуск платы; гаснет, когда плата дошла до рабочего цикла</li>
+                        <li><span class="rgb-dot rgb-off"></span><b>Не светится</b> — индикатор выключен: яркость 0 или ночной режим</li>
+                    </ul>
+                    <p class="form-hint">
+                        Если неисправностей несколько, показывается самая тяжёлая: красный важнее пурпурного, пурпурный важнее жёлтого.
+                        Индикатор показывает только состояние самой платы; ход полива, нагрева и связь с роутером видны на главной странице.
+                    </p>
+                </div>
             </div>
 
             <div class="form-section">
