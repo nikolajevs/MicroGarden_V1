@@ -37,7 +37,6 @@
 
 String admin_password; // Immutable after setup, never returned through HTTP.
 String csrf_token;
-std::atomic<uint32_t> rgb_activity_ms{0}; // SD/HTTPS activity may originate on either core.
 static bool sd_online = false;
 static bool led_supply_allowed = false;
 static bool rgb_ready = false;
@@ -355,21 +354,17 @@ void setStatusColor(StatusColor color) {
   // поэтому цвета не уползают от разброса светодиодов и видны при ярком свете.
   const bool red = color == StatusColor::Red || color == StatusColor::Purple ||
                    color == StatusColor::Yellow;
-  const bool green = color == StatusColor::Green || color == StatusColor::Yellow ||
-                     color == StatusColor::Cyan;
-  const bool blue = color == StatusColor::Blue || color == StatusColor::Purple ||
-                    color == StatusColor::Cyan;
+  const bool green = color == StatusColor::Green || color == StatusColor::Yellow;
+  const bool blue = color == StatusColor::Blue || color == StatusColor::Purple;
   ledcWrite(RGB_RED_PIN, red ? RGB_DUTY : 0);
   ledcWrite(RGB_GREEN_PIN, green ? RGB_DUTY : 0);
   ledcWrite(RGB_BLUE_PIN, blue ? RGB_DUTY : 0);
 }
 
 void updateStatusLed(uint32_t nowMs) {
-  const uint32_t activity = rgb_activity_ms.load(std::memory_order_relaxed);
   setStatusColor(statusColor(nowMs, state.sht_online, state.clock_trusted,
                  state.power_ok && state.led_supply_blocked,
-                 WiFi.status() == WL_CONNECTED, sd_online, state.power_ok,
-                 state.heater_active, state.pump_active, activity && elapsedMs(nowMs, activity) < 300));
+                 WiFi.status() == WL_CONNECTED, sd_online, state.power_ok));
 }
 
 void stopPumpAtDeadline() {
@@ -815,7 +810,6 @@ void vUbidotsTask(void *pvParameters) {
       http.addHeader("Content-Type", "application/json");
       http.addHeader("X-Auth-Token", cfg.ubidots_token);
       int code = http.POST(payload);
-      if (code >= 200 && code < 300) rgb_activity_ms.store(millis(), std::memory_order_relaxed);
       // Раньше код ответа присваивался и молча выбрасывался — узнать, дошла ли
       // телеметрия и не протух ли токен, было невозможно
       if (code > 0) logPrintf("[Core 0] Ubidots: HTTP %d\n", code);
@@ -1975,7 +1969,6 @@ void loop() {
     bool fileExists = SD.exists(logFilename);
     File logFile = SD.open(logFilename, FILE_APPEND);
     if (logFile) {
-      rgb_activity_ms.store(millis(), std::memory_order_relaxed);
       // power_w is appended last, so older readers of the first 8 columns keep working.
       // It is the average over the 10-minute interval, empty when the INA238 gave nothing.
       if (!fileExists) logFile.println("timestamp;temp;hum;led;fan1;fan2;sht_ok;rtc_ok;power_w");

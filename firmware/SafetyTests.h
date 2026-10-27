@@ -198,16 +198,15 @@ static_assert(!ledSupplyNext(false, false, 24) && !ledSupplyNext(true, false, 24
               !ledSupplyNext(true, true, 21.59f) && ledSupplyNext(true, true, 21.6f) &&
               !ledSupplyNext(false, true, 22.49f) && ledSupplyNext(false, true, 22.5f) &&
               !ledSupplyNext(true, true, __builtin_nanf("")), "LED supply cutoff, hysteresis and invalid data");
-static_assert(statusColor(200, false, true, true, true, true, true, true, true, true) == StatusColor::Red &&
-              statusColor(200, true, true, true, true, true, true, true, true, true) == StatusColor::Purple &&
-              statusColor(200, true, true, false, true, true, true, false, true, false) == StatusColor::Cyan &&
-              statusColor(700, true, true, false, false, true, true, false, false, false) == StatusColor::Blue,
-              "Status LED faults take priority over process flashes");
-// Шесть цветов: нагреватель отдаёт жёлтую вспышку, отправка телеметрии — пурпурную.
-// Ровная авария того же цвета недостижима одновременно со вспышкой: ветки аварий
-// стоят выше по приоритету, а между вспышками горит ровный зелёный.
-static_assert(statusColor(200, true, true, false, true, true, true, true, false, false) == StatusColor::Yellow &&
-              statusColor(200, true, true, false, true, false, true, false, false, false) == StatusColor::Yellow &&
-              statusColor(200, true, true, false, true, true, true, true, true, true) == StatusColor::Purple &&
-              statusColor(1500, true, true, false, true, true, true, true, true, false) == StatusColor::Green,
-              "Six-colour palette: heater flashes yellow, telemetry flashes purple");
+// Порядок приоритетов: датчик/часы, просадка шины, отсутствие Wi-Fi, SD и питание.
+static_assert(statusColor(200, false, true, true, true, true, true) == StatusColor::Red &&
+              statusColor(200, true, false, false, true, true, true) == StatusColor::Red &&
+              statusColor(200, true, true, true, false, false, false) == StatusColor::Purple &&
+              statusColor(700, true, true, false, false, false, false) == StatusColor::Blue &&
+              statusColor(200, true, true, false, false, true, true) == StatusColor::Off,
+              "Heavier status LED faults take priority over lighter ones");
+// Жёлтый только при живом Wi-Fi: SD или данные INA238 пропали, остальное в норме.
+static_assert(statusColor(200, true, true, false, true, false, true) == StatusColor::Yellow &&
+              statusColor(200, true, true, false, true, true, false) == StatusColor::Yellow &&
+              statusColor(200, true, true, false, true, true, true) == StatusColor::Green,
+              "Yellow marks missing SD or power data, green marks a healthy board");
