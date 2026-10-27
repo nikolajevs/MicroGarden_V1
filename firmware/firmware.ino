@@ -1910,12 +1910,27 @@ void loop() {
   updatePowerMeter(currentMillis, now.unixtime() / 86400, cfg.power_cal_pct); // Self-limits to 1 s
   const bool freshPower = state.power_ok && power_last_sample_ms != 0 &&
                           elapsedMs(currentMillis, power_last_sample_ms) <= POWER_FRESH_MS;
-  led_supply_allowed = ledSupplyNext(led_supply_allowed, freshPower, state.bus_v);
+  led_supply_allowed = ledSupplyAllowed(led_supply_allowed, freshPower, state.bus_v, power_online,
+                                        state.clock_trusted, state.sht_online);
   state.led_supply_blocked = !led_supply_allowed;
   // Lite has no hardware UVLO/PGOOD gate. Apply cutoff every loop, outside the 10 s climate update.
   if (!led_supply_allowed && state.led_pwm != 0) {
     state.led_pwm = 0;
     ledcWrite(LED_PWM_PIN, 0);
+  }
+  // Измеритель молчит, а свет разрешён по часам и датчику: защиты от просадки питания нет. Пишем
+  // об этом один раз, если так длится дольше 30 с, чтобы одиночный сбой не засорял журнал.
+  static uint32_t unmeasuredSinceMs = 0;
+  static bool unmeasuredReported = false;
+  if (led_supply_allowed && !freshPower && !power_online) {
+    if (unmeasuredSinceMs == 0) unmeasuredSinceMs = currentMillis ? currentMillis : 1;
+    if (!unmeasuredReported && elapsedMs(currentMillis, unmeasuredSinceMs) >= 30000) {
+      unmeasuredReported = true;
+      logPrintln("[Power] Нет связи с измерителем питания (INA238): свет работает без защиты от низкого напряжения.");
+    }
+  } else {
+    unmeasuredSinceMs = 0;
+    unmeasuredReported = false;
   }
 
 

@@ -147,7 +147,11 @@ function renderPower(data) {
     } else {
         valueEl.innerHTML = '--<span class="unit">Вт</span>';
         detailsEl.textContent = 'нет данных';
-        warnEl.textContent = 'Свет выключен: нет достоверных данных питания';
+        // Без данных измерителя свет гасится только если плата не знает время или у неё не отвечает датчик
+        // SHT4x; иначе он работает по расписанию, но без защиты от просадки питания.
+        warnEl.textContent = data.led_supply_blocked
+            ? 'Свет выключен: нет данных питания, а часы или датчик температуры не в порядке'
+            : 'Измеритель питания не отвечает: свет работает по расписанию, защиты от низкого напряжения нет';
         warnEl.hidden = false;
     }
     const energyEl = document.getElementById('energy-val');
