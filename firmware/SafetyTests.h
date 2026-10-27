@@ -193,7 +193,7 @@ constexpr bool ina238Regression() {
 }
 static_assert(ina238Regression(), "INA238 raw voltage conversion, 3.5 mOhm low-side shunt");
 static_assert(LED_MIN_DUTY == 5 && ledDutyForRequest(1) == 5 && ledDutyForRequest(4) == 5,
-              "75 W LED startup requires at least 5 duty counts");
+              "69 W LED startup requires at least 5 duty counts");
 static_assert(!ledSupplyNext(false, false, 24) && !ledSupplyNext(true, false, 24) &&
               !ledSupplyNext(true, true, 21.59f) && ledSupplyNext(true, true, 21.6f) &&
               !ledSupplyNext(false, true, 22.49f) && ledSupplyNext(false, true, 22.5f) &&

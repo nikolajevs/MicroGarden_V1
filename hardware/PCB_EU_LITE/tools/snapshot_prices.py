@@ -64,6 +64,13 @@ OWNER_QUOTES = {'OSTAPA57E2A': dict(shop='Electrobase', sku='EB1854986288',
     url='https://electrobase.lv/katalogs/diodes-led-tht-18mm/led-rgb-5mm-140deg-front-convex-231vdc-noof-term-4-round',
     price_date='2026-10-25', min_qty=1, multiple=1, pack=1,
     source='Owner-provided Electrobase product card 2026-10-25; VAT included; no live checkout verification')}
+# Read from the shop's own product page, not from the scraped database: kept when the snapshot is refreshed.
+SITE_QUOTES = {'SMD1206-1K-1%': dict(shop='Salvats', sku='SMD1206-1K-1%',
+    title='1K-1206-1% SMD Rezistors, 1206',
+    price=0.03, stock='490',
+    url='https://www.salvats.lv/lv/rezistori-smd-1206-025w/1k-1206-1-smd-rezistors-1206',
+    price_date='2026-10-27', min_qty=1, multiple=1, pack=1,
+    source='Salvats product page read on 2026-10-27 (VAT as shown, no checkout verification); not from the 2026-10-23 catalog.db snapshot')}
 
 
 def main():
@@ -86,6 +93,7 @@ def main():
         out[key] = dict(shop=shop, sku=mpn, title=r['usage'][:90], price=r['price_unit'], stock=str(r['stock']), url=r['url'],
                         price_date=r.get('price_date', '2026-10-23'), min_qty=1, multiple=1, pack=1, source='EU-0.1 BOM')
     out.update(OWNER_QUOTES)
+    out.update(SITE_QUOTES)
     # Refuse an incomplete refresh before replacing the working price snapshot.
     required = {r['mpn'] for r in json.loads((HERE / 'BOM_allocated.json').read_text(encoding='utf-8'))['buy']}
     missing = required - out.keys()

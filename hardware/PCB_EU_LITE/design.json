@@ -2022,7 +2022,7 @@
         "2": "LED_CSH_MID"
       },
       "footprint": "Resistor_SMD:R_1206_3216Metric",
-      "note": "With R506=620R: 5.32k total, ~1.55 A / 75 W-class at 48 V shared by all LED outputs",
+      "note": "With R506=1k: 5.7k total, ~1.444 A / 69.3 W-class at 48 V shared by all LED outputs",
       "position": [
         374.65,
         119.38
@@ -2033,9 +2033,9 @@
       "sheet": "LED",
       "ref": "R506",
       "symbol": "R",
-      "value": "620R 1%",
-      "mpn": "CRCW1206620RFKTABC",
-      "src": "CRCW1206620RFKTABC",
+      "value": "1k 1%",
+      "mpn": "SMD1206-1K-1%",
+      "src": "SMD1206-1K-1%",
       "nets": {
         "1": "LED_CSH_MID",
         "2": "GND"
@@ -2052,9 +2052,9 @@
       "sheet": "LED",
       "ref": "R507",
       "symbol": "R",
-      "value": "56k 1%",
-      "mpn": "SMD1206 56K 1%",
-      "src": "SMD1206 56K 1%",
+      "value": "82k 1%",
+      "mpn": "CRCW120682K0FKTABC",
+      "src": "CRCW120682K0FKTABC",
       "nets": {
         "1": "LED_SW",
         "2": "LED_RT_MID"

@@ -16,8 +16,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 DESIGN = HERE / 'design.json'
 OUTPUT = HERE / 'review'
-TARGET_A = 1.235 * 1000 / ((4700 + 620) * .150)
-CORNER_A = 1.26 * 1000 * 1.01 / ((4700 + 620) * .99 * .150 * .99)
+TARGET_A = 1.235 * 1000 / ((4700 + 1000) * .150)
+CORNER_A = 1.26 * 1000 * 1.01 / ((4700 + 1000) * .99 * .150 * .99)
 IS_LIMIT_MIN_A = .215 / (.040 * 1.01)
 OVP_V = 1.24 * (33_000 + 10_000 + 1_000) / 1_000
 SOURCE = 'https://www.ti.com/lit/ds/symlink/lm3429.pdf'
@@ -25,7 +25,7 @@ SOURCE = 'https://www.ti.com/lit/ds/symlink/lm3429.pdf'
 
 @dataclass(frozen=True)
 class Model:
-    frequency_hz: float = 400_000.0
+    frequency_hz: float = 25 / ((82_000 + 6_200) * 1e-9)  # LM3429 Rev H eq. 6: 283.45 kHz nominal
     inductance_h: float = 43.5e-6
     inductor_dcr_ohm: float = .030  # assumed, not measured
     switch_ron_ohm: float = .0208  # cold 4.5 V table value; no thermal prediction
@@ -51,7 +51,7 @@ def require_design_values():
     expected = {
         'L501': '47u 15A', 'Q501': 'BSC146N10LS5',
         'D501': 'SBRT15U100SP5', 'R501': '0R040 3W', 'R502': '0R15 2W',
-        'R503': '1k 1%', 'R504': '1k 1%', 'R505': '4k7 1%', 'R506': '620R 1%',
+        'R503': '1k 1%', 'R504': '1k 1%', 'R505': '4k7 1%', 'R506': '1k 1%',
         'R509': '33k 1%', 'R510': '10k 1%', 'R511': '1k 1%',
         'C508': '470u 63V', 'C515': '100n 100V',
         **{f'C{number}': '4u7 100V' for number in range(509, 515)},
@@ -344,7 +344,8 @@ def markdown_for(report):
 
 ## Принятые параметры
 
-- Частота 400 кГц — предположение из расчёта проекта; цепь RCT не симулируется.
+- Частота 283,45 кГц — номинал RCT 82 кОм + 6,2 кОм / 1 нФ по формуле 6 LM3429;
+  сама цепь RCT не симулируется, разброс таймера и RC не учтён.
 - L501 43,5 мкГн, DCR 30 мОм (DCR принят, физически не измерен).
 - Q501: 20,8 мОм при 4,5 В из таблицы проекта; температурный рост,
   заряд затвора и потери переключения не включены.

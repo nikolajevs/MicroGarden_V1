@@ -162,7 +162,7 @@ SRC_FP = {   # footprint per source (stock id 'S<n>' or purchase key)
     'BC-2001': 'LITE_Mechanical:Battery_COMF_BC-2001', 'C1206C102JCGACTU': C1206, 'CL31C101JBCNNNC': C1206,
     'C1206C100J5GACTU': C1206, 'OSTAPA57E2A': 'LITE_Parts:LED_OSTAPA57E2A_Formed_P2.54mm', 'SMD1206-10K-1%': R1206, 'CRCW120682K0FKTABC': R1206, 'SMD1206-6K2-1%': R1206,
     'SMD1206 4K7 1%': R1206, 'CRCW1206620RFKTABC': R1206,
-    'CRCW12061K20FKTABC': R1206, 'SMD1206 56K 1%': R1206, 'SMD1206-33K-1%': R1206,
+    'CRCW12061K20FKTABC': R1206, 'SMD1206-1K-1%': R1206, 'SMD1206 56K 1%': R1206, 'SMD1206-33K-1%': R1206,
 }
 # Footprints already drawn from manufacturer drawings in EU-0.1 / cheap-version (physical fit still pending)
 CHECKED_FP = {'LM3429MH/NOPB', 'MEM2061-01-188-00-A', 'BC-2001', 'ABS07-32.768KHZ-7-T', 'JNRH1207-220M-A', '3413.0330.11',
@@ -336,15 +336,15 @@ for k in (1, 2):
 
 # ------------------------------------------------------------------ 06 | LED boost (one channel)
 sheet('LED', '06 | LED boost channel (LM3429, one channel)', [
- 'J501/J502/J503 are parallel outputs AFTER R502: one 75 W-class LED channel, ~1.55 A TOTAL at ~48 V (1.235 V x 1k / (5.32k x 0.15 R)).',
- 'LM3429 VIN senses the actual 24 V input. RCT is fed from SW through 56k + 6k2, CT 1 nF C0G: same as EU-0.1 LED1 (frequency unchanged).',
- 'L501: stock Feryster DTMSS-27/0.047/15-V, 47 uH, 15 A, standing toroid ~35 mm high. Model peak <=4.36 A at 21.6 V, 90% efficiency, 43.5 uH, 1.26 V CSH and 1% resistors.',
+ 'J501/J502/J503 are parallel outputs AFTER R502: one 69 W-class LED channel, ~1.444 A TOTAL at ~48 V (1.235 V x 1k / (5.7k x 0.15 R)).',
+ 'LM3429 VIN senses the actual 24 V input. RCT is fed from SW through 82k + 6k2, CT 1 nF C0G: 25 / (88.2k x 1 nF) = 283.45 kHz nominal (EU-0.1 LED1 used 56k = 402 kHz).',
+ 'L501: stock Feryster DTMSS-27/0.047/15-V, 47 uH, 15 A, standing toroid ~35 mm high. Model peak <=4.24 A at 21.6 V, 90% efficiency, 43.5 uH, 283.45 kHz, 1.26 V CSH and 1% resistors.',
  'LM3429 IS threshold is 215/245/275 mV min/typ/max (TI Rev H): minimum limit 5.32 A with R501=40 mOhm +1%; modeled current-limit headroom >=20%. Verify real tolerances and heating.',
- 'Q501: stock BSC146N10LS5 (TDSON-8, 100 V, 14.6 mOhm, Qgd 2.8 nC) on the LM3429 7 V gate drive; no heatsink. The 75 W setpoint needs wide power copper, thermal vias and temperature checks.',
+ 'Q501: stock BSC146N10LS5 (TDSON-8, 100 V, 14.6 mOhm, Qgd 2.8 nC) on the LM3429 7 V gate drive; no heatsink. The 69 W setpoint needs wide power copper, thermal vias and temperature checks.',
  'Gate resistor 2 x 10 R in parallel = 5 R (stock) instead of 4.7 R. D501: stock SBRT15U100SP5 (100 V, 15 A, PowerDI5): pad 1 cathode, pads 2 anode.',
  'HSP/HSN use equal 1k filters; output bank is BEFORE the LED shunt; LED negative is GND. OVP = 1.24 V x 44 = 54.56 V; 63 V electrolytic and 100 V ceramics.',
  'nDIM: GPIO25 -> 5.1k -> nDIM, 10k to GND (HIGH 2.19 V, Hi-Z 0.6 V). No BAT54/LM2903 hardware block (see 02 | UVLO note).',
- 'Required firmware setting: at 1 kHz / 8 bit use >=5 PWM counts (19.53 us); the new startup-pulse estimate is ~16 us at 21.6 V / 48 V. Firmware is not changed here.',
+ 'Required firmware setting: at 1 kHz / 8 bit use >=5 PWM counts (19.53 us); the startup-pulse estimate at the 69 W setpoint is ~14.7 us at 21.6 V / 48 V. Firmware is not changed here.',
  'Boost output has a DC path from VIN even while disabled. Fuse is not semiconductor short-circuit proof. 22u COMP intentionally slow.',
 ], 85)
 nn = {1: '+24V_LED', 2: 'LED_COMP', 3: 'LED_CSH', 4: 'LED_RCT', 5: GND, 6: 'LED_OVP', 7: 'LED_NDIM', 8: None, 9: GND, 10: 'LED_GATE_RAW',
@@ -357,9 +357,9 @@ add('LED', 'Q501', 'NMOS_SO8', 'BSC146N10LS5', 'S112', {1: 'LED_IS', 2: 'LED_IS'
 r('LED', 'R501', '0R040 3W', 'LRP2512-R040-1%', 'LED_IS', GND, 'Switch-current sense (IS); source of Q501 -> shunt -> power GND')
 r('LED', 'R502', '0R15 2W', 'CS2512-0R15-1%-HP', 'LED_OUT', 'LED_POS', 'High side LED current shunt, separate Kelvin sense pair')
 r('LED', 'R503', '1k 1%', 'S62', 'LED_OUT', 'LED_HSP'); r('LED', 'R504', '1k 1%', 'S62', 'LED_POS', 'LED_HSN')
-r('LED', 'R505', '4k7 1%', 'SMD1206 4K7 1%', 'LED_CSH', 'LED_CSH_MID', 'With R506=620R: 5.32k total, ~1.55 A / 75 W-class at 48 V shared by all LED outputs')
-r('LED', 'R506', '620R 1%', 'CRCW1206620RFKTABC', 'LED_CSH_MID', GND)
-r('LED', 'R507', '56k 1%', 'SMD1206 56K 1%', 'LED_SW', 'LED_RT_MID'); r('LED', 'R508', '6k2 1%', 'SMD1206-6K2-1%', 'LED_RT_MID', 'LED_RCT')
+r('LED', 'R505', '4k7 1%', 'SMD1206 4K7 1%', 'LED_CSH', 'LED_CSH_MID', 'With R506=1k: 5.7k total, ~1.444 A / 69.3 W-class at 48 V shared by all LED outputs')
+r('LED', 'R506', '1k 1%', 'SMD1206-1K-1%', 'LED_CSH_MID', GND)
+r('LED', 'R507', '82k 1%', 'CRCW120682K0FKTABC', 'LED_SW', 'LED_RT_MID'); r('LED', 'R508', '6k2 1%', 'SMD1206-6K2-1%', 'LED_RT_MID', 'LED_RCT')
 r('LED', 'R509', '33k 1%', 'SMD1206-33K-1%', 'LED_OUT', 'LED_OVP_MID'); r('LED', 'R510', '10k 1%', 'S59', 'LED_OVP_MID', 'LED_OVP')
 r('LED', 'R511', '1k 1%', 'S62', 'LED_OVP', GND)
 r('LED', 'R512', '10R', 'S41', 'LED_GATE_RAW', 'LED_GATE', 'Two 10 R in parallel = 5 R gate resistor; each carries ~0.6 A peak for ~20 ns')
@@ -628,7 +628,7 @@ def main():
                    buy_pieces=sum(x['buy'] for x in buy_rows), shop_totals={k: str(v) for k, v in totals.items()},
                    parts_EUR=str(sum(totals.values())), shipping_EUR=str(shipping), total_EUR=str(sum(totals.values()) + shipping),
                    unpriced_items=unpriced, unpriced_allowance_EUR='0.00',
-                   price_basis='Catalogue snapshot 2026-10-23, including CSD19531KCS from catalog.db; OSTAPA57E2A owner Electrobase quote 2026-10-25 (procurement_lite.json); delivery as in the EU-0.1 README of 24.10.2026, not rechecked. No reservation or order.')
+                   price_basis='Catalogue snapshot 2026-10-23, including CSD19531KCS from catalog.db; OSTAPA57E2A owner Electrobase quote 2026-10-25 and the 1k 1206 line read from the Salvats product page on 2026-10-27 (procurement_lite.json); delivery as in the EU-0.1 README of 24.10.2026, not rechecked. No reservation or order.')
     (HERE/'BOM_allocated.json').write_text(json.dumps(dict(stock=stock_rows, buy=buy_rows, summary=summary), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     with (HERE/'BOM_allocated.csv').open('w', newline='', encoding='utf-8-sig') as f:
         w = csv.writer(f, lineterminator='\n')

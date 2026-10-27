@@ -1172,38 +1172,19 @@
     },
     {
       "shop": "Salvats",
-      "mpn": "CRCW1206620RFKTABC",
-      "sku": "CRCW1206620RFKTABC",
-      "needed": 1,
-      "buy": 1,
-      "unit": "шт.",
-      "price_unit": 0.03,
-      "line": 0.03,
-      "stock": "99",
-      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/620r-1206-1-smd-rezistors-1206",
-      "price_date": "2026-10-23",
-      "refs": [
-        "R506"
-      ],
-      "accessory_count": 0,
-      "min_qty": 1,
-      "multiple": 1,
-      "unpriced": false
-    },
-    {
-      "shop": "Salvats",
       "mpn": "CRCW120682K0FKTABC",
       "sku": "CRCW120682K0FKTABC",
-      "needed": 1,
-      "buy": 1,
+      "needed": 2,
+      "buy": 2,
       "unit": "шт.",
       "price_unit": 0.03,
-      "line": 0.03,
+      "line": 0.06,
       "stock": "284",
       "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/82k-1206-1-smd-rezistors-1206",
       "price_date": "2026-10-23",
       "refs": [
-        "R101"
+        "R101",
+        "R507"
       ],
       "accessory_count": 0,
       "min_qty": 1,
@@ -1292,26 +1273,6 @@
     },
     {
       "shop": "Salvats",
-      "mpn": "SMD1206 56K 1%",
-      "sku": "SMD1206",
-      "needed": 1,
-      "buy": 1,
-      "unit": "шт.",
-      "price_unit": 0.03,
-      "line": 0.03,
-      "stock": "906",
-      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/56k-1206-1-smd-rezistors-1206",
-      "price_date": "2026-10-23",
-      "refs": [
-        "R507"
-      ],
-      "accessory_count": 0,
-      "min_qty": 1,
-      "multiple": 1,
-      "unpriced": false
-    },
-    {
-      "shop": "Salvats",
       "mpn": "SMD1206-10K-1%",
       "sku": "SMD1206-10K-1%",
       "needed": 1,
@@ -1324,6 +1285,26 @@
       "price_date": "2026-10-23",
       "refs": [
         "R108"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "SMD1206-1K-1%",
+      "sku": "SMD1206-1K-1%",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.03,
+      "line": 0.03,
+      "stock": "490",
+      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/1k-1206-1-smd-rezistors-1206",
+      "price_date": "2026-10-27",
+      "refs": [
+        "R506"
       ],
       "accessory_count": 0,
       "min_qty": 1,
@@ -1441,7 +1422,7 @@
     },
     "stock_rows": 38,
     "stock_pieces": 115,
-    "buy_rows": 35,
+    "buy_rows": 34,
     "buy_pieces": 46,
     "shop_totals": {
       "Electrobase": "20.06",
@@ -1452,6 +1433,6 @@
     "total_EUR": "38.49",
     "unpriced_items": [],
     "unpriced_allowance_EUR": "0.00",
-    "price_basis": "Catalogue snapshot 2026-10-23, including CSD19531KCS from catalog.db; OSTAPA57E2A owner Electrobase quote 2026-10-25 (procurement_lite.json); delivery as in the EU-0.1 README of 24.10.2026, not rechecked. No reservation or order."
+    "price_basis": "Catalogue snapshot 2026-10-23, including CSD19531KCS from catalog.db; OSTAPA57E2A owner Electrobase quote 2026-10-25 and the 1k 1206 line read from the Salvats product page on 2026-10-27 (procurement_lite.json); delivery as in the EU-0.1 README of 24.10.2026, not rechecked. No reservation or order."
   }
 }
