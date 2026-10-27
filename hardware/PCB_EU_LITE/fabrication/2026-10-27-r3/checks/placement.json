@@ -1,0 +1,18 @@
+{
+  "checks_passed": 18791,
+  "pcbnew": "10.0.7-10.0.7~ubuntu24.04.1",
+  "netlisted_references": 163,
+  "mapped_netlist_pins": 437,
+  "sides": {
+    "F": 125,
+    "B": 38
+  },
+  "stage": "ROUTED_PLACEMENT",
+  "physical_fit_verified": false,
+  "thermal_verified": false,
+  "sha256": {
+    "PCB_EU_LITE.kicad_pcb": "299c4ab14cac89cc2c79a264d7f93015d5493700276c67f541e11812dad62153",
+    "netlist.xml": "0c12552d137fb512963cf952aaccb9e2681328dd0d3f780de30b2f9217f8e991",
+    "placement.json": "bf83da28a97f385219b09b3952d6bd9fe1ebf3ebcc12769f121c6f1bbf39209f"
+  }
+}

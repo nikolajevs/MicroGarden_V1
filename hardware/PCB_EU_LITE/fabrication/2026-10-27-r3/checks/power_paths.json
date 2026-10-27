@@ -1,0 +1,38 @@
+{
+  "kicad_version": "10.0.7",
+  "power_paths": {
+    "+24V_LED": {
+      "power_path_layer": "F.Cu",
+      "from": "F103.2",
+      "to": [
+        "L501.1",
+        "C501.1"
+      ]
+    },
+    "LED_SW": {
+      "power_path_layer": "F.Cu",
+      "from": "L501.2",
+      "to": [
+        "Q501.5",
+        "D501.2",
+        "R507.1"
+      ]
+    }
+  },
+  "inner_power_copper": {
+    "LED_SW": 0,
+    "LED_OUT": 0,
+    "LED_POS": 0
+  },
+  "raw_vias": 10,
+  "raw_via_size_drill_mm": [
+    0.8,
+    0.4
+  ],
+  "raw_via_min_pitch_mm": 1.1,
+  "all_raw_vias_connected_to_fuse_on_F_Cu_and_input_on_B_Cu": true,
+  "paste_overlaps": 0,
+  "esp_ground_vias": 7,
+  "remaining_small_annulus_vias": 32,
+  "thermal_qualified": false
+}

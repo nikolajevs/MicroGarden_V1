@@ -1,0 +1,5 @@
+09:55:30: Error: schema file '/usr/share/kicad/schemas/api.v1.schema.json' not found
+Found 35 violations
+Found 0 unconnected items
+Found 0 schematic parity issues
+Saved DRC Report to /workspace/scratch/48d09a96ab5c/MicroGarden_V1/work/recheck-2026-10-27/checks/drc.json

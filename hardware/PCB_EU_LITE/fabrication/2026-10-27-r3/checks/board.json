@@ -1,0 +1,74 @@
+{
+  "source_sha256": "299c4ab14cac89cc2c79a264d7f93015d5493700276c67f541e11812dad62153",
+  "kicad_version": "10.0.7",
+  "tracks": 1552,
+  "vias": 250,
+  "copper_layers": 4,
+  "size_mm": [
+    100,
+    100
+  ],
+  "nominal_thickness_mm": 1.6062,
+  "visible_silk_texts": 160,
+  "silk_texts_below_recommended_1mm": 27,
+  "min_silk_stroke_mm": 0.15,
+  "min_track_mm": 0.2,
+  "min_via_drill_mm": 0.3,
+  "via_drill_counts": {
+    "0.3": 227,
+    "0.4": 23
+  },
+  "verified_silk_only_library_differences": [
+    "C110",
+    "C401",
+    "C508",
+    "C513",
+    "D501",
+    "F101",
+    "F104",
+    "F105",
+    "F401",
+    "J301",
+    "L101",
+    "Q102",
+    "Q421",
+    "Q501",
+    "Q701",
+    "Q703",
+    "Q704",
+    "Q902",
+    "Q903",
+    "R101",
+    "R306",
+    "R509",
+    "R703",
+    "R706",
+    "R903",
+    "TP01",
+    "TP02",
+    "TP03",
+    "TP04",
+    "TP05",
+    "U101",
+    "U102",
+    "U201",
+    "U301",
+    "U501"
+  ],
+  "kelvin": {
+    "IN+": {
+      "pin": "U102.10",
+      "target": "R111.1",
+      "isolated_from_same_net_pours_pads_and_tracks": true,
+      "items": 9
+    },
+    "IN-": {
+      "pin": "U102.9",
+      "target": "R111.2",
+      "isolated_from_same_net_pours_pads_and_tracks": true,
+      "items": 11
+    }
+  },
+  "physical_fit_verified": false,
+  "thermal_qualified": false
+}
