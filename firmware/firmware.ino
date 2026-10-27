@@ -351,14 +351,16 @@ Preferences preferences;
 // RGB channels share the 1 kHz nDIM timer, never the 25 kHz fan timer.
 void setStatusColor(StatusColor color) {
   if (!rgb_ready) return;
+  // Каждый канал только включён или выключен — промежуточных яркостей больше нет,
+  // поэтому цвета не уползают от разброса светодиодов и видны при ярком свете.
   const bool red = color == StatusColor::Red || color == StatusColor::Purple ||
-                   color == StatusColor::Yellow || color == StatusColor::Orange || color == StatusColor::White;
+                   color == StatusColor::Yellow;
   const bool green = color == StatusColor::Green || color == StatusColor::Yellow ||
-                     color == StatusColor::Orange || color == StatusColor::Cyan || color == StatusColor::White;
+                     color == StatusColor::Cyan;
   const bool blue = color == StatusColor::Blue || color == StatusColor::Purple ||
-                    color == StatusColor::Cyan || color == StatusColor::White;
+                    color == StatusColor::Cyan;
   ledcWrite(RGB_RED_PIN, red ? RGB_DUTY : 0);
-  ledcWrite(RGB_GREEN_PIN, green ? (color == StatusColor::Orange ? RGB_DUTY / 3 : RGB_DUTY) : 0);
+  ledcWrite(RGB_GREEN_PIN, green ? RGB_DUTY : 0);
   ledcWrite(RGB_BLUE_PIN, blue ? RGB_DUTY : 0);
 }
 

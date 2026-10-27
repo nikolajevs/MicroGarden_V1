@@ -203,3 +203,11 @@ static_assert(statusColor(200, false, true, true, true, true, true, true, true, 
               statusColor(200, true, true, false, true, true, true, false, true, false) == StatusColor::Cyan &&
               statusColor(700, true, true, false, false, true, true, false, false, false) == StatusColor::Blue,
               "Status LED faults take priority over process flashes");
+// Шесть цветов: нагреватель отдаёт жёлтую вспышку, отправка телеметрии — пурпурную.
+// Ровная авария того же цвета недостижима одновременно со вспышкой: ветки аварий
+// стоят выше по приоритету, а между вспышками горит ровный зелёный.
+static_assert(statusColor(200, true, true, false, true, true, true, true, false, false) == StatusColor::Yellow &&
+              statusColor(200, true, true, false, true, false, true, false, false, false) == StatusColor::Yellow &&
+              statusColor(200, true, true, false, true, true, true, true, true, true) == StatusColor::Purple &&
+              statusColor(1500, true, true, false, true, true, true, true, true, false) == StatusColor::Green,
+              "Six-colour palette: heater flashes yellow, telemetry flashes purple");
