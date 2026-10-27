@@ -49,6 +49,7 @@ function page() {
         operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
         drying_hum_target: 55, drying_hum_band: 5,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
+        telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
         led_on_hour: 6, led_on_minute: 0, led_off_hour: 18, led_off_minute: 0,
         watering_days: 0, start_time: 0})};
     }
@@ -66,7 +67,9 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('operation_mode').value, '0');
   assert.equal(p.fields.get('drying_temp_target').value, 18);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
-  for (const name of ['wifi_pass', 'ap_pass']) assert.equal(p.fields.get(name).value, '');
+  assert.equal(p.fields.get('telemetry_url').value, 'https://dash.example.lat/api/ingest');
+  assert.equal(p.fields.get('device_label').value, 'box-1');
+  for (const name of ['wifi_pass', 'ap_pass', 'telemetry_token']) assert.equal(p.fields.get(name).value, '');
   for (const form of p.forms) {
     assert.equal(form.inputs[0].name, 'csrf_token');
     assert.equal(form.inputs[0].value, 'random-per-boot-token');
