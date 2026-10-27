@@ -305,3 +305,19 @@ static_assert(rgbVisibleColor(StatusColor::Green, false, RGB_NIGHT_FAULTS_ONLY) 
 static_assert(rgbVisibleColor(StatusColor::Green, false, RGB_NIGHT_OFF) == StatusColor::Off &&
               rgbVisibleColor(StatusColor::Red, false, RGB_NIGHT_OFF) == StatusColor::Off,
               "'off' must switch the indicator off at night");
+
+// --- Суточная наработка нагревателя --------------------------------------------------------------
+constexpr bool dailyRuntimeRegression() {
+  DailyRuntime r{0, 0};
+  r = dailyRuntimeStep(r, 20000, true, 1500);     // первый шаг: сутки начались, нагреватель включён
+  r = dailyRuntimeStep(r, 20000, true, 500);
+  r = dailyRuntimeStep(r, 20000, false, 9000);    // выключенный нагреватель время не копит
+  if (r.day != 20000 || r.ms != 2000) return false;
+  r = dailyRuntimeStep(r, 20001, true, 700);      // полночь платы: счёт заново, шаг уже новых суток
+  if (r.day != 20001 || r.ms != 700) return false;
+  r = dailyRuntimeStep(r, 20001, false, 100);
+  r = dailyRuntimeStep(r, 19999, false, 100);     // часы переведены назад: тоже новые сутки, счёт заново
+  return r.day == 19999 && r.ms == 0;
+}
+static_assert(dailyRuntimeRegression(), "heater run time must add up within a board day and restart on a new day");
+

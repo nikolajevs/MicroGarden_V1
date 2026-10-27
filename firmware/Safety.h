@@ -118,3 +118,13 @@ constexpr bool encodeMcp7940n(const RtcFields &time, uint8_t weekday, uint8_t (&
   raw[6] = rtcBcd(time.year - 2000);
   return true;
 }
+
+// Суточная наработка устройства (нагревателя): сколько миллисекунд оно было включено в текущие сутки
+// платы. Сутки — код дня (unixtime / 86400) часов платы; при смене кода счёт начинается заново.
+struct DailyRuntime { uint32_t day; uint32_t ms; };
+
+constexpr DailyRuntime dailyRuntimeStep(DailyRuntime state, uint32_t today, bool active, uint32_t dtMs) {
+  if (today != state.day) state = {today, 0};
+  if (active) state.ms += dtMs;
+  return state;
+}
