@@ -361,10 +361,10 @@ void setStatusColor(StatusColor color) {
   ledcWrite(RGB_BLUE_PIN, blue ? RGB_DUTY : 0);
 }
 
-void updateStatusLed(uint32_t nowMs) {
-  setStatusColor(statusColor(nowMs, state.sht_online, state.clock_trusted,
+void updateStatusLed() {
+  setStatusColor(statusColor(state.sht_online, state.clock_trusted,
                  state.power_ok && state.led_supply_blocked,
-                 WiFi.status() == WL_CONNECTED, sd_online, state.power_ok));
+                 sd_online, state.power_ok));
 }
 
 void stopPumpAtDeadline() {
@@ -2061,7 +2061,7 @@ void loop() {
     }
   }
 
-  updateStatusLed(millis());
+  updateStatusLed();
   publishState(); // Сравнение с опубликованной копией; если ничего не менялось — no-op
   esp_task_wdt_reset();
   delay(1); // Yield to the monitored idle task.
