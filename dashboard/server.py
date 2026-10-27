@@ -221,8 +221,10 @@ class Store:
                     "INSERT OR REPLACE INTO samples(device, ts, %s) VALUES (?, ?, %s)"
                     % (", ".join(SAMPLE_COLS), ", ".join("?" * len(SAMPLE_COLS))),
                     (device, now) + tuple(cols[name] for name in SAMPLE_COLS))
-                shown = {k: v for k, v in cols.items() if v is not None}
-                shown.update(extra)
+                # В базе флаги лежат как 0/1, а странице нужны настоящие true/false.
+                flags = BOOL_FIELDS + EXTRA_BOOL_FIELDS
+                shown = {k: (bool(v) if k in flags else v) for k, v in cols.items() if v is not None}
+                shown.update({k: (bool(v) if k in flags else v) for k, v in extra.items()})
                 cx.execute(
                     "INSERT INTO devices(device, first_seen, last_seen, boot, log_next, sample_ts, last_sample)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(device) DO UPDATE SET last_seen=excluded.last_seen,"

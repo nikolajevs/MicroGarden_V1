@@ -106,7 +106,8 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(st["online"])
         self.assertEqual(st["age"], 30)
         self.assertEqual(st["sample"]["temp"], 24.5)
-        self.assertTrue(st["sample"]["water_present"])
+        self.assertIs(st["sample"]["water_present"], True)   # страница сравнивает с настоящим false
+        self.assertIs(st["sample"]["sht_ok"], True)
         self.assertEqual((st["errors_24h"], st["warnings_24h"]), (1, 1))
         self.assertFalse(self.store.status("m", 180, now=NOW + 600)["online"])
         self.assertIsNone(self.store.status("unknown", 180))

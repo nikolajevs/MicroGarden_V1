@@ -412,7 +412,7 @@
     $('sub').textContent = 'Плата ' + st.device + (st.sample && st.sample.fw ? ' · прошивка ' + st.sample.fw : '');
 
     const s = st.sample || {};
-    const shtBad = s.sht_ok === false;
+    const shtBad = s.sht_ok === false || s.sht_ok === 0;
     setText('v-temp', shtBad ? '—' : fmt(s.temp, 1));
     setText('v-hum', shtBad ? '—' : fmt(s.hum, 1));
     setNote('n-temp', shtBad ? 'датчик не отвечает' : '', shtBad);
