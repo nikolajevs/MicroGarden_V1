@@ -144,6 +144,7 @@ struct State {
   bool clock_usable;       // clock_trusted, либо программный таймер выставлен из RTC или вручную с момента запуска
   bool pump_active;
   bool heater_active;
+  uint32_t heater_on_s;    // Сколько секунд нагреватель проработал за сутки платы (с полуночи или с запуска)
   uint8_t rtc_status;      // RtcStatus of the last RTC read
   bool water_present;      // Debounced float switch, whatever water_sensor_enabled says
   uint32_t last_water_day; // unixtime / 86400 of the day marked as watered, 0 = never
@@ -1319,6 +1320,8 @@ static bool power_online = false;
 static uint32_t power_last_poll_ms = 0, power_last_retry_ms = 0, power_last_sample_ms = 0;
 static uint8_t power_failures = 0;
 static uint32_t energy_day = 0;   // Day code energy_wh belongs to
+static DailyRuntime heater_runtime = {0, 0}; // Наработка нагревателя за сутки платы
+static uint32_t heater_runtime_ms = 0;       // millis() предыдущего шага подсчёта
 static double energy_wh = 0;
 static double csv_power_ws = 0;   // For the 10-minute CSV average
 static uint32_t csv_power_ms = 0;
@@ -1329,6 +1332,17 @@ float takeCsvAveragePower() {
   csv_power_ws = 0;
   csv_power_ms = 0;
   return avg;
+}
+
+// Сколько нагреватель проработал за сутки платы. Считается на каждом проходе loop() по настоящему
+// времени между проходами, поэтому долгие операции (например, установка часов) в наработку входят:
+// пока они идут, пин нагревателя остаётся включённым. Как и энергия, счёт не хранится в NVS:
+// после перезагрузки он идёт заново с запуска платы.
+void updateHeaterRuntime(uint32_t nowMs, uint32_t todayCode) {
+  const uint32_t dt = elapsedMs(nowMs, heater_runtime_ms);
+  heater_runtime_ms = nowMs;
+  heater_runtime = dailyRuntimeStep(heater_runtime, todayCode, state.heater_active, dt);
+  state.heater_on_s = heater_runtime.ms / 1000;
 }
 
 void updatePowerMeter(uint32_t nowMs, uint32_t todayCode, float calPct) {
@@ -1690,7 +1704,8 @@ void setup() {
     }
     // Energy since midnight; kept while the meter is briefly silent.
     json += "\"energy_kwh\":" + String(st.energy_wh / 1000.0f, 3) + ",";
-    json += "\"heater_active\":" + String(st.heater_active ? "true" : "false");
+    json += "\"heater_active\":" + String(st.heater_active ? "true" : "false") + ",";
+    json += "\"heater_today_s\":" + String((unsigned long)st.heater_on_s); // Наработка за сутки платы
     json += "}";
     request->send(200, "application/json", json);
   });
@@ -2281,6 +2296,7 @@ void loop() {
     }
   }
 
+  updateHeaterRuntime(millis(), now.unixtime() / 86400);
   updateStatusLed(cfg);
   publishState(); // Сравнение с опубликованной копией; если ничего не менялось — no-op
   esp_task_wdt_reset();

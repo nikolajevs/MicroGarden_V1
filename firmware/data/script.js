@@ -86,6 +86,8 @@ function renderStatus(data) {
         heaterEl.innerText = 'Выключен';
         heaterEl.style.color = 'var(--text-muted)';
     }
+    // Сколько нагреватель проработал за сутки платы (с полуночи или с последнего включения платы)
+    document.getElementById('heater-today').textContent = 'Сегодня: ' + Format.formatWorkTime(data.heater_today_s);
 
     // График следует за сегодняшним днём платы, пока пользователь сам не выбрал другой:
     // и при первой загрузке, и когда на плате наступила полночь
