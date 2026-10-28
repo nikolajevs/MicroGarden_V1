@@ -1,0 +1,562 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-10-28T18:54:53",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning"
+    ],
+    "kicad_version": "10.0.5",
+    "schematic_parity": [],
+    "source": "PCB_EU_LITE.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Посад. место 'R_1206_3216Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R101",
+                    "pos": {
+                        "x": 53.0,
+                        "y": 74.5
+                    },
+                    "uuid": "070fcb4b-1ba7-5871-a64f-34a21fa6d6f2"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOT-23' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q704",
+                    "pos": {
+                        "x": 59.0,
+                        "y": 82.0
+                    },
+                    "uuid": "0d27fcaa-f13a-54b6-8fe6-8261721b2f60"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TestPoint_Pad_D1.0mm' не соответствует копии в библиотеке 'TestPoint'",
+            "items": [
+                {
+                    "description": "Посад. место TP05",
+                    "pos": {
+                        "x": 54.5,
+                        "y": 71.5
+                    },
+                    "uuid": "10995839-d29d-5926-a272-fe678208e023"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'Diodes_PowerDI5' не соответствует копии в библиотеке 'LITE_Parts'",
+            "items": [
+                {
+                    "description": "Посад. место D501",
+                    "pos": {
+                        "x": 83.06,
+                        "y": 37.3
+                    },
+                    "uuid": "19565ed1-478e-5053-9e63-4efbf0443361"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'L_Jantek_JNRH1207' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место L101",
+                    "pos": {
+                        "x": 35.0,
+                        "y": 67.2
+                    },
+                    "uuid": "208b3122-f2c2-503e-839c-a78dc8ebf8ef"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'C_0603_1608Metric' не соответствует копии в библиотеке 'Capacitor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место C401",
+                    "pos": {
+                        "x": 43.5,
+                        "y": 73.5
+                    },
+                    "uuid": "29266804-e115-532f-b551-f0d68326cc85"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOT-23' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q421",
+                    "pos": {
+                        "x": 28.5,
+                        "y": 39.0
+                    },
+                    "uuid": "2c912672-2bc0-5505-bd0d-9a1d9ee7e6e6"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'Fuse_Schurter_UMT250' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место F104",
+                    "pos": {
+                        "x": 47.5,
+                        "y": 68.0
+                    },
+                    "uuid": "2e864790-9b17-5dc6-9f29-d0fb25b8357e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm' не соответствует копии в библиотеке 'Package_SO'",
+            "items": [
+                {
+                    "description": "Посад. место U101",
+                    "pos": {
+                        "x": 24.0,
+                        "y": 67.3
+                    },
+                    "uuid": "2eb1868b-4a77-5895-9381-6660495af25d"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOT-23' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q701",
+                    "pos": {
+                        "x": 48.0,
+                        "y": 78.0
+                    },
+                    "uuid": "43e9c77e-2565-5f6b-9e58-ccde03750603"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'CP_Elec_16x17.5' не соответствует копии в библиотеке 'Capacitor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место C508",
+                    "pos": {
+                        "x": 76.0,
+                        "y": 70.0
+                    },
+                    "uuid": "4c7d941c-1508-545f-8cdf-884299c35d6c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'VSSOP-10_3x3mm_P0.5mm' не соответствует копии в библиотеке 'LITE_Parts'",
+            "items": [
+                {
+                    "description": "Посад. место U102",
+                    "pos": {
+                        "x": 19.5,
+                        "y": 45.2
+                    },
+                    "uuid": "4ed1fe36-0870-593e-9e4f-b27317f32e9d"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'R_1206_3216Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R509",
+                    "pos": {
+                        "x": 65.5,
+                        "y": 60.5
+                    },
+                    "uuid": "51d76165-d9e6-5ddd-a875-a6e27e8f0b31"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'Fuse_Schurter_UMT250' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место F105",
+                    "pos": {
+                        "x": 75.0,
+                        "y": 85.0
+                    },
+                    "uuid": "5678da65-bc36-5d81-8e46-9659d4548362"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'Fuse_Schurter_UMT250' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место F401",
+                    "pos": {
+                        "x": 16.0,
+                        "y": 21.0
+                    },
+                    "uuid": "6cf96459-7799-51fb-b09e-bf98f51c6614"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TO-220-3_Vertical' не соответствует копии в библиотеке 'Package_TO_SOT_THT'",
+            "items": [
+                {
+                    "description": "Посад. место Q102",
+                    "pos": {
+                        "x": 15.5,
+                        "y": 53.0
+                    },
+                    "uuid": "76ab91cf-e0a9-5072-9fe7-56b0bad52cd8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TestPoint_Pad_D1.0mm' не соответствует копии в библиотеке 'TestPoint'",
+            "items": [
+                {
+                    "description": "Посад. место TP02",
+                    "pos": {
+                        "x": 8.0013,
+                        "y": 67.5
+                    },
+                    "uuid": "7f53f848-1212-5042-a8d5-f1bea108211e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'Fuse_Schurter_UST_USI1206_Reflow' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место F101",
+                    "pos": {
+                        "x": 23.5,
+                        "y": 49.0
+                    },
+                    "uuid": "814c7e59-ca0c-55e3-bf2e-8e083b3eea4f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm' не соответствует копии в библиотеке 'Package_SO'",
+            "items": [
+                {
+                    "description": "Посад. место U201",
+                    "pos": {
+                        "x": 38.5,
+                        "y": 38.0
+                    },
+                    "uuid": "95828734-1aa5-511d-8b1a-c12d43c968c8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TestPoint_Pad_D1.0mm' не соответствует копии в библиотеке 'TestPoint'",
+            "items": [
+                {
+                    "description": "Посад. место TP04",
+                    "pos": {
+                        "x": 50.0013,
+                        "y": 72.0
+                    },
+                    "uuid": "9b5523c9-e08d-56d7-ad46-8d079a5904c4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TDSON-8-1' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q501",
+                    "pos": {
+                        "x": 81.96,
+                        "y": 44.35
+                    },
+                    "uuid": "9d6e0366-73f6-5ca4-be7a-0f765f738a6c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'C_1210_3225Metric' не соответствует копии в библиотеке 'Capacitor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место C513",
+                    "pos": {
+                        "x": 73.26,
+                        "y": 35.65
+                    },
+                    "uuid": "b02421f8-a12b-5ea8-92b6-11f5166994d1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TestPoint_Pad_D1.0mm' не соответствует копии в библиотеке 'TestPoint'",
+            "items": [
+                {
+                    "description": "Посад. место TP01",
+                    "pos": {
+                        "x": 28.0013,
+                        "y": 33.5
+                    },
+                    "uuid": "b63d84ea-cc2d-510b-9490-ce5d6c06e8bb"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TestPoint_Pad_D1.0mm' не соответствует копии в библиотеке 'TestPoint'",
+            "items": [
+                {
+                    "description": "Посад. место TP03",
+                    "pos": {
+                        "x": 47.5013,
+                        "y": 71.5
+                    },
+                    "uuid": "e2dd9f9b-17f4-5b20-891c-65ac60bf52c2"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'CP_Elec_10x10.5' не соответствует копии в библиотеке 'Capacitor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место C110",
+                    "pos": {
+                        "x": 36.0,
+                        "y": 80.0
+                    },
+                    "uuid": "e3fa60a0-33da-5457-b2ed-23782c524de4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TI_PWP0014A_LM3429' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место U501",
+                    "pos": {
+                        "x": 70.0,
+                        "y": 50.0
+                    },
+                    "uuid": "e556d437-bf5f-57d3-8477-91fec9fbd453"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'TO-220-3_Vertical' не соответствует копии в библиотеке 'Package_TO_SOT_THT'",
+            "items": [
+                {
+                    "description": "Посад. место Q703",
+                    "pos": {
+                        "x": 55.0,
+                        "y": 84.0
+                    },
+                    "uuid": "e621ee84-b900-5217-8f85-1993c2a0fd52"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'R_1206_3216Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R706",
+                    "pos": {
+                        "x": 63.0,
+                        "y": 75.5
+                    },
+                    "uuid": "eac36eec-30fe-540c-86b4-6bbf22a4492e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'microSD_GCT_MEM2061-01-188-00-A' не соответствует копии в библиотеке 'EU_Mechanical'",
+            "items": [
+                {
+                    "description": "Посад. место J301",
+                    "pos": {
+                        "x": 16.5,
+                        "y": 27.5
+                    },
+                    "uuid": "ff0dd0fc-eb0e-575b-b0dd-ac94f23cf1dc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'R_1206_3216Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R703",
+                    "pos": {
+                        "x": 62.0,
+                        "y": 76.0
+                    },
+                    "uuid": "0ef7057f-7c8b-5eb3-892c-58005fcaecee"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOIC-8_3.9x4.9mm_P1.27mm' не соответствует копии в библиотеке 'LITE_Parts'",
+            "items": [
+                {
+                    "description": "Посад. место U301",
+                    "pos": {
+                        "x": 61.0,
+                        "y": 61.5
+                    },
+                    "uuid": "6524dc1a-a6b5-5740-bfac-c4983cb87d7e"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'R_0805_2012Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R903",
+                    "pos": {
+                        "x": 31.0,
+                        "y": 75.0
+                    },
+                    "uuid": "875698da-a772-5777-81ff-3d128ef65b59"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'R_0805_2012Metric' не соответствует копии в библиотеке 'Resistor_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место R306",
+                    "pos": {
+                        "x": 16.0,
+                        "y": 42.0
+                    },
+                    "uuid": "a506c304-a8cb-5521-83e9-a7eef7e6a252"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOT-23' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q902",
+                    "pos": {
+                        "x": 25.5,
+                        "y": 80.0
+                    },
+                    "uuid": "b9341ffd-4594-5833-8e96-28b870a017c5"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Посад. место 'SOT-23' не соответствует копии в библиотеке 'Package_TO_SOT_SMD'",
+            "items": [
+                {
+                    "description": "Посад. место Q903",
+                    "pos": {
+                        "x": 31.0,
+                        "y": 80.0
+                    },
+                    "uuid": "dd4f84ff-61e5-54ee-838b-810207aa9e38"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        }
+    ]
+}
