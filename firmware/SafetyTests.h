@@ -217,6 +217,43 @@ static_assert(ledSupplyAllowed(false, false, 0, false, true) &&                /
               !ledSupplyAllowed(true, false, 0, false, false) &&               // времени нет: день или ночь неизвестно
               !ledSupplyAllowed(false, false, 0, false, false),
               "without a power meter the LED runs whenever the clock is usable");
+// --- Климат Growing: лампа, вентиляторы и нагреватель вместе ------------------------------------
+// По умолчанию: цель 25 °C, дельта 2, лампа 10–100 % (25..255), вентиляторы 20–100 % (51..255).
+constexpr bool growClimateRegression() {
+  // От включения нагревателя (цель − дельта) до его выключения (цель) и ниже: лампа на максимуме,
+  // вентиляторы на минимуме — нагреватель только добавляет тепло и не приглушает свет.
+  const float heaterZone[] = {15.0f, 23.0f, 24.0f, 24.99f, 25.0f};
+  for (float t : heaterZone) {
+    if (growLampPwm(t, 25.0f, 2.0f, 25, 255) != 255) return false;
+    if (growFanPwm(t, 25.0f, 2.0f, false, 90.0f, 70.0f, 10.0f, 51, 255) != 51) return false;
+  }
+  if (!heaterNextState(false, true, 23.0f, 23.0f, 25.0f, HEATER_HARD_LIMIT_C) ||
+      heaterNextState(true, true, 25.0f, 23.0f, 25.0f, HEATER_HARD_LIMIT_C)) return false;
+  // Выше цели лампа приглушается, вентиляторы разгоняются; при «цель + дельта» — минимум и максимум.
+  return growLampPwm(26.0f, 25.0f, 2.0f, 25, 255) == 140 && growLampPwm(27.0f, 25.0f, 2.0f, 25, 255) == 25 &&
+         growLampPwm(35.0f, 25.0f, 2.0f, 25, 255) == 25 &&
+         growFanPwm(26.0f, 25.0f, 2.0f, false, 50.0f, 70.0f, 10.0f, 51, 255) == 153 &&
+         growFanPwm(27.0f, 25.0f, 2.0f, false, 50.0f, 70.0f, 10.0f, 51, 255) == 255;
+}
+static_assert(growClimateRegression(), "below the target the lamp stays at max and fans at min; the heater only helps");
+// Ночь: цель 20 °C, влажность 70 % и диапазон 10 %. Вентиляторы следуют большему из двух требований.
+static_assert(growFanPwm(19.0f, 20.0f, 2.0f, true, 65.0f, 70.0f, 10.0f, 51, 255) == 51 &&    // сухо и прохладно
+              growFanPwm(19.0f, 20.0f, 2.0f, true, 75.0f, 70.0f, 10.0f, 51, 255) == 153 &&   // сыро: разгон и при нагреве
+              growFanPwm(19.0f, 20.0f, 2.0f, true, 80.0f, 70.0f, 10.0f, 51, 255) == 255 &&
+              growFanPwm(21.5f, 20.0f, 2.0f, true, 72.0f, 70.0f, 10.0f, 51, 255) == 204 &&   // жарко сильнее, чем сыро
+              growFanPwm(19.0f, 20.0f, 2.0f, false, 95.0f, 70.0f, 10.0f, 51, 255) == 51,     // днём влажность не учитывается
+              "at night the fans follow humidity as well as temperature, by day temperature only");
+static_assert(growFanPwm(19.0f, 20.0f, 2.0f, true, 100.0f, 100.0f, 10.0f, 51, 255) == 51 &&  // 100 % — не следить
+              growFanPwm(19.0f, 20.0f, 2.0f, true, 100.0f, 95.0f, 10.0f, 51, 255) == 255 &&  // верх диапазона не выше 100 %
+              rampPwm(__builtin_nanf(""), 0.0f, 1.0f, 51, 255) == 51 && rampPwm(5.0f, 1.0f, 1.0f, 51, 255) == 255,
+              "humidity target 100 disables it, the band is capped at 100 %, no NaN or zero-width surprises");
+// Расписание света: 06:00–18:00 и через полночь 20:00–06:00; без достоверного времени дня нет.
+static_assert(lightScheduleDay(true, 720, 360, 1080) && !lightScheduleDay(true, 300, 360, 1080) &&
+              !lightScheduleDay(true, 1080, 360, 1080) && lightScheduleDay(true, 1380, 1200, 360) &&
+              !lightScheduleDay(true, 720, 1200, 360) && lightScheduleDay(true, 0, 600, 600) &&
+              !lightScheduleDay(false, 720, 360, 1080) && !lightScheduleDay(false, 0, 600, 600),
+              "the light follows its schedule only while the clock is usable");
+
 // Порядок приоритетов: датчик/часы, просадка шины, затем SD и данные питания.
 static_assert(statusColor(false, true, true, false, false) == StatusColor::Red &&
               statusColor(true, false, false, true, true) == StatusColor::Red &&

@@ -47,7 +47,7 @@ function page() {
       calls.push({url, options});
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
         operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
-        drying_hum_target: 55, drying_hum_band: 5,
+        drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 70, hum_band_night: 10,
         rgb_brightness: 19, rgb_night_mode: 1,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
         telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
@@ -70,6 +70,8 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('operation_mode').value, '0');
   assert.equal(p.fields.get('drying_temp_target').value, 18);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
+  assert.equal(p.fields.get('hum_target_night').value, 70);
+  assert.equal(p.fields.get('hum_band_night').value, 10);
   assert.equal(p.fields.get('telemetry_url').value, 'https://dash.example.lat/api/ingest');
   assert.equal(p.fields.get('device_label').value, 'box-1');
   for (const name of ['wifi_pass', 'ap_pass', 'telemetry_token']) assert.equal(p.fields.get(name).value, '');
@@ -202,4 +204,18 @@ test('RGB legend lists exactly the status colours of the firmware', () => {
   const legendColours = [...html.matchAll(/class="rgb-dot rgb-(\w+)"/g)].map(m => m[1]).sort();
   assert.deepEqual(legendColours, firmwareColours,
     'a colour added to or removed from StatusColor must be added to or removed from the legend');
+});
+
+test('every settings form field is a firmware setting and every setting has a form field', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  // Поля вне таблицы SETTING_DEFS: время и дата разбираются отдельно, *_clear стирают пароль/токен.
+  const special = new Set(['viewport', 'datetime', 'start_date']);
+  const formNames = new Set([...html.matchAll(/name="([a-z0-9_]+)"/g)].map(m => m[1])
+    .filter(name => !special.has(name) && !name.endsWith('_clear')));
+  const firmware = [...sketch.matchAll(/^\s*SET_([A-Z0-9_]+)\s*\("([a-z0-9_]+)"/gm)];
+  const formParams = new Set(firmware.filter(m => !m[1].endsWith('_NOFORM')).map(m => m[2]));
+  assert.ok(formParams.has('hum_target_night') && formParams.has('hum_band_night'));
+  assert.deepEqual([...formNames].sort(), [...formParams].sort(),
+    'a field on the settings page without a SETTING_DEFS row is silently ignored by the board, and the reverse is unreachable');
 });

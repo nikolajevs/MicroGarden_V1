@@ -82,8 +82,10 @@ struct Settings {
 
   // Климат
   float temp_target;        // Дневная цель: лампа и вентиляторы по температуре
-  float temp_delta;         // Ширина температурного диапазона и порог включения обогрева в Growing, °C
+  float temp_delta;         // Growing: обогрев включается на дельту ниже цели, лампа и вентиляторы доходят до края на дельту выше, °C
   float temp_target_night;  // Ночная цель для обогрева и вентиляторов, °C
+  float hum_target_night;   // Ночью выше этой влажности вентиляторы разгоняются, % RH (100 — не следить)
+  float hum_band_night;     // ...и к цели + диапазон выходят на максимум, % RH
 
   // Отдельный климатический профиль сушки
   float drying_temp_target;
@@ -419,11 +421,13 @@ void setStatusColor(StatusColor color, uint8_t duty = RGB_DUTY) {
 }
 
 // Яркость и ночной режим берутся из настроек (страница «Общее»). Ночью — вне расписания света.
+// Без достоверного времени день и ночь неизвестны: индикатор ведёт себя как днём, чтобы красный
+// (часы не выставлены) не погас по ночному режиму.
 void updateStatusLed(const Settings &cfg) {
   const StatusColor color = statusColor(state.sht_online, state.clock_trusted,
                                         state.power_ok && state.led_supply_blocked,
                                         sd_online, state.power_ok);
-  setStatusColor(rgbVisibleColor(color, state.is_day, cfg.rgb_night_mode),
+  setStatusColor(rgbVisibleColor(color, state.is_day || !state.clock_usable, cfg.rgb_night_mode),
                  rgbDutyForPercent(cfg.rgb_brightness));
 }
 
@@ -574,6 +578,8 @@ static const SettingDef SETTING_DEFS[] = {
   SET_FLOAT("temp_target",         "temp_target",     temp_target,           0,    50,    25),
   SET_FLOAT("temp_delta",          "temp_delta",      temp_delta,            0.1,  20,    2),
   SET_FLOAT("temp_target_night",   "temp_night",      temp_target_night,     0,    50,    20),
+  SET_FLOAT("hum_target_night",    "night_hum",       hum_target_night,      0,    100,   70),
+  SET_FLOAT("hum_band_night",      "night_h_band",    hum_band_night,        0.1,  25,    10),
   SET_FLOAT("drying_temp_target",  "dry_temp",        drying_temp_target,    0,    50,    18),
   SET_FLOAT("drying_temp_delta",   "dry_t_delta",     drying_temp_delta,     0.1,  20,    0.5),
   SET_FLOAT("drying_hum_target",   "dry_hum",         drying_hum_target,     0,    100,   55),
@@ -1989,14 +1995,11 @@ void loop() {
   if (currentMillis - lastClimateTime >= 10000) {
     lastClimateTime = currentMillis;
 
-    int current_hour = now.hour();
-    int current_minutes = current_hour * 60 + now.minute();
-    int on_minutes = cfg.led_on_hour * 60 + cfg.led_on_minute;
-    int off_minutes = cfg.led_off_hour * 60 + cfg.led_off_minute;
-
-    if (on_minutes == off_minutes) state.is_day = true; // время включения == времени выключения — считаем "весь день"
-    else if (on_minutes < off_minutes) state.is_day = (current_minutes >= on_minutes && current_minutes < off_minutes);
-    else state.is_day = (current_minutes >= on_minutes || current_minutes < off_minutes);
+    // Без достоверного времени дня нет (lightScheduleDay): свет выключен, а климат держится по ночной
+    // цели и ночной влажности — лампа не греет, как ночью.
+    state.is_day = lightScheduleDay(state.clock_usable, now.hour() * 60 + now.minute(),
+                                    cfg.led_on_hour * 60 + cfg.led_on_minute,
+                                    cfg.led_off_hour * 60 + cfg.led_off_minute);
     const bool is_day = state.is_day;
 
     int pwm_fan1_min = map(cfg.fan1_min_limit, 0, 100, 0, 255);
@@ -2082,10 +2085,8 @@ void loop() {
     }
     else {
       // --- НОРМАЛЬНАЯ РАБОТА ---
-      // Защита от temp_delta == 0, чтобы map() не делил на ноль
+      // Дельта не меньше 0,1 °C: при нуле обогрев включался бы ровно на цели, без гистерезиса
       float safe_delta = max(cfg.temp_delta, 0.1f);
-      float current_min = cfg.temp_target - safe_delta;
-      float current_max = cfg.temp_target + safe_delta;
 
       float heater_delta = drying_mode ? max(cfg.drying_temp_delta, 0.1f) : safe_delta;
       // В режиме Growing сохраняется прежний дневной/ночной термостат. В Drying
@@ -2132,40 +2133,19 @@ void loop() {
           target_fan2 = map(read_hum * 100, humidity_min * 100, humidity_max * 100, pwm_fan2_min, pwm_fan2_max);
         }
       } else {
-        // В Growing вентиляторы используют ту же температурную цель, что и обогрев:
-        // дневную при включённом свете и ночную при выключённом.
-        float fan_target = is_day ? cfg.temp_target : cfg.temp_target_night;
-        float fan_min_temp = fan_target - safe_delta;
-        float fan_max_temp = fan_target + safe_delta;
-
-        if (read_temp <= current_min) {
-          target_led = is_day ? pwm_led_max : 0;
-        }
-        else if (read_temp >= current_max) {
-          target_led = is_day ? pwm_led_min : 0;
-        }
-        else {
-          target_led = is_day ? map(read_temp * 100, current_min * 100, current_max * 100, pwm_led_max, pwm_led_min) : 0;
-        }
-
-        if (read_temp <= fan_min_temp) {
-          target_fan1 = pwm_fan1_min;
-          target_fan2 = pwm_fan2_min;
-        } else if (read_temp >= fan_max_temp) {
-          target_fan1 = pwm_fan1_max;
-          target_fan2 = pwm_fan2_max;
-        } else {
-          target_fan1 = map(read_temp * 100, fan_min_temp * 100, fan_max_temp * 100, pwm_fan1_min, pwm_fan1_max);
-          target_fan2 = map(read_temp * 100, fan_min_temp * 100, fan_max_temp * 100, pwm_fan2_min, pwm_fan2_max);
-        }
-
-        // Пока обогреватель греет, вентиляторы держим на минимуме. Иначе на отрезке
-        // "цель − дельта … цель" они разгонялись до половины диапазона и выдували тепло,
-        // которое обогреватель производит: слабый обогреватель мог не выключиться никогда.
-        if (state.heater_active) {
-          target_fan1 = pwm_fan1_min;
-          target_fan2 = pwm_fan2_min;
-        }
+        // В Growing лампа, вентиляторы и обогрев работают от одной цели: дневной при включённом
+        // свете и ночной при выключенном. Ниже цели лампа на максимуме, вентиляторы на минимуме,
+        // недобор тепла покрывает обогреватель (вкл. на дельту ниже цели, выкл. на цели). Выше цели
+        // лампа приглушается, вентиляторы разгоняются; край — на дельту выше цели. Раньше обе кривые
+        // начинались на дельту ниже цели: при нагреве лампа тускнела, а сразу после выключения
+        // обогревателя вентиляторы выходили на середину диапазона и выдували набранное тепло.
+        // Ночью вентиляторы следят и за влажностью (growFanPwm).
+        float climate_target = is_day ? cfg.temp_target : cfg.temp_target_night;
+        target_led = is_day ? growLampPwm(read_temp, climate_target, safe_delta, pwm_led_min, pwm_led_max) : 0;
+        target_fan1 = growFanPwm(read_temp, climate_target, safe_delta, !is_day, read_hum,
+                                 cfg.hum_target_night, cfg.hum_band_night, pwm_fan1_min, pwm_fan1_max);
+        target_fan2 = growFanPwm(read_temp, climate_target, safe_delta, !is_day, read_hum,
+                                 cfg.hum_target_night, cfg.hum_band_night, pwm_fan2_min, pwm_fan2_max);
       }
     }
 
