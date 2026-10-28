@@ -1,0 +1,22 @@
+[
+  {
+    "shop": "Electrobase",
+    "mpn": "C1206C100J5GACTU",
+    "needed": 2,
+    "buy": 2,
+    "unit": "шт.",
+    "price_unit": 0.25,
+    "line": 0.5,
+    "stock": ">1000",
+    "url": "https://electrobase.lv/katalogs/kondensatori-mlcc-smd-0201/capacitor-ceramic-mlcc-10pf-50vdc-c0g-5-smd-1206",
+    "block": "RTC",
+    "usage": "KEMET, 10 пФ / 50 В / C0G / ±5%, 1206: нагрузка кварца Y301 (RTC_X1, RTC_X2), подобрать на плате. Карточка Salvats для C1206C100J5GAC называет Y5V, поэтому покупка у Electrobase; TU — суффикс упаковки (лента); у поставщика >1000 шт. на 23.10.2026",
+    "price_date": "2026-10-23",
+    "previous_needed": 2,
+    "refs": [
+      "C301",
+      "C302"
+    ],
+    "accessory_count": 0
+  }
+]
