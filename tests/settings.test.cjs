@@ -219,3 +219,17 @@ test('every settings form field is a firmware setting and every setting has a fo
   assert.deepEqual([...formNames].sort(), [...formParams].sort(),
     'a field on the settings page without a SETTING_DEFS row is silently ignored by the board, and the reverse is unreachable');
 });
+
+test('temperature targets on the page and in the firmware stop at the heater hard limit', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  const board = fs.readFileSync(path.join(__dirname, '../firmware/Board.h'), 'utf8');
+  const limit = Number(board.match(/HEATER_HARD_LIMIT_C\s*=\s*([0-9.]+)f/)[1]);
+  assert.equal(limit, 40);
+  for (const id of ['temp_target', 'temp_target_night', 'drying_temp_target']) {
+    const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))[0];
+    assert.equal(Number(input.match(/max="([0-9.]+)"/)[1]), limit, `${id}: page maximum`);
+    const row = sketch.match(new RegExp(`SET_FLOAT\\("${id}",[^\\n]*`))[0];
+    assert.match(row, /,\s*HEATER_HARD_LIMIT_C,/, `${id}: firmware maximum`);
+  }
+});
