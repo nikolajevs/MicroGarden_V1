@@ -8,6 +8,7 @@ SPDX-License-Identifier: MIT
 """
 
 import argparse
+import math
 from pathlib import Path
 import pcbnew as p
 from build_board import HERE, identity
@@ -229,12 +230,54 @@ def route_cell_signals(board):
             raise RuntimeError(f"Unrouted cell net: {net}")
 
 
+C508_GND_GAP = 0.5  # mm minimum from the exposed C508.2 GND pad (up to ~55 V on LED_OUT)
+# Thin F.Cu GND ties inside the ground pour above C508.1; the pour and the In1 plane already join
+# R506.2, C505.2, C508.2 and the via at (69.5; 62.0). They block the direct feed and one of them
+# ran under the capacitor body to C508.2.
+C508_GND_TIES = [
+    ((73.4625, 58.0), (70.7063, 55.2437)),
+    ((70.9489, 60.0732), (73.0221, 58.0)),
+    ((73.0221, 58.0), (73.4625, 58.0)),
+    ((80.2183, 70.0), (70.9489, 60.7306)),
+    ((70.9489, 60.7306), (70.9489, 60.0732)),
+    ((70.95, 60.73), (69.5, 62.0)),
+]
+# 1 mm F.Cu feed: from C511.1 left above R506.2, down between the R506 pads and into C508.1
+# from its own (upper) side, about 6 mm from the C508.2 GND pad.
+C508_FEED = [((79.0, 56.3), (72.0, 56.3)), ((72.0, 56.3), (72.0, 66.0))]
+
+
 def c508_feed(board):
-    """Replace the 0.25 mm-only feed of the 470 uF output capacitor by a 1 mm outer-layer path."""
-    from repair_power import route
-    pads = {(f.GetReference(), q.GetNumber()): q for f in board.GetFootprints() for q in f.Pads()}
-    route(board, "LED_OUT", pads[("C511", "1")], pads[("C508", "1")], 1.0, "c508_feed",
-          layers=(p.F_Cu, p.B_Cu))
+    """Feed the 470 uF output capacitor with 1 mm F.Cu instead of the 0.25 mm trace alone."""
+    removed = 0
+    for item in list(board.GetTracks()):
+        if isinstance(item, p.PCB_VIA) or item.GetNetname() != "GND" or item.GetLayer() != p.F_Cu:
+            continue
+        a, b = mm_xy(item.GetStart()), mm_xy(item.GetEnd())
+        if any((same(a, x) and same(b, y)) or (same(a, y) and same(b, x)) for x, y in C508_GND_TIES):
+            board.Delete(item)
+            removed += 1
+    if removed != len(C508_GND_TIES):
+        raise RuntimeError(f"C508 feed: expected {len(C508_GND_TIES)} GND ties, found {removed}")
+    tracks = [add_track(board, f"c508_feed_{i}", "LED_OUT", p.F_Cu, a, b, 1.0)
+              for i, (a, b) in enumerate(C508_FEED)]
+    gnd = next(q for f in board.GetFootprints() if f.GetReference() == "C508"
+               for q in f.Pads() if q.GetNumber() == "2")
+    box = gnd.GetBoundingBox()
+    x0, y0, x1, y1 = (p.ToMM(v) for v in (box.GetLeft(), box.GetTop(), box.GetRight(), box.GetBottom()))
+    gap = min(
+        math.hypot(max(x0 - x, 0, x - x1), max(y0 - y, 0, y - y1)) - 0.5
+        for a, b in C508_FEED for k in range(201)
+        for x, y in [(a[0] + (b[0] - a[0]) * k / 200, a[1] + (b[1] - a[1]) * k / 200)]
+    )
+    if gap < C508_GND_GAP:
+        raise RuntimeError(f"C508 feed only {gap:.2f} mm from the GND pad")
+    # The feed passes on two sides of R506.2 (CSH set resistor ground): connect the pad
+    # solidly to the pour and give it its own plane via instead of the removed ties.
+    r506 = next(f for f in board.GetFootprints() if f.GetReference() == "R506")
+    next(q for q in r506.Pads() if q.GetNumber() == "2").SetLocalZoneConnection(p.ZONE_CONNECTION_FULL)
+    add_via(board, "r506_gnd", "GND", (74.8, 58.0))
+    print(f"C508 feed: 1.0 mm F.Cu, {gap:.2f} mm from C508.2; GND ties removed {removed}", flush=True)
 
 
 def sync_fields(board):
