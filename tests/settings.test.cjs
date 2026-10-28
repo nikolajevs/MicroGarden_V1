@@ -46,7 +46,7 @@ function page() {
     fetch: async (url, options) => {
       calls.push({url, options});
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
-        operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
+        operation_mode: 0, drying_temp_target: 16, drying_temp_delta: 0.5,
         drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 55, hum_band_night: 10,
         rgb_brightness: 19, rgb_night_mode: 1,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
@@ -68,7 +68,7 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('rgb_brightness').value, 19);
   assert.equal(p.fields.get('rgb_night_mode').value, 1);
   assert.equal(p.fields.get('operation_mode').value, '0');
-  assert.equal(p.fields.get('drying_temp_target').value, 18);
+  assert.equal(p.fields.get('drying_temp_target').value, 16);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
   assert.equal(p.fields.get('hum_target_night').value, 55);
   assert.equal(p.fields.get('hum_band_night').value, 10);
@@ -232,4 +232,17 @@ test('temperature targets on the page and in the firmware stop at the heater har
     const row = sketch.match(new RegExp(`SET_FLOAT\\("${id}",[^\\n]*`))[0];
     assert.match(row, /,\s*HEATER_HARD_LIMIT_C,/, `${id}: firmware maximum`);
   }
+});
+
+test('climate defaults are the values the owner chose', () => {
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  const defaultOf = id => Number(sketch.match(new RegExp(`SET_FLOAT\\("${id}",[^\\n]*,\\s*([0-9.]+)\\)`))[1]);
+  // Решения владельца от 28.10.2026; на платах с уже сохранённым значением остаётся сохранённое.
+  assert.deepEqual({
+    temp_target: defaultOf('temp_target'), temp_target_night: defaultOf('temp_target_night'),
+    temp_delta: defaultOf('temp_delta'), hum_target_night: defaultOf('hum_target_night'),
+    hum_band_night: defaultOf('hum_band_night'), drying_temp_target: defaultOf('drying_temp_target'),
+    drying_temp_delta: defaultOf('drying_temp_delta')
+  }, {temp_target: 25, temp_target_night: 17, temp_delta: 2, hum_target_night: 55, hum_band_night: 10,
+      drying_temp_target: 16, drying_temp_delta: 0.5});
 });

@@ -236,12 +236,12 @@ constexpr bool growClimateRegression() {
          growFanPwm(27.0f, 25.0f, 2.0f, false, 50.0f, 70.0f, 10.0f, 51, 255) == 255;
 }
 static_assert(growClimateRegression(), "below the target the lamp stays at max and fans at min; the heater only helps");
-// Ночь: цель 20 °C, влажность 55 % и диапазон 10 % (по умолчанию). Вентиляторы следуют большему из двух требований.
-static_assert(growFanPwm(19.0f, 20.0f, 2.0f, true, 50.0f, 55.0f, 10.0f, 51, 255) == 51 &&    // сухо и прохладно
-              growFanPwm(19.0f, 20.0f, 2.0f, true, 60.0f, 55.0f, 10.0f, 51, 255) == 153 &&   // сыро: разгон и при нагреве
-              growFanPwm(19.0f, 20.0f, 2.0f, true, 65.0f, 55.0f, 10.0f, 51, 255) == 255 &&
-              growFanPwm(21.5f, 20.0f, 2.0f, true, 57.0f, 55.0f, 10.0f, 51, 255) == 204 &&   // жарко сильнее, чем сыро
-              growFanPwm(19.0f, 20.0f, 2.0f, false, 95.0f, 55.0f, 10.0f, 51, 255) == 51,     // днём влажность не учитывается
+// Ночь по умолчанию: цель 17 °C, влажность 55 % и диапазон 10 %. Вентиляторы следуют большему из двух требований.
+static_assert(growFanPwm(16.0f, 17.0f, 2.0f, true, 50.0f, 55.0f, 10.0f, 51, 255) == 51 &&    // сухо и прохладно
+              growFanPwm(16.0f, 17.0f, 2.0f, true, 60.0f, 55.0f, 10.0f, 51, 255) == 153 &&   // сыро: разгон и при нагреве
+              growFanPwm(16.0f, 17.0f, 2.0f, true, 65.0f, 55.0f, 10.0f, 51, 255) == 255 &&
+              growFanPwm(18.5f, 17.0f, 2.0f, true, 57.0f, 55.0f, 10.0f, 51, 255) == 204 &&   // жарко сильнее, чем сыро
+              growFanPwm(16.0f, 17.0f, 2.0f, false, 95.0f, 55.0f, 10.0f, 51, 255) == 51,     // днём влажность не учитывается
               "at night the fans follow humidity as well as temperature, by day temperature only");
 static_assert(growFanPwm(19.0f, 20.0f, 2.0f, true, 100.0f, 100.0f, 10.0f, 51, 255) == 51 &&  // 100 % — не следить
               growFanPwm(19.0f, 20.0f, 2.0f, true, 100.0f, 95.0f, 10.0f, 51, 255) == 255 &&  // верх диапазона не выше 100 %
