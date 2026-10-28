@@ -1,0 +1,18 @@
+{
+  "checks_passed": 18791,
+  "pcbnew": "10.0.5",
+  "netlisted_references": 163,
+  "mapped_netlist_pins": 437,
+  "sides": {
+    "F": 125,
+    "B": 38
+  },
+  "stage": "ROUTED_PLACEMENT",
+  "physical_fit_verified": false,
+  "thermal_verified": false,
+  "sha256": {
+    "PCB_EU_LITE.kicad_pcb": "9ee19736af04324e84e771ec39705e9c92196ab2e7d098cb54d6583b398471a7",
+    "netlist.xml": "a336f767a3a763700b5db37e2ccdad2a923954e25bf22d366ad39a1ef5e08c16",
+    "placement.json": "5ab2e8d1729759216f973b4c8df9a13f4d8947101d583444fd272325ff254e05"
+  }
+}

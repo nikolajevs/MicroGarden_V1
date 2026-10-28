@@ -1,0 +1,8 @@
+{
+  "board_width_mm": 100.1,
+  "board_height_mm": 100.1,
+  "copper_layers": 4,
+  "pth_objects": 326,
+  "npth_objects": 4,
+  "reader": "gerbonara: independent Gerber and Excellon import"
+}

@@ -1,0 +1,56 @@
+{
+  "source_revision": "f9862da203fd2135539b0bff425258e9dbfc9735",
+  "board_sha256": "9ee19736af04324e84e771ec39705e9c92196ab2e7d098cb54d6583b398471a7",
+  "kicad_version": "10.0.5",
+  "target_version": "10.0.7",
+  "target_version_verified": false,
+  "stage": "PROTOTYPE_FABRICATION",
+  "electrical_drc_issues": 0,
+  "unconnected": 0,
+  "schematic_parity_issues": 0,
+  "verified_silk_only_library_warnings": 35,
+  "cam": {
+    "board_width_mm": 100.1,
+    "board_height_mm": 100.1,
+    "copper_layers": 4,
+    "pth_objects": 326,
+    "npth_objects": 4,
+    "reader": "gerbonara: independent Gerber and Excellon import"
+  },
+  "source_hash_encoding": "UTF-8 text, LF-normalized as in .gitattributes",
+  "source_sha256": {
+    "PCB_EU_LITE.kicad_pcb": "9ee19736af04324e84e771ec39705e9c92196ab2e7d098cb54d6583b398471a7",
+    "PCB_EU_LITE.kicad_pro": "12c0bd8c54d9292f5bcad632bccc676a136719c16972912e6feafaa824dac2f2",
+    "placement.json": "5ab2e8d1729759216f973b4c8df9a13f4d8947101d583444fd272325ff254e05",
+    "design.json": "0819fbfdf63e4e5c910d7b4b7b0449cceba5e1a876fe6692625c174db1545c6c",
+    "Aux12V.kicad_sch": "67d30e46f7c48527f76b8109d401ceaf84c7c04ded7cff2b5eb570033599f7a4",
+    "InputPower.kicad_sch": "3c0669006be227c7ed1e4d5503eac195ebd99879af65dee77d8a9d58301d55b7",
+    "Interfaces.kicad_sch": "c0b37c5afa610c4716dfd6e7ef0d41b25e0c874fc9951fba6106fee234f0515e",
+    "LED.kicad_sch": "e62c0e1abb88b09b826ec57a8bf0a0aaee61065a5bfe73c3d909d11042066df7",
+    "Loads.kicad_sch": "2c9884b1bbabac9dc9ee0169cea4377109eb2265a624e37b351d958ca7a7ac6c",
+    "MCU.kicad_sch": "f465fc2396d54b644b5e5b453ad51b494352baabec1f2dbbd64e3f37b02986af",
+    "PCB_EU_LITE.kicad_sch": "d27e7880f35f4cf8b1f7479e7eedba9ecb80bdf478da92c9bcad80f5762410a6",
+    "Peripherals.kicad_sch": "3dfcd1df3870bc97084b9ae71a6d363d43bcb065e27562512690df98393d511b",
+    "Status.kicad_sch": "991b340f05aa2357635d7b9329e2a70940a8558ca9bec188d8e22065cf54e13a"
+  },
+  "fabrication_files": {
+    "PCB_EU_LITE-B_Cu.gbl": "f1a7ff4068ad3bd3b02fa906b4b3c69423d9fced8a29c2c481af66497dcf0af9",
+    "PCB_EU_LITE-B_Mask.gbs": "487dc833b4f99d72555dc30f0f8425786180239093cc302f12dc744a4158e6d6",
+    "PCB_EU_LITE-B_Silkscreen.gbo": "4701bec776db9aa8ad134a18158b83c5ba88cd5c09f6289cb70f7c5938ac9ade",
+    "PCB_EU_LITE-Edge_Cuts.gm1": "3d16189efc408cd2e581ba5c057cc5ebe73f27c4ca2a1a5267745ee36cc74201",
+    "PCB_EU_LITE-F_Cu.gtl": "1ce225e923f43d91f2f6bd0714e779e615b55f76d6e49d7126e88db39b1e4812",
+    "PCB_EU_LITE-F_Mask.gts": "85a625dba3606a434cf1cd508503928a592a4bf2622ce24f7b314006cbab61d5",
+    "PCB_EU_LITE-F_Silkscreen.gto": "4bd223b65f92b03a82da8b5ac7928b6c630e3546d2842454dc1569033b7340ae",
+    "PCB_EU_LITE-In1_Cu.g1": "0aee6c2ea25fde24ea3fa493509c9f62e8bc805e820a5e765b74d5afcfa0d659",
+    "PCB_EU_LITE-In2_Cu.g2": "d926377de63b9ab77264625f45bd2a123a39a6d6442a9de4ec0697c650bf7716",
+    "PCB_EU_LITE-job.gbrjob": "73c1927dc437d8d636d37bc8e9bd583ae9aff6fbfc2551c0ea33ed9322d24838",
+    "PCB_EU_LITE-NPTH.drl": "d8147beac0e514c10c935a07042ed0190d7dcfe7c502f828a27fa03f94ddf051",
+    "PCB_EU_LITE-PTH.drl": "3e376829cb8c7d2329657da02e19d5e9736207356ac8433e82ed67823b9e96e7"
+  },
+  "physical_fit_verified": false,
+  "thermal_qualified": false,
+  "archive": {
+    "filename": "PCB_EU_LITE_Gerber_9ee19736.zip",
+    "sha256": "0ea166e6dbad86d3d50933b50a56077b6c26e49bcf458d8dbf81073c3334354c"
+  }
+}
