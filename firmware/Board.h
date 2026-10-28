@@ -39,7 +39,7 @@ constexpr int LED_MIN_DUTY = (LED_MIN_PULSE_US * LED_PWM_FREQ * PWM_COUNTS + 999
 
 // Software ceiling for the 100 W PTC, independent of every setting. The external thermal
 // cutoff stays mandatory; this only adds a second, settings-proof limit.
-constexpr float HEATER_HARD_LIMIT_C = 60.0f;
+constexpr float HEATER_HARD_LIMIT_C = 40.0f; // Owner decision 2026-10-28 (was 60 C).
 
 // INA238, TI SLYS025B Rev. B, sections 6.6 and 7.1.
 // Two 7 mOhm shunts in parallel = 3.5 mOhm. IN+ is on board GND; VBUS is directly on +24V_FUSED.

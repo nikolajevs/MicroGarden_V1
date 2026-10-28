@@ -578,7 +578,7 @@ static const SettingDef SETTING_DEFS[] = {
   SET_FLOAT("temp_target",         "temp_target",     temp_target,           0,    50,    25),
   SET_FLOAT("temp_delta",          "temp_delta",      temp_delta,            0.1,  20,    2),
   SET_FLOAT("temp_target_night",   "temp_night",      temp_target_night,     0,    50,    20),
-  SET_FLOAT("hum_target_night",    "night_hum",       hum_target_night,      0,    100,   70),
+  SET_FLOAT("hum_target_night",    "night_hum",       hum_target_night,      0,    100,   55),
   SET_FLOAT("hum_band_night",      "night_h_band",    hum_band_night,        0.1,  25,    10),
   SET_FLOAT("drying_temp_target",  "dry_temp",        drying_temp_target,    0,    50,    18),
   SET_FLOAT("drying_temp_delta",   "dry_t_delta",     drying_temp_delta,     0.1,  20,    0.5),

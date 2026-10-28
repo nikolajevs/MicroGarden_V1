@@ -47,7 +47,7 @@ function page() {
       calls.push({url, options});
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
         operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
-        drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 70, hum_band_night: 10,
+        drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 55, hum_band_night: 10,
         rgb_brightness: 19, rgb_night_mode: 1,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
         telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
@@ -70,7 +70,7 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('operation_mode').value, '0');
   assert.equal(p.fields.get('drying_temp_target').value, 18);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
-  assert.equal(p.fields.get('hum_target_night').value, 70);
+  assert.equal(p.fields.get('hum_target_night').value, 55);
   assert.equal(p.fields.get('hum_band_night').value, 10);
   assert.equal(p.fields.get('telemetry_url').value, 'https://dash.example.lat/api/ingest');
   assert.equal(p.fields.get('device_label').value, 'box-1');
