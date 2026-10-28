@@ -28,10 +28,10 @@ test('датчик SHT4x: тяжёлое оповещение', () => {
 test('часы: без времени — тяжёлое, на программном таймере — предупреждение', () => {
   const lost = collectAlerts(healthy({clock_trusted: false, clock_usable: false, rtc_status: 'no_response'}));
   assert.equal(lost[0].level, 'bad');
-  assert.match(lost[0].text, /RTC не отвечают.*полив выключен/);
+  assert.match(lost[0].text, /RTC не отвечают.*свет и полив выключены/); // без времени свет не включается
   const timer = collectAlerts(healthy({clock_trusted: false, clock_usable: true, rtc_status: 'no_response'}));
   assert.equal(timer[0].level, 'warn');
-  assert.match(timer[0].text, /программному таймеру.*полив работает/);
+  assert.match(timer[0].text, /программному таймеру.*свет и полив работают/);
   const unset = collectAlerts(healthy({clock_trusted: false, clock_usable: false, rtc_status: 'not_set'}));
   assert.match(unset[0].text, /не выставлены/);
 });
@@ -58,6 +58,10 @@ test('измеритель и датчик молчат: свет на мини�
   // если свет заблокирован (нет времени), про минимум не пишем
   const blocked = collectAlerts(healthy({sht_online: false, led_supply_blocked: true, power_ok: false}));
   assert.doesNotMatch(blocked.find(a => a.id === 'sht').text, /свет на минимальном/);
+  // измеритель исправен, но времени нет: свет тоже выключен
+  const noClock = collectAlerts(healthy({sht_online: false, clock_trusted: false, clock_usable: false,
+    rtc_status: 'not_set'}));
+  assert.doesNotMatch(noClock.find(a => a.id === 'sht').text, /свет на минимальном/);
   // в сушке света нет
   const dry = collectAlerts(healthy({operation_mode: 1, sht_online: false}));
   assert.doesNotMatch(dry.find(a => a.id === 'sht').text, /свет/);

@@ -46,8 +46,8 @@ function page() {
     fetch: async (url, options) => {
       calls.push({url, options});
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
-        operation_mode: 0, drying_temp_target: 18, drying_temp_delta: 0.5,
-        drying_hum_target: 55, drying_hum_band: 5,
+        operation_mode: 0, drying_temp_target: 16, drying_temp_delta: 0.5,
+        drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 55, hum_band_night: 10,
         rgb_brightness: 19, rgb_night_mode: 1,
         wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
         telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
@@ -68,8 +68,10 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('rgb_brightness').value, 19);
   assert.equal(p.fields.get('rgb_night_mode').value, 1);
   assert.equal(p.fields.get('operation_mode').value, '0');
-  assert.equal(p.fields.get('drying_temp_target').value, 18);
+  assert.equal(p.fields.get('drying_temp_target').value, 16);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
+  assert.equal(p.fields.get('hum_target_night').value, 55);
+  assert.equal(p.fields.get('hum_band_night').value, 10);
   assert.equal(p.fields.get('telemetry_url').value, 'https://dash.example.lat/api/ingest');
   assert.equal(p.fields.get('device_label').value, 'box-1');
   for (const name of ['wifi_pass', 'ap_pass', 'telemetry_token']) assert.equal(p.fields.get(name).value, '');
@@ -202,4 +204,45 @@ test('RGB legend lists exactly the status colours of the firmware', () => {
   const legendColours = [...html.matchAll(/class="rgb-dot rgb-(\w+)"/g)].map(m => m[1]).sort();
   assert.deepEqual(legendColours, firmwareColours,
     'a colour added to or removed from StatusColor must be added to or removed from the legend');
+});
+
+test('every settings form field is a firmware setting and every setting has a form field', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  // Поля вне таблицы SETTING_DEFS: время и дата разбираются отдельно, *_clear стирают пароль/токен.
+  const special = new Set(['viewport', 'datetime', 'start_date']);
+  const formNames = new Set([...html.matchAll(/name="([a-z0-9_]+)"/g)].map(m => m[1])
+    .filter(name => !special.has(name) && !name.endsWith('_clear')));
+  const firmware = [...sketch.matchAll(/^\s*SET_([A-Z0-9_]+)\s*\("([a-z0-9_]+)"/gm)];
+  const formParams = new Set(firmware.filter(m => !m[1].endsWith('_NOFORM')).map(m => m[2]));
+  assert.ok(formParams.has('hum_target_night') && formParams.has('hum_band_night'));
+  assert.deepEqual([...formNames].sort(), [...formParams].sort(),
+    'a field on the settings page without a SETTING_DEFS row is silently ignored by the board, and the reverse is unreachable');
+});
+
+test('temperature targets on the page and in the firmware stop at the heater hard limit', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  const board = fs.readFileSync(path.join(__dirname, '../firmware/Board.h'), 'utf8');
+  const limit = Number(board.match(/HEATER_HARD_LIMIT_C\s*=\s*([0-9.]+)f/)[1]);
+  assert.equal(limit, 40);
+  for (const id of ['temp_target', 'temp_target_night', 'drying_temp_target']) {
+    const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))[0];
+    assert.equal(Number(input.match(/max="([0-9.]+)"/)[1]), limit, `${id}: page maximum`);
+    const row = sketch.match(new RegExp(`SET_FLOAT\\("${id}",[^\\n]*`))[0];
+    assert.match(row, /,\s*HEATER_HARD_LIMIT_C,/, `${id}: firmware maximum`);
+  }
+});
+
+test('climate defaults are the values the owner chose', () => {
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  const defaultOf = id => Number(sketch.match(new RegExp(`SET_FLOAT\\("${id}",[^\\n]*,\\s*([0-9.]+)\\)`))[1]);
+  // Решения владельца от 28.10.2026; на платах с уже сохранённым значением остаётся сохранённое.
+  assert.deepEqual({
+    temp_target: defaultOf('temp_target'), temp_target_night: defaultOf('temp_target_night'),
+    temp_delta: defaultOf('temp_delta'), hum_target_night: defaultOf('hum_target_night'),
+    hum_band_night: defaultOf('hum_band_night'), drying_temp_target: defaultOf('drying_temp_target'),
+    drying_temp_delta: defaultOf('drying_temp_delta')
+  }, {temp_target: 25, temp_target_night: 17, temp_delta: 2, hum_target_night: 55, hum_band_night: 10,
+      drying_temp_target: 16, drying_temp_delta: 0.5});
 });

@@ -33,7 +33,7 @@ class ClassifyTests(unittest.TestCase):
             "[АВАРИЙНЫЙ РЕЖИМ]: Отказ SHT4x! Климат зафиксирован на безопасных уровнях.": "error",
             "[INA238] Не отвечает — мощность не показывается, повтор раз в 30 с.": "error",
             "[ПОЛИВ] Аварийная остановка: вода закончилась во время полива": "error",
-            "[Heater] Off: temperature reached the 60 C hard limit.": "error",
+            "[Heater] Off: temperature reached the 40 C hard limit.": "error",
             "[Watering] NVS write failed; pump remains off.": "error",
             "[RTC] Установка: кварц Y301 не запустился за 3 с (OSCRUN=0). Проверьте кварц и его пайку.": "error",
             "[RTC] Установка: часы пошли, но проверочное чтение не совпало со временем.": "error",

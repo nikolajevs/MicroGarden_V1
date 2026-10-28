@@ -108,6 +108,10 @@ function renderStatus(data) {
     if (drying) {
         phaseEl.textContent = '🍂 Сушка';
         cycleEl.className = "status-badge cycle-badge drying-badge";
+    } else if (data.clock_usable === false) {
+        // Без времени плата не знает, день сейчас или ночь: свет выключен, климат по ночным настройкам
+        phaseEl.textContent = '🕓 Нет времени';
+        cycleEl.className = "status-badge cycle-badge night-badge";
     } else if (data.is_day) {
         phaseEl.textContent = '☀️ День';
         cycleEl.className = "status-badge cycle-badge day-badge";

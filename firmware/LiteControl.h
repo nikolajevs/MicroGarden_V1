@@ -22,6 +22,44 @@ constexpr bool ledSupplyAllowed(bool allowed, bool valid, float volts, bool mete
        : clockUsable;
 }
 
+// День ли сейчас по расписанию света (минуты от полуночи; включение == выключению — весь день).
+// Без времени, которому можно верить (RTC или программный таймер, выставленный из RTC или владельцем),
+// день не наступает: плата стартует с выдуманной даты, и свет горел бы в случайные часы. Решение
+// владельца от 28.10.2026: свету достаточно хотя бы введённого вручную времени, но не выдуманного.
+constexpr bool lightScheduleDay(bool clockUsable, int nowMin, int onMin, int offMin) {
+  return clockUsable && (onMin == offMin || (onMin < offMin ? nowMin >= onMin && nowMin < offMin
+                                                            : nowMin >= onMin || nowMin < offMin));
+}
+
+// Линейный выход между двумя порогами: до low включительно — atLow, от high — atHigh, между ними —
+// по прямой. Нечисловое значение даёт atLow; при high <= low получается ступенька без деления на ноль.
+constexpr int rampPwm(float value, float low, float high, int atLow, int atHigh) {
+  return !(value > low) ? atLow
+       : !(value < high) ? atHigh
+       : int(atLow + (value - low) * float(atHigh - atLow) / (high - low));
+}
+
+// Лампа днём в Growing. Ниже цели она всегда на максимуме: недобор тепла покрывает нагреватель,
+// а не приглушение света (решение владельца от 28.10.2026). Выше цели лампа плавно уходит
+// к минимуму и достигает его при «цель + дельта», чтобы не перегреть растения.
+constexpr int growLampPwm(float temp, float target, float delta, int pwmMin, int pwmMax) {
+  return rampPwm(temp, target, target + delta, pwmMax, pwmMin);
+}
+
+// Вентилятор в Growing. По температуре: до цели — минимум, к «цель + дельта» — максимум. Нагреватель
+// выключается на цели, поэтому вентиляторы не выдувают его тепло ни во время нагрева, ни сразу после.
+// Ночью (watchHumidity) — ещё и по влажности: выше humTarget разгон, к humTarget + humBand (не выше
+// 100 %) максимум, в том числе пока греет нагреватель: сырой воздух всё равно нужно сменить, а нагрев
+// сам снижает относительную влажность. humTarget = 100 — влажность не учитывается. Из двух требований
+// берётся большее. Днём влажность не учитывается: при работающей лампе проблем с ней нет.
+constexpr int growFanPwm(float temp, float tempTarget, float tempDelta, bool watchHumidity,
+                         float hum, float humTarget, float humBand, int pwmMin, int pwmMax) {
+  const int byTemp = rampPwm(temp, tempTarget, tempTarget + tempDelta, pwmMin, pwmMax);
+  const float humTop = humTarget + humBand < 100.0f ? humTarget + humBand : 100.0f;
+  const int byHum = watchHumidity ? rampPwm(hum, humTarget, humTop, pwmMin, pwmMax) : pwmMin;
+  return byTemp > byHum ? byTemp : byHum;
+}
+
 // Индикатор показывает только состояние платы. Каждый канал либо полностью
 // включён, либо выключен: промежуточных яркостей и смешанных оттенков нет,
 // поэтому цвета различимы при любом освещении.

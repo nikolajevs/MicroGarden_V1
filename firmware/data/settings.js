@@ -293,6 +293,8 @@ async function loadCurrentSettings() {
         document.getElementById('water_sensor_checkbox').checked = !!data.water_sensor_enabled;
         document.getElementById('heater_mode').value = data.heater_mode;
         document.getElementById('temp_target_night').value = data.temp_target_night;
+        document.getElementById('hum_target_night').value = data.hum_target_night;
+        document.getElementById('hum_band_night').value = data.hum_band_night;
         document.getElementById('drying_temp_target').value = data.drying_temp_target;
         document.getElementById('drying_temp_delta').value = data.drying_temp_delta;
         document.getElementById('drying_hum_target').value = data.drying_hum_target;
