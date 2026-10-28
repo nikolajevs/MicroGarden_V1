@@ -1,0 +1,8 @@
+EU-LITE schematic connectivity review (from design.json, no KiCad)
+Revision: EU-LITE-0.1-DRAFT
+PASS: 58 checks
+Fitted electrical components: 158
+Stock pieces: 115 in 38 rows; purchased pieces: 46 in 34 rows
+Purchases incl. VAT 32.62 EUR + delivery 5.87 EUR = 38.49 EUR (catalogue 2026-10-23; RGB owner quote 2026-10-25), including CSD19531KCS and OSTAPA57E2A
+Stock lines used up completely (no spare, a mounting error means a repurchase): EEEFT1E821AP, EEVFK1J471M, INA238AIDGSR, IRL2505, id12
+

@@ -1,0 +1,76 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-10-28T18:53:33",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning"
+    ],
+    "kicad_version": "10.0.5",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1",
+            "violations": []
+        },
+        {
+            "path": "/01 | 24 V input, reverse polarity, fuses and power monitor/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/2fd0f82c-e708-5531-b2f2-50c74d7335db",
+            "violations": []
+        },
+        {
+            "path": "/02 | 24 V to 12 V buck (ST1S14)/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/4cac3ca5-1a56-5a37-a0f5-ba99eee7b776",
+            "violations": []
+        },
+        {
+            "path": "/03 | 12 V to 3.3 V buck (ST1S10) and ESP32/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/f76a5d0d-a6dc-570a-b738-9f033acc0fb4",
+            "violations": []
+        },
+        {
+            "path": "/04 | RTC, battery and microSD/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/77cea4d5-c73c-514f-9956-e71b8e9e5a60",
+            "violations": []
+        },
+        {
+            "path": "/05 | SHT4x, float and two 4-wire fans (no tachometers)/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/a3c1170a-084b-590b-afbe-5013b0daaf8d",
+            "violations": []
+        },
+        {
+            "path": "/06 | LED boost channel (LM3429, one channel)/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/b30c6af1-805b-5229-828c-1f25b9e7fc3c",
+            "violations": []
+        },
+        {
+            "path": "/07 | PTC heater and 24 V pump/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/c30ecf18-b1b2-59a9-9724-01d4f444e536",
+            "violations": []
+        },
+        {
+            "path": "/08 | RGB status LED/",
+            "uuid_path": "/6650c329-4f4f-5b7a-a019-ee8e8f2772e1/7d73c2bc-1773-50f3-89a5-3aba4ffcc101",
+            "violations": []
+        }
+    ],
+    "source": "PCB_EU_LITE.kicad_sch"
+}
