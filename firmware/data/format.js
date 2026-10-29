@@ -1,5 +1,5 @@
-// Форматирование длительностей для главной страницы. Чистые функции без DOM: их проверяет
-// tests/format.test.cjs.
+// Мелкие чистые функции для главной страницы: время работы и адрес платы в сети роутера. Без DOM,
+// их проверяет tests/format.test.cjs.
 (function () {
     'use strict';
 
@@ -17,7 +17,15 @@
         return hours + ' ч' + (rest ? ' ' + String(rest).padStart(2, '0') + ' мин' : '');
     }
 
-    const api = { formatWorkTime };
+    // Адрес платы в сети роутера для шапки: только пока плата подключена и адрес похож на IPv4
+    // (четыре числа через точки). Иначе null, и значок в шапке скрыт.
+    function routerAddress(data) {
+        if (!data || data.wifi_state !== 'connected') return null;
+        const ip = data.wifi_ip;
+        return typeof ip === 'string' && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) ? ip : null;
+    }
+
+    const api = { formatWorkTime, routerAddress };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     if (typeof window !== 'undefined') window.Format = api;
 })();

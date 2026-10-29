@@ -54,6 +54,13 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 a.status-badge { text-decoration: none; }
 .cycle-badge { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; }
 .cycle-divider { opacity: 0.55; }
+/* Адрес платы в сети роутера: тихий значок рядом с фазой цикла, цифры без капса и с одинаковой шириной */
+.net-badge {
+    background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid var(--card-border);
+    font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.net-ip { user-select: all; } /* адрес выделяется целиком и без значка: его удобно скопировать */
 
 /* Плата не отвечает: последние показания остаются на экране, но приглушены */
 .grid.stale { opacity: 0.45; transition: opacity 0.3s; }

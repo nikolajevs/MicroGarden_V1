@@ -17,6 +17,7 @@ function setLinkLost(lost) {
     if (lost) {
         timeEl.innerText = 'Нет связи';
         timeEl.className = "status-badge offline-badge";
+        renderRouterAddress(null); // адрес мог смениться, пока плата молчит
         renderAlerts([Alerts.LINK_LOST_ALERT]); // без связи остальные оповещения недостоверны
     } else {
         timeEl.className = "status-badge time-badge";
@@ -60,6 +61,7 @@ function renderStatus(data) {
     renderPower(data);
 
     document.getElementById('box-time').innerText = data.time;
+    renderRouterAddress(Format.routerAddress(data));
 
     const pumpEl = document.getElementById('pump-val');
     if (data.pump_active) {
@@ -130,6 +132,15 @@ function renderStatus(data) {
     // Неисправность часов (RTC не отвечает, время не выставлено, полив на программном таймере или выключен)
     // показывает колокольчик: правила и тексты в alerts.js.
     renderAlerts(Alerts.collectAlerts(data));
+}
+
+// Адрес платы в сети роутера (значок в шапке): ip — строка или null, когда платы в сети роутера нет
+function renderRouterAddress(ip) {
+    const badge = document.getElementById('net-badge');
+    badge.hidden = !ip;
+    if (!ip) return;
+    document.getElementById('net-ip').textContent = ip;
+    badge.title = 'Адрес платы в сети роутера: ' + ip;
 }
 
 // Колокольчик в шапке: число активных оповещений и их список (правила — в alerts.js).
