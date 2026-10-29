@@ -71,6 +71,17 @@ class SampleTests(unittest.TestCase):
         self.assertEqual(extra["rssi"], -61)
         self.assertEqual(len(extra["fw"]), 32)
 
+    def test_alert_fields_are_accepted_and_typed(self):
+        _, extra = server.clean_sample({"op_mode": 1, "clock_usable": True, "water_skipped": False,
+                                        "clock_trusted": False})
+        self.assertEqual(extra["op_mode"], 1)
+        self.assertIs(extra["clock_usable"], 1)      # в базе флаги 0/1, булевыми их делает status()
+        self.assertEqual(extra["water_skipped"], 0)
+        _, bad = server.clean_sample({"op_mode": 2, "clock_usable": "yes", "water_skipped": 1})
+        self.assertNotIn("op_mode", bad)              # режимы бывают 0 и 1
+        self.assertNotIn("clock_usable", bad)         # флаг — только true/false
+        self.assertNotIn("water_skipped", bad)        # число 1 — не флаг
+
     def test_dead_sensor_hides_climate(self):
         cols, _ = server.clean_sample({"temp": 25.0, "hum": 50.0, "sht_ok": False})
         self.assertIsNone(cols["temp"])
@@ -109,8 +120,29 @@ class StoreTests(unittest.TestCase):
         self.assertIs(st["sample"]["water_present"], True)   # страница сравнивает с настоящим false
         self.assertIs(st["sample"]["sht_ok"], True)
         self.assertEqual((st["errors_24h"], st["warnings_24h"]), (1, 1))
+        self.assertEqual(st["errors_1h"], 1)
         self.assertFalse(self.store.status("m", 180, now=NOW + 600)["online"])
         self.assertIsNone(self.store.status("unknown", 180))
+
+    def test_status_recent_errors_window(self):
+        old_line = "ОШИБКА: давно\n"
+        self.store.ingest("m", {"log": {"boot": "a", "from": 0, "text": old_line}}, now=NOW)
+        later = NOW + 2 * 3600
+        self.store.ingest("m", {"log": {"boot": "a", "from": len(old_line.encode("utf-8")),
+                                        "text": "ОШИБКА: недавно\n[ПОЛИВ] Пропущен: нет воды\n"}}, now=later)
+        st = self.store.status("m", 180, now=later + 60)
+        self.assertEqual(st["errors_24h"], 2)
+        self.assertEqual(st["errors_1h"], 1)          # старая ошибка колокольчик уже не показывает
+        self.assertEqual(self.store.status("m", 180, now=later + 3600 + 61)["errors_1h"], 0)
+
+    def test_status_alert_flags_are_real_booleans(self):
+        self.store.ingest("m", {"sample": {"op_mode": 0, "clock_usable": True, "water_skipped": False,
+                                           "clock_trusted": False, "rtc_ok": False}}, now=NOW)
+        sample = self.store.status("m", 180, now=NOW)["sample"]
+        self.assertIs(sample["clock_usable"], True)
+        self.assertIs(sample["water_skipped"], False)
+        self.assertIs(sample["clock_trusted"], False)
+        self.assertEqual(sample["op_mode"], 0)
 
     def test_log_resend_is_idempotent(self):
         first = "строка раз\nстрока два\n"
@@ -301,8 +333,10 @@ class HttpTests(unittest.TestCase):
         html = body.decode("utf-8")
         self.assertNotIn("<script>", html)      # CSP запрещает встроенные скрипты
         self.assertNotIn(" style=", html)
-        for path in ("/app.js", "/style.css"):
+        for path in ("/app.js", "/alerts.js", "/style.css"):
             self.assertEqual(self.request("GET", path)[0], 200, path)
+        self.assertIn('<script src="/alerts.js">', html)   # правила оповещений подключены до app.js
+        self.assertLess(html.index("/alerts.js"), html.index("/app.js"))
         self.assertEqual(self.request("GET", "/server.py")[0], 404)
         self.assertEqual(self.request("GET", "/../server.py")[0], 404)
         self.assertEqual(self.request("GET", "/static/app.js")[0], 404)

@@ -19,6 +19,16 @@
     <div class="top-right">
       <select id="device" class="select" aria-label="Плата" hidden></select>
       <span id="pill" class="pill pill-wait" role="status">Загрузка…</span>
+      <button type="button" id="bell" class="bell" aria-label="Оповещений нет" aria-expanded="false" aria-controls="alerts-panel">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2v1.5"></path><path d="M5.2 17.2c1.1-.9 1.5-1.9 1.5-3.4v-3a5.3 5.3 0 0 1 10.6 0v3c0 1.5.4 2.5 1.5 3.4z"></path><path d="M10.3 19.9a1.9 1.9 0 0 0 3.4 0"></path></svg>
+        <span id="bell-count" class="bell-count" hidden>0</span>
+      </button>
+    </div>
+    <div id="alerts-panel" class="alerts-panel" role="region" aria-label="Оповещения" hidden>
+      <h2>Оповещения</h2>
+      <ul id="alerts-list" class="alerts-list"></ul>
+      <p id="alerts-empty" class="alerts-empty">Всё в порядке, оповещений нет.</p>
+      <p class="alerts-note">Текущие неисправности платы, связь с ней и свежие ошибки журнала. История сообщений — в разделе «Сообщения платы» ниже.</p>
     </div>
   </header>
 
@@ -43,8 +53,6 @@
     <div class="card"><span class="label">Нагреватель</span><span class="val small"><b id="v-heater">—</b></span><span class="note">&nbsp;</span></div>
   </section>
 
-  <section class="health" id="health" aria-label="Состояние платы"></section>
-
   <section class="panel">
     <h2>Температура и влажность</h2>
     <div class="chart" id="chart-climate"></div>
@@ -61,7 +69,7 @@
     <div class="chart" id="chart-power"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="log-section">
     <div class="panel-head">
       <h2>Сообщения платы (Serial)</h2>
       <div class="seg" id="level-group" role="group" aria-label="Какие сообщения показывать">
@@ -78,6 +86,7 @@
 
   <footer class="foot">Плата присылает показания и журнал по HTTPS раз в минуту.</footer>
 </div>
+<script src="/alerts.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

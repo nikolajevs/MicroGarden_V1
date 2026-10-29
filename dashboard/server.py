@@ -48,8 +48,10 @@ NUM_FIELDS = {
 BOOL_FIELDS = ("pump", "heater", "led_blocked", "sht_ok", "rtc_ok")
 EXTRA_NUM_FIELDS = {
     "rssi": (-130, 0, True), "heap_free": (0, 10_000_000, True), "uptime_s": (0, 2 ** 32, True),
+    "op_mode": (0, 1, True),  # 0 — выращивание, 1 — сушка
 }
-EXTRA_BOOL_FIELDS = ("clock_trusted", "water_present", "water_sensor", "sd_ok", "power_ok")
+EXTRA_BOOL_FIELDS = ("clock_trusted", "clock_usable", "water_present", "water_sensor", "water_skipped",
+                     "sd_ok", "power_ok")
 
 RANGES = {"1h": 3600, "6h": 6 * 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "1y": 365 * 86400}
 BUCKETS = (60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400)
@@ -59,6 +61,7 @@ STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/alerts.js": ("alerts.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
 }
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -297,11 +300,14 @@ class Store:
             counts = dict(cx.execute(
                 "SELECT level, COUNT(*) FROM logs WHERE device=? AND ts>=? GROUP BY level",
                 (device, now - 86400)).fetchall())
+            errors_1h = cx.execute("SELECT COUNT(*) FROM logs WHERE device=? AND level='error' AND ts>=?",
+                                   (device, now - 3600)).fetchone()[0]
         last_seen, boot, sample_ts, last_sample = row
         return {"device": device, "now": now, "last_seen": last_seen, "age": now - last_seen,
                 "online": now - last_seen <= online_sec, "online_sec": online_sec, "boot": boot,
                 "sample_ts": sample_ts, "sample": json.loads(last_sample) if last_sample else None,
-                "errors_24h": counts.get("error", 0), "warnings_24h": counts.get("warn", 0)}
+                "errors_24h": counts.get("error", 0), "warnings_24h": counts.get("warn", 0),
+                "errors_1h": errors_1h}
 
     def series(self, device, t_from, t_to):
         bucket = pick_bucket(t_to - t_from)

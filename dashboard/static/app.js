@@ -384,32 +384,30 @@
     el.classList.toggle('bad', !!bad);
   }
 
-  function badge(text, kind) {
-    const b = document.createElement('span');
-    b.className = 'badge' + (kind ? ' ' + kind : '');
-    b.textContent = text;
-    return b;
-  }
-
   function renderStatus() {
     const st = state.status;
     const pill = $('pill');
     const cards = $('cards');
-    const health = $('health');
-    health.textContent = '';
     if (!st) {
       pill.className = 'pill pill-wait';
       pill.textContent = 'Плата ещё не присылала данные';
       cards.classList.add('stale');
       $('sub').textContent = 'Телеметрия платы';
+      renderBell([]);
       return;
     }
     const age = st.age + (Date.now() - state.fetchedAt) / 1000;
     const online = age <= (st.online_sec || 180);
+    renderBell(Alerts.collectAlerts(st, age, formatAgo));
     pill.className = 'pill ' + (online ? 'pill-ok' : age < 3600 ? 'pill-warn' : 'pill-bad');
     pill.textContent = online ? 'На связи · данные ' + formatAgo(age) + ' назад' : 'Нет связи с платой · ' + formatAgo(age);
     cards.classList.toggle('stale', !online);
-    $('sub').textContent = 'Плата ' + st.device + (st.sample && st.sample.fw ? ' · прошивка ' + st.sample.fw : '');
+    // Неисправности датчиков, часов, SD и измерителя питания показывает колокольчик; здесь остаётся то,
+    // что не неисправность: версия прошивки, уровень Wi-Fi и время работы (последние два — только пока плата на связи)
+    const info = st.sample || {};
+    $('sub').textContent = 'Плата ' + st.device + (info.fw ? ' · прошивка ' + info.fw : '') +
+      (online && info.rssi !== undefined ? ' · Wi-Fi ' + fmt(info.rssi, 0) + ' дБм' : '') +
+      (online && info.uptime_s !== undefined ? ' · работает ' + formatAgo(info.uptime_s) : '');
 
     const s = st.sample || {};
     const shtBad = s.sht_ok === false || s.sht_ok === 0;
@@ -428,17 +426,76 @@
     else if (s.water_present === false) setNote('n-water', 'в баке нет воды', true);
     else setNote('n-water', s.water_present ? 'вода в баке есть' : '');
 
-    if (s.sht_ok !== undefined) health.appendChild(badge(s.sht_ok ? 'Датчик SHT4x' : 'Датчик SHT4x: нет ответа', s.sht_ok ? 'ok' : 'bad'));
-    if (s.rtc_ok !== undefined) {
-      if (!s.rtc_ok) health.appendChild(badge('Часы RTC: нет ответа', 'bad'));
-      else if (s.clock_trusted === false) health.appendChild(badge('Часы не выставлены', 'warn'));
-      else health.appendChild(badge('Часы RTC', 'ok'));
-    }
-    if (s.sd_ok !== undefined) health.appendChild(badge(s.sd_ok ? 'SD-карта' : 'SD-карта: нет', s.sd_ok ? 'ok' : 'warn'));
-    if (s.power_ok !== undefined) health.appendChild(badge(s.power_ok ? 'Измеритель INA238' : 'INA238: нет данных', s.power_ok ? 'ok' : 'warn'));
-    if (s.rssi !== undefined) health.appendChild(badge('Wi-Fi ' + fmt(s.rssi, 0) + ' дБм'));
-    if (s.uptime_s !== undefined) health.appendChild(badge('Работает ' + formatAgo(s.uptime_s)));
     setText('cnt-error', st.errors_24h ? String(st.errors_24h) : '');
+  }
+
+  // ----- колокольчик оповещений ---------------------------------------------------------
+  // Правила — в alerts.js. Оповещения — текущие неисправности и свежие ошибки журнала, они пропадают,
+  // когда причина устранена; сам журнал с историей — в разделе ниже.
+  let lastBellCount = null; // null — первый показ после загрузки страницы: качать нечего
+  let lastBellSignature = '';
+
+  function setBellPanel(open) {
+    $('alerts-panel').hidden = !open;
+    $('bell').setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  // Пункт «Показать» у ошибок журнала: переключает журнал на ошибки и прокручивает к нему
+  function showErrorLog() {
+    state.level = 'error';
+    remember('level', 'error');
+    markGroup('level-group', 'data-level', 'error');
+    setBellPanel(false);
+    loadLog(false).then(() => {
+      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      $('log-section').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }).catch(console.error);
+  }
+
+  function renderBell(alerts) {
+    const { count, level } = Alerts.summarizeAlerts(alerts);
+    const bell = $('bell');
+    const badge = $('bell-count');
+    badge.hidden = count === 0;
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.className = 'bell-count' + (level === 'warn' ? ' warn' : '');
+    bell.setAttribute('aria-label', count ? 'Оповещений: ' + count : 'Оповещений нет');
+    bell.classList.toggle('is-bad', level === 'bad'); // цвет значка — по самому тяжёлому оповещению
+    bell.classList.toggle('is-warn', level === 'warn');
+    if (lastBellCount !== null && count > lastBellCount) { // новое оповещение: колокольчик качнётся
+      bell.classList.remove('ring');
+      void bell.offsetWidth; // перезапуск анимации
+      bell.classList.add('ring');
+    }
+    lastBellCount = count;
+    document.title = (count ? '(' + count + ') ' : '') + 'MicroGarden · Телеметрия';
+
+    // Список перестраиваем только при изменении: страница пересчитывает показания каждые 5 секунд,
+    // и открытая панель не должна мигать
+    const signature = JSON.stringify(alerts);
+    if (signature === lastBellSignature) return;
+    lastBellSignature = signature;
+    const list = $('alerts-list');
+    list.textContent = '';
+    for (const alert of alerts) {
+      const item = document.createElement('li');
+      const dot = document.createElement('span');
+      dot.className = 'alert-dot ' + alert.level;
+      const text = document.createElement('span');
+      text.textContent = alert.text; // тексты собирает alerts.js, но вставляем как текст
+      item.appendChild(dot);
+      item.appendChild(text);
+      if (alert.action === 'log') {
+        const act = document.createElement('button');
+        act.type = 'button';
+        act.className = 'alert-act';
+        act.textContent = 'Показать';
+        act.addEventListener('click', showErrorLog);
+        item.appendChild(act);
+      }
+      list.appendChild(item);
+    }
+    $('alerts-empty').hidden = count > 0;
   }
 
   // ----- журнал --------------------------------------------------------------------------
@@ -509,6 +566,7 @@
       const pill = $('pill');
       pill.className = 'pill pill-bad';
       pill.textContent = 'Нет связи с сервером';
+      renderBell([Alerts.SERVER_LOST_ALERT]);
       console.error(err);
     }
   }
@@ -545,6 +603,15 @@
     bindGroup('level-group', 'data-level', (v) => { state.level = v; remember('level', v); loadLog(false).catch(console.error); });
     $('device').addEventListener('change', (evt) => { state.device = evt.target.value; refresh(); });
     $('more').addEventListener('click', () => loadLog(true).catch(console.error));
+    $('bell').addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      setBellPanel($('alerts-panel').hidden);
+    });
+    document.addEventListener('click', (evt) => {
+      const panel = $('alerts-panel');
+      if (!panel.hidden && !panel.contains(evt.target)) setBellPanel(false);
+    });
+    document.addEventListener('keydown', (evt) => { if (evt.key === 'Escape') setBellPanel(false); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
     refresh();
     setInterval(refresh, POLL_MS);
