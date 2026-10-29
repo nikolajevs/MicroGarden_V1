@@ -397,6 +397,7 @@ std::atomic<uint8_t> time_set_result{TIME_SET_NONE}; // Итог последн�
 
 // --- Хендлы FreeRTOS для многоядерности ---
 TaskHandle_t WifiTaskHandle = NULL;
+static std::atomic<bool> wifi_connecting{false}; // Задача WiFi сейчас подключается к роутеру (страница показывает «Подключаюсь…»)
 TaskHandle_t TelemetryTaskHandle = NULL;
 static char boot_id[9] = ""; // Случайный номер запуска: по нему сервер отличает перезагрузку от повтора порции
 
@@ -837,11 +838,13 @@ void vWifiTask(void *pvParameters) {
     WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
     strlcpy(connectedSsid, cfg.wifi_ssid, sizeof(connectedSsid));
     strlcpy(connectedPass, cfg.wifi_pass, sizeof(connectedPass));
+    wifi_connecting = true;
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 30) {
       vTaskDelay(pdMS_TO_TICKS(500));
       attempts++;
     }
+    wifi_connecting = false;
 
     if (WiFi.status() == WL_CONNECTED) {
       logPrintf("[Core 0] Роутер: подключено, веб-интерфейс на http://%s/\n",
@@ -1711,6 +1714,18 @@ void setup() {
     // Energy since midnight; kept while the meter is briefly silent.
     json += "\"energy_kwh\":" + String(st.energy_wh / 1000.0f, 3) + ",";
     json += "\"heater_active\":" + String(st.heater_active ? "true" : "false") + ",";
+    // WiFi роутера: состояние, адрес платы в сети роутера и уровень сигнала (страница настроек, раздел «WiFi»).
+    // ap_ip — адрес в сети самой платы (точка доступа).
+    static const char *const WIFI_STATE_NAMES[] = {"not_configured", "connecting", "connected", "disconnected"};
+    // Адрес читаем один раз: «подключено» только с настоящим адресом, и состояние с адресом не разойдутся при обрыве.
+    const String staIp = WiFi.localIP().toString();
+    const bool staUp = WiFi.status() == WL_CONNECTED && staIp != "0.0.0.0";
+    const WifiState wifi = wifiState(cfg.wifi_ssid[0] != '\0', staUp, wifi_connecting);
+    const bool wifiUp = wifi == WifiState::Connected;
+    json += "\"wifi_state\":\"" + String(WIFI_STATE_NAMES[uint8_t(wifi)]) + "\",";
+    json += "\"wifi_ip\":" + (wifiUp ? "\"" + staIp + "\"" : String("null")) + ",";
+    json += "\"wifi_rssi\":" + (wifiUp ? String(WiFi.RSSI()) : String("null")) + ",";
+    json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
     json += "\"heater_today_s\":" + String((unsigned long)st.heater_on_s); // Наработка за сутки платы
     json += "}";
     request->send(200, "application/json", json);

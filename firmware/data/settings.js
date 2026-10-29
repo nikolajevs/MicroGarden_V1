@@ -1,6 +1,7 @@
 let csrfToken = "";
 let lastConsoleText = null;
 let consoleInFlight = false;
+let wifiInFlight = false;
 let currentMode = '0';        // Режим, сохранённый на плате: к нему возвращаем список при отмене
 let activeTabRestored = false;
 const TAB_STORAGE_KEY = 'gi-settings-tab';
@@ -252,6 +253,68 @@ async function watchTimeSet(attempt = 0) {
     else if (result === 'ok') loadCurrentSettings(); // Обновить "Текущие дата и время на плате"
 }
 
+// ----- WiFi роутера: состояние и IP-адрес платы в его сети --------------------------------------
+// /api/status отдаёт wifi_state (not_configured, connecting, connected, disconnected), wifi_ip, wifi_rssi
+// и ap_ip. Страница опрашивает его раз в 4 секунды, поэтому после сохранения настроек видно, как плата
+// подключается и какой адрес получила от роутера.
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+function signalLabel(rssi) {
+    return rssi >= -60 ? 'отличный' : rssi >= -70 ? 'хороший' : rssi >= -80 ? 'слабый' : 'плохой';
+}
+
+// Что показать по ответу /api/status: уровень (цвет точки), текст, адрес и подпись про сигнал.
+// Чистая функция без DOM, её проверяют тесты.
+function wifiStatusView(data) {
+    const state = data && data.wifi_state;
+    if (state === 'connected') {
+        const rssi = typeof data.wifi_rssi === 'number' ? data.wifi_rssi : null;
+        return {
+            level: 'ok', text: 'Подключено к роутеру', ip: IPV4.test(data.wifi_ip || '') ? data.wifi_ip : null,
+            extra: rssi === null ? '' : 'Сигнал: ' + String(rssi).replace('-', '−') + ' дБм (' + signalLabel(rssi) + ')'
+        };
+    }
+    if (state === 'connecting') return { level: 'wait', text: 'Подключаюсь к роутеру…', ip: null, extra: '' };
+    if (state === 'disconnected') {
+        return {
+            level: 'bad', ip: null, text: 'Нет подключения к роутеру',
+            extra: 'Плата повторяет попытку примерно раз в 2 минуты; новые имя сети или пароль запускают её сразу.'
+        };
+    }
+    if (state === 'not_configured') {
+        return { level: 'off', text: 'Сеть роутера не задана: введите имя сети и пароль ниже.', ip: null, extra: '' };
+    }
+    return { level: 'off', text: 'Состояние неизвестно: плата не ответила.', ip: null, extra: '' };
+}
+
+function renderWifiStatus(data) {
+    const view = wifiStatusView(data);
+    document.getElementById('wifi-dot').className = 'wifi-dot ' + view.level;
+    document.getElementById('wifi-state-text').textContent = view.text;
+    const line = document.getElementById('wifi-ip-line');
+    line.hidden = !view.ip;
+    if (view.ip) {
+        document.getElementById('wifi-ip').textContent = view.ip;
+        document.getElementById('wifi-open').href = 'http://' + view.ip + '/';
+    }
+    document.getElementById('wifi-extra').textContent = view.extra;
+    if (data && IPV4.test(data.ap_ip || '')) document.getElementById('ap-ip').textContent = data.ap_ip;
+}
+
+// Опрашивает плату, только пока открыта вкладка «WiFi» (как консоль): остальное время /api/status не нужен.
+async function updateWifiStatus() {
+    const panel = document.getElementById('tab-network');
+    if (wifiInFlight || document.hidden || !panel.classList.contains('active')) return;
+    wifiInFlight = true;
+    let data = null;
+    try {
+        const res = await fetch('/api/status');
+        if (res.ok) data = await res.json();
+    } catch (e) { /* плата занята или связи нет: покажем «неизвестно» */ }
+    finally { wifiInFlight = false; }
+    renderWifiStatus(data);
+}
+
 function syncTimeFromBrowser() {
     document.getElementById('datetime').value = localIsoTime(19);
     document.getElementById('time-form').requestSubmit();
@@ -450,6 +513,7 @@ function initTabs() {
             document.getElementById(btn.dataset.tab).classList.add('active');
             storeTab(btn.dataset.tab);
             if (btn.dataset.tab === 'tab-console') updateConsole();
+            if (btn.dataset.tab === 'tab-network') updateWifiStatus();
         });
     });
 }
@@ -461,6 +525,7 @@ window.onload = () => {
     setCurrentTime();
     loadCurrentSettings();
     loadSdFiles();
+    setInterval(updateWifiStatus, 4000);
     document.getElementById('watering-form').addEventListener('submit', packWateringDays);
     document.getElementById('watering-form').addEventListener('submit', packWaterSensor);
     document.getElementById('watering-form').addEventListener('submit', packWateringTime);

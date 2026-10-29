@@ -360,6 +360,7 @@
                 <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
                     Сеть, к которой подключается твой телефон/ноутбук для доступа к этой странице.
                     После сохранения текущее подключение к плате оборвётся — переподключись с новыми данными.
+                    Адрес интерфейса в этой сети: <b class="wifi-ip-value" id="ap-ip">192.168.4.1</b>.
                 </div>
                 <div id="ap-error-banner" class="form-error" style="display: none;">
                     Не удалось сохранить часть настроек точки доступа: имя от 1 до 32 символов, новый пароль от 8 до 63 символов. Пустое поле сохраняет прежний пароль.
@@ -384,6 +385,17 @@
 
             <div class="form-section">
                 <h3>WiFi роутера (доступ к интерфейсу из домашней сети)</h3>
+                <div class="wifi-status" id="wifi-status" aria-live="polite">
+                    <span class="wifi-dot off" id="wifi-dot"></span>
+                    <div>
+                        <div class="wifi-state" id="wifi-state-text">Проверяю состояние…</div>
+                        <div class="wifi-ip" id="wifi-ip-line" hidden>
+                            IP-адрес платы в сети роутера: <b id="wifi-ip">—</b>
+                            · <a id="wifi-open" href="#" target="_blank" rel="noopener">открыть интерфейс по этому адресу</a>
+                        </div>
+                        <div class="wifi-extra" id="wifi-extra"></div>
+                    </div>
+                </div>
                 <div id="wifi-error-banner" class="form-error" style="display: none;">
                     Не удалось сохранить WiFi роутера: имя сети — до 32 символов, пароль — пусто (открытая сеть) или от 8 до 63 символов. Изменения не применены.
                 </div>

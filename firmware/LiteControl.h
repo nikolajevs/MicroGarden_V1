@@ -100,3 +100,14 @@ constexpr StatusColor statusColor(bool climateOk, bool clockOk, bool busLow,
        : !sdOk || !powerOk ? StatusColor::Yellow
        : StatusColor::Green;
 }
+
+// Состояние подключения к WiFi роутера для страницы настроек. Приоритет: сеть не задана, подключено,
+// идёт попытка, нет связи. Номера используются как индексы в таблице имён в firmware.ino.
+enum class WifiState : uint8_t { NotConfigured = 0, Connecting = 1, Connected = 2, Disconnected = 3 };
+
+constexpr WifiState wifiState(bool configured, bool connected, bool connecting) {
+  return !configured ? WifiState::NotConfigured
+       : connected ? WifiState::Connected
+       : connecting ? WifiState::Connecting
+       : WifiState::Disconnected;
+}
