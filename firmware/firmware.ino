@@ -918,10 +918,14 @@ static String buildTelemetryPayload(const Settings &cfg, const State &st, const 
   addFlag(p, "sht_ok", st.sht_online);
   addFlag(p, "rtc_ok", st.rtc_online);
   addFlag(p, "clock_trusted", st.clock_trusted);
+  addFlag(p, "clock_usable", st.clock_usable); // RTC или выставленный программный таймер: от этого зависят свет и полив
   addFlag(p, "sd_ok", sd_online);
   addFlag(p, "power_ok", st.power_ok);
   addFlag(p, "water_sensor", cfg.water_sensor_enabled);
   addFlag(p, "water_present", st.water_present);
+  // Для оповещений панели: последний запланированный полив пропущен (как last_water_skipped в /api/status)
+  addFlag(p, "water_skipped", st.last_water_day != 0 && st.last_skip_day == st.last_water_day);
+  addInteger(p, "op_mode", cfg.operation_mode); // 0 — выращивание, 1 — сушка: в сушке нет света и полива
   addInteger(p, "rssi", WiFi.RSSI());
   addInteger(p, "heap_free", (long)ESP.getFreeHeap());
   addInteger(p, "uptime_s", (long)(millis() / 1000));
