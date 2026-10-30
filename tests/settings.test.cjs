@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function page() {
+function page(statusPayload) {
   const fields = new Map();
   let modeChangeHandler;
   let modeFormSubmits = 0;
@@ -45,6 +45,10 @@ function page() {
     alert: text => alerts.push(text),
     fetch: async (url, options) => {
       calls.push({url, options});
+      if (url === '/api/status') {
+        if (statusPayload === 'down') throw new Error('плата не отвечает');
+        if (statusPayload) return {ok: true, json: async () => statusPayload};
+      }
       return {ok: true, json: async () => ({csrf_token: 'random-per-boot-token',
         operation_mode: 0, drying_temp_target: 16, drying_temp_delta: 0.5,
         drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 55, hum_band_night: 10,
@@ -245,4 +249,120 @@ test('climate defaults are the values the owner chose', () => {
     drying_temp_delta: defaultOf('drying_temp_delta')
   }, {temp_target: 25, temp_target_night: 17, temp_delta: 2, hum_target_night: 55, hum_band_night: 10,
       drying_temp_target: 16, drying_temp_delta: 0.5});
+});
+
+// ----- WiFi роутера: состояние и IP-адрес платы -----------------------------------------------------
+function wifiView(p, data) {
+  return JSON.parse(vm.runInContext('JSON.stringify(wifiStatusView(' + JSON.stringify(data) + '))', p.context));
+}
+
+test('WiFi роутера: подключено — показываем IP-адрес и уровень сигнала', () => {
+  const p = page();
+  const view = wifiView(p, {wifi_state: 'connected', wifi_ip: '192.168.1.57', wifi_rssi: -58, ap_ip: '192.168.4.1'});
+  assert.equal(view.level, 'ok');
+  assert.equal(view.ip, '192.168.1.57');
+  assert.match(view.extra, /−58 дБм \(отличный\)/);
+});
+
+test('WiFi роутера: сигнал называется по уровню', () => {
+  const p = page();
+  const label = rssi => wifiView(p, {wifi_state: 'connected', wifi_ip: '10.0.0.2', wifi_rssi: rssi}).extra;
+  assert.match(label(-60), /отличный/);
+  assert.match(label(-67), /хороший/);
+  assert.match(label(-75), /слабый/);
+  assert.match(label(-90), /плохой/);
+  assert.equal(wifiView(p, {wifi_state: 'connected', wifi_ip: '10.0.0.2', wifi_rssi: null}).extra, '');
+});
+
+test('WiFi роутера: остальные состояния адреса не показывают', () => {
+  const p = page();
+  assert.deepEqual(
+    ['connecting', 'disconnected', 'not_configured'].map(s => wifiView(p, {wifi_state: s, wifi_ip: '192.168.1.57'}).ip),
+    [null, null, null]);
+  assert.equal(wifiView(p, {wifi_state: 'connecting'}).level, 'wait');
+  assert.equal(wifiView(p, {wifi_state: 'disconnected'}).level, 'bad');
+  assert.equal(wifiView(p, {wifi_state: 'disconnected'}).text, 'Нет подключения к роутеру');
+  assert.match(wifiView(p, {wifi_state: 'disconnected'}).extra, /раз в 2 минуты/);
+  assert.equal(wifiView(p, {wifi_state: 'not_configured'}).level, 'off');
+  // старая прошивка без этих полей и пустой ответ
+  assert.match(wifiView(p, {}).text, /неизвестно/);
+  assert.match(wifiView(p, null).text, /неизвестно/);
+});
+
+test('WiFi роутера: адрес, не похожий на IPv4, в ссылку не попадает', () => {
+  const p = page();
+  for (const bad of ['javascript:alert(1)', '<b>x</b>', '192.168.1', '1.2.3.4/evil', '']) {
+    assert.equal(wifiView(p, {wifi_state: 'connected', wifi_ip: bad, wifi_rssi: -50}).ip, null, bad);
+  }
+});
+
+// Вкладка «WiFi» открыта (active) или нет: только на открытой вкладке страница опрашивает плату
+function wifiTab(p, active = true) {
+  p.fields.set('tab-network', {classList: {contains: name => name === 'active' && active}});
+}
+
+test('WiFi роутера: плату опрашивают, только пока открыта вкладка «WiFi»', async () => {
+  const p = page({wifi_state: 'connected', wifi_ip: '192.168.1.57', wifi_rssi: -50, ap_ip: '192.168.4.1'});
+  wifiTab(p, false);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.calls.length, 0, 'вкладка закрыта — запроса нет');
+  wifiTab(p, true);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.deepEqual(p.calls.map(c => c.url), ['/api/status']);
+});
+
+test('WiFi роутера: пока запрос не вернулся, второй не отправляется', async () => {
+  const p = page({wifi_state: 'connecting'});
+  wifiTab(p);
+  const first = vm.runInContext('updateWifiStatus()', p.context);
+  const second = vm.runInContext('updateWifiStatus()', p.context);
+  await Promise.all([first, second]);
+  assert.equal(p.calls.length, 1);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.calls.length, 2, 'после ответа опрос снова возможен');
+});
+
+test('WiFi роутера: страница обновляет текст, адрес и ссылку', async () => {
+  const p = page({wifi_state: 'connected', wifi_ip: '192.168.1.57', wifi_rssi: -71, ap_ip: '192.168.4.1'});
+  wifiTab(p);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.calls.at(-1).url, '/api/status');
+  assert.equal(p.fields.get('wifi-state-text').textContent, 'Подключено к роутеру');
+  assert.equal(p.fields.get('wifi-ip').textContent, '192.168.1.57');
+  assert.equal(p.fields.get('wifi-open').href, 'http://192.168.1.57/');
+  assert.equal(p.fields.get('wifi-ip-line').hidden, false);
+  assert.equal(p.fields.get('wifi-dot').className, 'wifi-dot ok');
+  assert.match(p.fields.get('wifi-extra').textContent, /слабый/);
+  assert.equal(p.fields.get('ap-ip').textContent, '192.168.4.1');
+});
+
+test('WiFi роутера: пока плата подключается, адреса нет; когда подключилась, он появляется', async () => {
+  const p = page({wifi_state: 'connecting'});
+  wifiTab(p);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.fields.get('wifi-ip-line').hidden, true);
+  assert.equal(p.fields.get('wifi-state-text').textContent, 'Подключаюсь к роутеру…');
+  assert.equal(p.fields.get('wifi-dot').className, 'wifi-dot wait');
+});
+
+test('WiFi роутера: плата не отвечает — страница не падает и пишет «неизвестно»', async () => {
+  const p = page('down');
+  wifiTab(p);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.match(p.fields.get('wifi-state-text').textContent, /неизвестно/);
+  assert.equal(p.fields.get('wifi-ip-line').hidden, true);
+});
+
+test('WiFi роутера: все элементы, которые заполняет скрипт, есть на вкладке «WiFi»', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const start = html.indexOf('id="tab-network"');
+  const end = html.indexOf('class="tab-panel', start);
+  assert.ok(start > 0 && end > start, 'вкладка tab-network найдена');
+  const panel = html.slice(start, end);
+  for (const id of ['wifi-status', 'wifi-dot', 'wifi-state-text', 'wifi-ip-line', 'wifi-ip', 'wifi-open', 'wifi-extra', 'ap-ip']) {
+    assert.equal(html.split('id="' + id + '"').length - 1, 1, id + ' встречается один раз на странице');
+    assert.ok(panel.includes('id="' + id + '"'), id + ' лежит внутри вкладки «WiFi»');
+  }
+  // Адрес сначала скрыт: до ответа платы страница не показывает пустую строку «IP-адрес: —»
+  assert.match(html, /id="wifi-ip-line" hidden/);
 });

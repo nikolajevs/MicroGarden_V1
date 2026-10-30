@@ -358,3 +358,13 @@ constexpr bool dailyRuntimeRegression() {
 }
 static_assert(dailyRuntimeRegression(), "heater run time must add up within a board day and restart on a new day");
 
+// --- Состояние WiFi роутера на странице настроек --------------------------------------------------
+static_assert(wifiState(false, false, false) == WifiState::NotConfigured &&
+              wifiState(false, true, true) == WifiState::NotConfigured &&       // сеть стёрли, а старое соединение ещё не разорвано
+              wifiState(true, true, false) == WifiState::Connected &&
+              wifiState(true, true, true) == WifiState::Connected &&            // подключено важнее «идёт попытка»
+              wifiState(true, false, true) == WifiState::Connecting &&
+              wifiState(true, false, false) == WifiState::Disconnected &&
+              uint8_t(WifiState::Connected) == 2 && uint8_t(WifiState::Disconnected) == 3,
+              "WiFi state must follow: not configured, connected, connecting, disconnected");
+

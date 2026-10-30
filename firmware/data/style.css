@@ -54,6 +54,13 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 a.status-badge { text-decoration: none; }
 .cycle-badge { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; }
 .cycle-divider { opacity: 0.55; }
+/* Адрес платы в сети роутера: тихий значок рядом с фазой цикла, цифры без капса и с одинаковой шириной */
+.net-badge {
+    background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid var(--card-border);
+    font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.net-ip { user-select: all; } /* адрес выделяется целиком и без значка: его удобно скопировать */
 
 /* Плата не отвечает: последние показания остаются на экране, но приглушены */
 .grid.stale { opacity: 0.45; transition: opacity 0.3s; }
@@ -344,3 +351,20 @@ header { position: relative; }
 .alerts-empty { color: var(--success); font-size: 13px; margin-bottom: 10px; }
 .alerts-note { color: var(--text-muted); font-size: 12px; }
 .alerts-note a { color: var(--primary); }
+
+/* Состояние подключения к роутеру и IP-адрес платы (страница настроек, раздел «WiFi») */
+.wifi-status {
+    display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; padding: 12px 14px;
+    border: 1px solid var(--card-border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);
+}
+.wifi-dot { flex: 0 0 auto; width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: var(--text-muted); }
+.wifi-dot.ok { background: var(--success); }
+.wifi-dot.wait { background: var(--warning); }
+.wifi-dot.bad { background: var(--danger); }
+.wifi-state { font-size: 14px; font-weight: 600; }
+.wifi-ip { margin-top: 4px; font-size: 13px; color: var(--text-muted); }
+.wifi-ip b, .wifi-ip-value { color: var(--text-main); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: all; }
+.wifi-ip b { font-size: 15px; }
+.wifi-ip a { color: var(--primary); }
+.wifi-extra { margin-top: 2px; font-size: 12px; color: var(--text-muted); }
+.wifi-extra:empty { display: none; }
