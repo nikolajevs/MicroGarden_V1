@@ -140,7 +140,8 @@
   const W = 900, H = 250, PAD_T = 10, PAD_B = 26;
   const $ = (id) => document.getElementById(id);
 
-  const state = { device: null, range: '24h', level: 'error', status: null, fetchedAt: 0, logRows: [], logHasMore: false };
+  // Плата можно задать в адресе (?device=имя): так на неё ведёт карточка на странице «Платы»
+  const state = { device: new URLSearchParams(location.search).get('device') || null, range: '24h', level: 'error', status: null, fetchedAt: 0, logRows: [], logHasMore: false };
 
   const CHARTS = {
     climate: {

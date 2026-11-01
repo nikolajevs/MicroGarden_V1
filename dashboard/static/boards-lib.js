@@ -79,8 +79,47 @@
     return origin + '/api/ingest';
   }
 
+  // Форма числительного: 1 плата, 2 платы, 5 плат
+  function plural(n, one, few, many) {
+    const mod100 = n % 100;
+    const mod10 = n % 10;
+    if (mod100 >= 11 && mod100 <= 14) return many;
+    if (mod10 === 1) return one;
+    return mod10 >= 2 && mod10 <= 4 ? few : many;
+  }
+
+  // Значок связи на карточке платы, коротко: «Онлайн», «Нет связи · 3 ч назад», «Нет данных»
+  function boardChip(board, now) {
+    if (board.last_seen == null) return { state: 'never', text: 'Нет данных', title: 'Плата ещё не присылала данные' };
+    const ago = agoText(board.last_seen, now);
+    if (board.online) return { state: 'online', text: 'Онлайн', title: 'Данные пришли ' + ago };
+    return { state: 'offline', text: 'Нет связи · ' + ago, title: 'Последние данные пришли ' + ago };
+  }
+
+  // Строка под заголовком страницы: «3 платы · 2 онлайн»
+  function summary(boards) {
+    const n = boards.length;
+    if (!n) return 'Плат пока нет';
+    const online = boards.filter((board) => board.online).length;
+    const state = online === 0 ? 'нет связи' : online === n ? (n === 1 ? 'онлайн' : 'все онлайн') : online + ' онлайн';
+    return n + ' ' + plural(n, 'плата', 'платы', 'плат') + ' · ' + state;
+  }
+
+  // Токен в одной строке: как давно им пользовались. live — плата использует его прямо сейчас.
+  function tokenUse(item, now) {
+    if (item.active !== true) {
+      return { text: typeof item.revoked_at === 'number' ? 'отозван ' + agoText(item.revoked_at, now) : 'отозван', live: false, title: '' };
+    }
+    const used = typeof item.last_used_at === 'number';
+    return {
+      text: used ? agoText(item.last_used_at, now) : 'не использовался',
+      live: used && now - item.last_used_at < IN_USE_SEC,
+      title: used && item.last_ip ? 'Последний раз с адреса ' + item.last_ip : '',
+    };
+  }
+
   const api = { NAME_MAX, DEVICE_RE, IN_USE_SEC, agoText, boardStatus, describeToken, hasActiveToken,
-                validateName, validateNewBoard, suggestDevice, ingestUrl };
+                validateName, validateNewBoard, suggestDevice, ingestUrl, plural, boardChip, summary, tokenUse };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.BoardsLib = api;
 })();

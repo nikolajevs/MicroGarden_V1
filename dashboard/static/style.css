@@ -25,6 +25,11 @@
   --bell-warn-fg: #b45309;
   --bell-bad-bg: #fde0e0;
   --bell-bad-fg: #b91c1c;
+  --ok-bg: rgba(16, 185, 129, .14);
+  --bad-bg: rgba(239, 68, 68, .14);
+  --warn-bg: rgba(245, 158, 11, .14);
+  --accent-bg: rgba(14, 165, 233, .14);
+  --chip-bg: rgba(148, 163, 184, .14);
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -49,6 +54,11 @@
     --band-heater: rgba(234, 88, 12, .12);
     --bell-bg: #e8edd9;
     --bell-border: #cfd6bd;
+    --ok-bg: rgba(5, 150, 105, .12);
+    --bad-bg: rgba(220, 38, 38, .10);
+    --warn-bg: rgba(180, 83, 9, .12);
+    --accent-bg: rgba(3, 105, 161, .10);
+    --chip-bg: rgba(71, 85, 105, .10);
   }
 }
 
@@ -218,8 +228,7 @@ h2 { font-size: 15px; font-weight: 700; }
 .icon-btn:hover { border-color: var(--accent); }
 .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Страница плат: регистрация, токены, статус связи */
-.board-form { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+/* Общие элементы форм; блок .created, .token-code, .board-* и .badge используют страницы «Люди» и «Настройки» */
 .lead { margin: 0 0 12px; }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .input {
@@ -234,10 +243,8 @@ h2 { font-size: 15px; font-weight: 700; }
 button.btn:disabled { opacity: .5; cursor: default; }
 .form-error { color: var(--bad); font-weight: 600; margin-top: 10px; }
 .form-error[hidden], .created[hidden], #shared-section[hidden] { display: none; }
-.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .created { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--ok); border-radius: 12px; }
 .created p { margin-bottom: 8px; }
-.steps { margin: 0 0 10px 20px; display: grid; gap: 6px; }
 .token-code {
   display: block; margin: 6px 0 0; padding: 8px 12px; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px;
   font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; user-select: all;
@@ -252,25 +259,110 @@ button.btn:disabled { opacity: .5; cursor: default; }
 .board-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
 .board-title .name { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
 .board-title .device { color: var(--muted); font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.board .meta, .token-row .meta { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.board .meta { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
 .board-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.warn-text { color: var(--warn); font-size: 13px; }
-.token-list { list-style: none; display: grid; gap: 8px; }
-.token-list:empty { display: none; }
-.token-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
-.token-row.revoked { opacity: .65; }
-.token-main { min-width: 0; flex: 1 1 240px; display: grid; gap: 2px; }
-.token-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.token-head .name { font-weight: 600; overflow-wrap: anywhere; }
-.token-actions { display: flex; gap: 8px; }
 .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; font-weight: 700; }
 .badge.active, .badge.online { color: var(--ok); border-color: var(--ok); }
 .badge.in-use { color: var(--accent); border-color: var(--accent); }
 .badge.offline { color: var(--bad); border-color: var(--bad); }
 .badge.revoked, .badge.never { color: var(--muted); }
+
+/* Страница плат: карточки, токены, меню, показ токена */
+.btn.small { padding: 6px 12px; }
+.btn.with-icon { display: inline-flex; align-items: center; gap: 6px; }
+.btn svg { flex: 0 0 auto; }
+.tool {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 34px; height: 34px; padding: 0;
+  border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; list-style: none;
+}
+.tool::-webkit-details-marker { display: none; }
+.tool:hover, .menu[open] > .tool { color: var(--text); background: var(--chip-bg); }
+.tool.danger:hover { color: var(--bad); background: var(--bad-bg); }
+.tool.ok { color: var(--ok); }
+.tool:focus-visible, .menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.add-panel { margin-bottom: 14px; }
+.add-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px 12px; align-items: start; }
+.add-form .hint { color: var(--muted); font-size: 12px; }
+.add-actions { display: flex; gap: 8px; padding-top: 21px; }
+
+#created { margin: 0 0 14px; padding: 14px 16px; background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 16px; }
+.created-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.copy-list { display: grid; gap: 6px; }
+.copy-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.copy-label { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.copy-row code {
+  padding: 7px 10px; background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; min-width: 0;
+  font: 13.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; user-select: all;
+}
+.created-note { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
+
+.plates { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-bottom: 14px; }
+.plates:empty { display: none; }
+.plate {
+  --tone: var(--line);
+  position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px 16px 14px 20px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+}
+.plate::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px; border-radius: 0 4px 4px 0; background: var(--tone); }
+.plate[data-state="online"] { --tone: var(--ok); }
+.plate[data-state="offline"] { --tone: var(--bad); }
+.plate-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.plate-title { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.plate-name { font-size: 17px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.plate-id { color: var(--muted); font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.plate-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.chip.dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.online { color: var(--ok); background: var(--ok-bg); }
+.chip.offline { color: var(--bad); background: var(--bad-bg); }
+.plate-warn { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 13px; font-weight: 600; }
+.plate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+
+.keys { list-style: none; display: grid; gap: 6px; }
+.keys:empty { display: none; }
+.key { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 6px 7px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+.key-icon { color: var(--muted); }
+.key.live .key-icon { color: var(--ok); }
+.key-main { display: grid; gap: 1px; min-width: 0; }
+.key-name { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.key-line { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--muted); font-size: 12.5px; }
+.key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.key.live .key-use { color: var(--ok); font-weight: 600; }
+.key.revoked { opacity: .7; }
+.old-keys summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 2px 0; }
+.old-keys[open] summary { margin-bottom: 6px; }
+.revoked-item { list-style: none; }
+
+.menu { position: relative; flex: 0 0 auto; }
+.menu > summary { cursor: pointer; }
+.menu-list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: grid; gap: 2px; min-width: 200px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.menu-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.menu-item:hover:not(:disabled) { background: var(--chip-bg); }
+.menu-item.danger { color: var(--bad); }
+.menu-item:disabled { opacity: .45; cursor: default; }
+.menu-hint { padding: 0 10px 4px 34px; color: var(--muted); font-size: 12px; }
+
+.confirm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px solid var(--bad); border-radius: 12px; background: var(--bad-bg); font-size: 13.5px; }
+.confirm-bar span { flex: 1 1 220px; }
+.rename { display: flex; align-items: center; gap: 4px; }
+.rename .input { font-size: 16px; font-weight: 700; padding: 6px 10px; }
+
+.empty-state { display: grid; justify-items: center; gap: 8px; padding: 40px 16px; text-align: center; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); }
+.empty-state h2 { color: var(--text); font-size: 17px; }
+.empty-state[hidden] { display: none; }
+.shared { margin-top: 14px; }
+.shared .legend-note { margin-top: 10px; }
 @media (max-width: 640px) {
-  .board-form { grid-template-columns: 1fr; }
-  .board-form .btn { width: 100%; }
+  .add-form { grid-template-columns: 1fr; }
+  .add-actions { padding-top: 0; }
+  .add-actions .btn { flex: 1 1 auto; }
 }
 
 /* Вход, регистрация, аккаунт и страница администратора */

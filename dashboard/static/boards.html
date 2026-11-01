@@ -14,67 +14,73 @@
   <header class="top">
     <div>
       <h1>Платы</h1>
-      <p class="sub">Платы, которым разрешено присылать данные на этот сервер</p>
+      <p class="sub" id="summary">Загрузка…</p>
     </div>
     <div class="top-right">
+      <button type="button" class="btn primary with-icon" id="add-toggle" aria-expanded="false" aria-controls="add-panel">Добавить плату</button>
       <a class="btn" href="/">← К графикам</a>
     </div>
   </header>
 
-  <section class="panel" aria-labelledby="add-title">
-    <h2 id="add-title">Добавить плату</h2>
-    <p class="legend-note lead">Каждая плата регистрируется здесь и получает свой токен. Плата, которой здесь нет, данные отправлять не может.</p>
-    <form id="new-form" class="board-form" autocomplete="off" novalidate>
+  <p id="page-error" class="form-error" role="alert" hidden></p>
+
+  <section id="created" class="created" role="status" hidden>
+    <div class="created-head">
+      <b id="created-title"></b>
+      <button type="button" class="tool" id="hide-created" aria-label="Скрыть" title="Скрыть"></button>
+    </div>
+    <div class="copy-list">
+      <div class="copy-row">
+        <span class="copy-label">Адрес</span>
+        <code id="created-url"></code>
+        <button type="button" class="tool" id="copy-url" aria-label="Копировать адрес" title="Копировать"></button>
+      </div>
+      <div class="copy-row">
+        <span class="copy-label">Имя</span>
+        <code id="created-device"></code>
+        <button type="button" class="tool" id="copy-device" aria-label="Копировать имя" title="Копировать"></button>
+      </div>
+      <div class="copy-row">
+        <span class="copy-label">Токен</span>
+        <code id="created-token"></code>
+        <button type="button" class="tool" id="copy-token" aria-label="Копировать токен" title="Копировать"></button>
+      </div>
+    </div>
+    <p class="created-note">Введите это в настройках платы: «WiFi» → «Телеметрия». Токен показан один раз.</p>
+  </section>
+
+  <section class="panel add-panel" id="add-panel" aria-labelledby="add-title" hidden>
+    <h2 id="add-title">Новая плата</h2>
+    <form id="new-form" class="add-form" autocomplete="off" novalidate>
       <label class="field">
         <span class="label">Название</span>
-        <input class="input" id="new-name" type="text" maxlength="40" required placeholder="Например, Теплица">
+        <input class="input" id="new-name" type="text" maxlength="40" required placeholder="Теплица">
       </label>
       <label class="field">
-        <span class="label">Имя платы в системе</span>
+        <span class="label">Имя в системе</span>
         <input class="input" id="new-device" type="text" maxlength="32" required spellcheck="false" autocapitalize="none" placeholder="microgarden-2">
+        <span class="hint">латиница, цифры, _ . -</span>
       </label>
-      <button type="submit" class="btn primary" id="new-submit">Добавить плату</button>
-    </form>
-    <p class="legend-note">Имя платы — то, что указано в её настройках (вкладка «WiFi», раздел «Телеметрия», поле «Имя платы»): латиница, цифры, _ . - , без повторов.</p>
-    <p id="page-error" class="form-error" role="alert" hidden></p>
-
-    <div id="created" class="created" role="status" hidden>
-      <p><b id="created-title"></b></p>
-      <ol class="steps">
-        <li>Откройте настройки платы: вкладка «WiFi», раздел «Телеметрия».</li>
-        <li>Адрес приёма: <code id="created-url" class="token-code inline"></code></li>
-        <li>Имя платы: <code id="created-device" class="token-code inline"></code></li>
-        <li>Токен приёма (вставьте целиком):
-          <code id="created-token" class="token-code"></code>
-        </li>
-        <li>Нажмите «Сохранить телеметрию». Через минуту плата появится ниже со статусом «Онлайн».</li>
-      </ol>
-      <div class="created-actions">
-        <button type="button" class="btn" id="copy">Копировать токен</button>
-        <button type="button" class="btn ghost" id="hide-created">Скрыть</button>
-        <span id="copy-note" class="legend-note"></span>
+      <div class="add-actions">
+        <button type="submit" class="btn primary" id="new-submit">Добавить</button>
+        <button type="button" class="btn" id="add-cancel">Отмена</button>
       </div>
-      <p class="legend-note">Токен показан один раз: на сервере хранится только его отпечаток, прочитать токен потом нельзя. Потеряли — создайте новый токен платы, а старый отзовите.</p>
-    </div>
+    </form>
   </section>
 
-  <section class="panel" aria-labelledby="list-title">
-    <div class="panel-head">
-      <h2 id="list-title">Зарегистрированные платы</h2>
-      <label class="check"><input type="checkbox" id="show-revoked"> Показывать отозванные токены</label>
-    </div>
-    <ul id="board-list" class="board-list"></ul>
-    <p id="board-empty" class="empty plain" hidden>Плат пока нет. Добавьте первую выше.</p>
-    <p class="legend-note">Сменить токен без перерыва в приёме: «Новый токен», введите его в настройках платы, затем отзовите старый. Отозванный токен перестаёт действовать сразу. Удалить плату можно, когда у неё нет действующих токенов; вместе с ней удаляются её показания и журнал.</p>
-  </section>
+  <ul id="board-list" class="plates"></ul>
 
-  <section class="panel" id="shared-section" aria-labelledby="shared-title" hidden>
-    <h2 id="shared-title">Общий токен из .env</h2>
-    <ul id="shared-list" class="token-list"></ul>
-    <p class="legend-note">Этот токен записан в файле .env на сервере и подходит любой зарегистрированной плате. Надёжнее, когда у каждой платы свой токен: выдайте его кнопкой «Новый токен», введите в плату, а общий отзовите и уберите из .env.</p>
-  </section>
+  <div id="board-empty" class="empty-state" hidden>
+    <h2>Пока нет плат</h2>
+    <p>Добавьте первую, чтобы получить для неё токен.</p>
+    <button type="button" class="btn primary" id="empty-add">Добавить плату</button>
+  </div>
 
-  <footer class="foot">Токены хранятся на сервере в виде отпечатка (SHA-256), в базу попадает не сам токен.</footer>
+  <section class="panel shared" id="shared-section" aria-labelledby="shared-title" hidden>
+    <h2 id="shared-title">Общий токен</h2>
+    <ul id="shared-list" class="keys"></ul>
+    <p class="legend-note">Подходит любой плате. Надёжнее выдать каждой свой токен.</p>
+  </section>
 </div>
 <script src="/boards-lib.js"></script>
 <script src="/boards.js"></script>
