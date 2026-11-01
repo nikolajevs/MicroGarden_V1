@@ -368,3 +368,15 @@ static_assert(wifiState(false, false, false) == WifiState::NotConfigured &&
               uint8_t(WifiState::Connected) == 2 && uint8_t(WifiState::Disconnected) == 3,
               "WiFi state must follow: not configured, connected, connecting, disconnected");
 
+// --- Мощность WiFi: слабая, средняя, сильная ------------------------------------------------------
+static_assert(wifiPowerQuarterDbm(WIFI_POWER_WEAK) == 28 &&       // 7 дБм
+              wifiPowerQuarterDbm(WIFI_POWER_MEDIUM) == 52 &&     // 13 дБм
+              wifiPowerQuarterDbm(WIFI_POWER_STRONG) == 78,       // 19,5 дБм: максимум и значение SDK по умолчанию
+              "WiFi power levels must be 7, 13 and 19.5 dBm");
+static_assert(wifiPowerQuarterDbm(WIFI_POWER_WEAK) < wifiPowerQuarterDbm(WIFI_POWER_MEDIUM) &&
+              wifiPowerQuarterDbm(WIFI_POWER_MEDIUM) < wifiPowerQuarterDbm(WIFI_POWER_STRONG),
+              "WiFi power must grow with the level");
+static_assert(wifiPowerQuarterDbm(-1) == wifiPowerQuarterDbm(WIFI_POWER_STRONG) &&
+              wifiPowerQuarterDbm(3) == wifiPowerQuarterDbm(WIFI_POWER_STRONG),
+              "an unknown WiFi power level must fall back to the strongest one");
+

@@ -111,3 +111,14 @@ constexpr WifiState wifiState(bool configured, bool connected, bool connecting) 
        : connecting ? WifiState::Connecting
        : WifiState::Disconnected;
 }
+
+// Мощность передатчика WiFi: слабая, средняя, сильная. Радио у ESP32 одно, поэтому мощность общая для
+// точки доступа платы и для подключения к роутеру. Значения в четвертях дБм, как у wifi_power_t в SDK
+// (static_assert в firmware.ino сверяет их с SDK): 7 дБм = 28, 13 дБм = 52, 19,5 дБм = 78. Сильная —
+// максимум и значение SDK по умолчанию, поэтому у уже прошитых плат до первой настройки ничего не меняется.
+enum WifiPowerLevel : int { WIFI_POWER_WEAK = 0, WIFI_POWER_MEDIUM = 1, WIFI_POWER_STRONG = 2 };
+
+// Неизвестный уровень даёт сильную мощность: недоступная точка доступа хуже лишних децибел.
+constexpr int wifiPowerQuarterDbm(int level) {
+  return level == WIFI_POWER_WEAK ? 28 : level == WIFI_POWER_MEDIUM ? 52 : 78;
+}

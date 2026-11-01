@@ -287,8 +287,16 @@ function wifiStatusView(data) {
     return { level: 'off', text: 'Состояние неизвестно: плата не ответила.', ip: null, extra: '' };
 }
 
+// Мощность, которую сейчас держит радио платы: «Сейчас на плате: 19,5 дБм.» Пусто, если плата не ответила
+// или прошивка старая. Если значение не совпадает с выбранным в списке, видно, что плата его не приняла.
+function wifiPowerNow(data) {
+    if (!data || typeof data.wifi_tx_dbm !== 'number' || !isFinite(data.wifi_tx_dbm)) return '';
+    return 'Сейчас на плате: ' + String(data.wifi_tx_dbm).replace('-', '−').replace('.', ',') + ' дБм.';
+}
+
 function renderWifiStatus(data) {
     const view = wifiStatusView(data);
+    document.getElementById('wifi-power-now').textContent = wifiPowerNow(data);
     document.getElementById('wifi-dot').className = 'wifi-dot ' + view.level;
     document.getElementById('wifi-state-text').textContent = view.text;
     const line = document.getElementById('wifi-ip-line');
@@ -374,6 +382,9 @@ async function loadCurrentSettings() {
 
         document.getElementById('wifi_ssid').value = data.wifi_ssid;
         document.getElementById('ap_ssid').value = data.ap_ssid;
+        // Старая прошивка поля не присылает: тогда остаётся «Сильный» из разметки (так же, как у платы по умолчанию),
+        // иначе пустой список с required не дал бы сохранить даже имя точки доступа
+        if (typeof data.wifi_power === 'number') document.getElementById('wifi_power').value = data.wifi_power;
         document.getElementById('telemetry_url').value = data.telemetry_url;
         document.getElementById('device_label').value = data.device_label;
         setSecretPlaceholder('wifi_pass', data.wifi_pass_set);

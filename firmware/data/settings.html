@@ -359,7 +359,7 @@
                 <h3>Точка доступа платы (локальный WiFi)</h3>
                 <div style="font-size: 13px; margin-bottom: 15px; color: var(--text-muted)">
                     Сеть, к которой подключается твой телефон/ноутбук для доступа к этой странице.
-                    После сохранения текущее подключение к плате оборвётся — переподключись с новыми данными.
+                    После смены имени или пароля текущее подключение к плате оборвётся — переподключись с новыми данными.
                     Адрес интерфейса в этой сети: <b class="wifi-ip-value" id="ap-ip">192.168.4.1</b>.
                 </div>
                 <div id="ap-error-banner" class="form-error" style="display: none;">
@@ -378,7 +378,22 @@
                                 <button type="button" class="btn-action" onclick="togglePasswordField('ap_pass')">👁</button>
                             </div>
                         </div>
+                        <div class="form-group">
+                            <label for="wifi_power">Сила сигнала</label>
+                            <select id="wifi_power" name="wifi_power" required>
+                                <option value="0">Слабый (7 дБм)</option>
+                                <option value="1">Средний (13 дБм)</option>
+                                <option value="2" selected>Сильный (19,5 дБм)</option>
+                            </select>
+                        </div>
                     </div>
+                    <div class="form-hint" style="margin-bottom: 8px;">
+                        Мощность передатчика платы. У ESP32 одно радио, поэтому она действует и на эту точку доступа, и на связь с роутером
+                        (раздел ниже): при слабом сигнале телефон нужно держать ближе к плате, а связь с роутером может ухудшиться.
+                        Применяется сразу после сохранения, перезагрузка не нужна. Если страница перестала открываться, подойдите
+                        к плате ближе или откройте её по адресу в сети роутера.
+                    </div>
+                    <div class="wifi-extra" id="wifi-power-now" style="margin-bottom: 15px;"></div>
                     <button type="submit" class="btn-action btn-sync">Сохранить точку доступа</button>
                 </form>
             </div>
