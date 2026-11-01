@@ -146,3 +146,31 @@ test('страница графиков и страница плат уходя�
   assert.match(html, /id="people" href="\/admin"[^>]*\bhidden\b/, 'кнопка «Люди» скрыта, пока сервер не подтвердит администратора');
   assert.match(app, /me\.user\.role !== 'admin'/);
 });
+
+test('главная без данных: остаются шапка и подсказка, а дашборд (показания, графики, журнал) спрятан', () => {
+  const html = read('static', 'index.html');
+  const app = read('static', 'app.js');
+  const at = (id) => html.indexOf('id="' + id + '"');
+  const start = html.indexOf('<div id="dash">');
+  const end = html.indexOf('<script src="/alerts.js">');
+  assert.ok(start > 0 && end > start, 'дашборд обёрнут в #dash');
+  assert.equal((html.match(/<div\b/g) || []).length, (html.match(/<\/div>/g) || []).length, 'теги div закрыты');
+  for (const id of ['range-group', 'csv', 'board-settings', 'cards', 'chart-climate', 'chart-light', 'chart-power', 'log-section', 'level-group', 'more']) {
+    assert.ok(at(id) > start && at(id) < end, '#' + id + ' лежит внутри дашборда');
+  }
+  for (const id of ['start-hint', 'pill', 'bell', 'account', 'device', 'alerts-panel']) {
+    assert.ok(at(id) > 0 && at(id) < start, '#' + id + ' остаётся вне дашборда');
+  }
+  assert.match(html, /<footer class="foot">[^<]*<\/footer>\s*<\/div>\s*<\/div>/, 'подвал тоже внутри дашборда');
+  assert.match(html, /<p id="start-hint" class="start-hint" hidden>Здесь появятся показания вашей платы\. <a href="\/boards">Добавьте плату<\/a>, введите выданные адрес, имя и токен в её настройках \(вкладка «WiFi», раздел «Телеметрия»\), и через минуту она появится на графиках\.<\/p>/);
+  assert.match(app, /\$\('start-hint'\)\.hidden = !!st;\s*\$\('dash'\)\.hidden = !st;/, 'подсказка и дашборд переключаются вместе');
+  // Дашборд открывается раньше, чем на нём рисуются графики: у скрытого блока нулевая ширина
+  assert.match(app, /state\.status = status;\s*state\.fetchedAt = Date\.now\(\);\s*renderStatus\(\);\s*csvLink\(\);\s*if \(series\) for \(const key in CHARTS\) drawChart/);
+});
+
+test('число оповещений на колокольчике прячется атрибутом hidden: правило display не должно его перебивать', () => {
+  const css = read('static', 'style.css');
+  assert.match(css, /\.bell-count \{[^}]*display: inline-flex/, 'у значка задан display, поэтому атрибут hidden сам его не скроет');
+  assert.match(css, /\.bell-count\[hidden\] \{ display: none; \}/, 'без этого правила при нуле оповещений на колокольчике висел красный «0»');
+  assert.match(read('static', 'app.js'), /badge\.hidden = count === 0;/);
+});

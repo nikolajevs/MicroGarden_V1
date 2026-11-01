@@ -43,6 +43,8 @@
 
   <p id="start-hint" class="start-hint" hidden>Здесь появятся показания вашей платы. <a href="/boards">Добавьте плату</a>, введите выданные адрес, имя и токен в её настройках (вкладка «WiFi», раздел «Телеметрия»), и через минуту она появится на графиках.</p>
 
+  <!-- Дашборд: пока от платы нет ни одного замера, вместо него остаётся подсказка выше (скрывает app.js) -->
+  <div id="dash">
   <section class="toolbar" aria-label="Период и выгрузка">
     <div class="seg" id="range-group" role="group" aria-label="Период графиков">
       <button type="button" data-range="6h">6 ч</button>
@@ -99,6 +101,7 @@
   </section>
 
   <footer class="foot">Плата присылает показания и журнал по HTTPS раз в минуту.</footer>
+  </div>
 </div>
 <script src="/alerts.js"></script>
 <script src="/app.js"></script>
