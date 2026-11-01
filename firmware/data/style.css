@@ -52,8 +52,10 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 .status-badge.offline-badge { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
 .status-badge.drying-badge { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
 a.status-badge { text-decoration: none; }
-.cycle-badge { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; }
-.cycle-divider { opacity: 0.55; }
+/* Значок цикла: значок фазы и текст; в узкой шапке текст обрезается многоточием, а не переносится */
+.cycle-badge { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; min-width: 0; overflow: hidden; }
+.cycle-icon { flex: 0 0 auto; }
+.cycle-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Адрес платы в сети роутера: тихий значок рядом с фазой цикла, цифры без капса и с одинаковой шириной */
 .net-badge {
     background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid var(--card-border);
@@ -65,13 +67,10 @@ a.status-badge { text-decoration: none; }
 /* Плата не отвечает: последние показания остаются на экране, но приглушены */
 .grid.stale { opacity: 0.45; transition: opacity 0.3s; }
 
-/* Телефон: время и кнопка остаются в первой строке, значки состояния уходят во вторую.
-   Раньше всё стояло в один ряд без переноса, и длинный значок выталкивал кнопку за экран. */
+/* Телефон: поля страницы и шапки поменьше (сама шапка в одну строку описана в конце раздела про колокольчик) */
 @media (max-width: 600px) {
-    body { padding: 14px; }
+    body { padding: 12px; }
     header { margin-bottom: 20px; padding-bottom: 14px; }
-    .header-status { order: 3; flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
-    .cycle-badge { white-space: normal; flex-wrap: wrap; }
 }
 
 .time-badge {
@@ -335,6 +334,16 @@ header { position: relative; }
     border: 2px solid var(--bg-color); pointer-events: none;
 }
 .bell-count.warn { background: var(--warning); color: #111827; }
+/* Настройки: круглая кнопка-значок того же размера, что и колокольчик, но тёмная */
+.icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 44px; height: 44px; border-radius: 50%; text-decoration: none;
+    background: #1f2937; color: var(--text-main); border: 1px solid var(--card-border);
+    transition: background 0.15s;
+}
+.icon-btn:hover { background: #374151; }
+.icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.icon-btn svg { width: 22px; height: 22px; background: none; border: 0; border-radius: 0; } /* как у .bell svg */
 .alerts-panel {
     position: absolute; top: calc(100% + 10px); right: 0; z-index: 20;
     width: min(380px, calc(100vw - 32px)); padding: 14px;
@@ -351,6 +360,29 @@ header { position: relative; }
 .alerts-empty { color: var(--success); font-size: 13px; margin-bottom: 10px; }
 .alerts-note { color: var(--text-muted); font-size: 12px; }
 .alerts-note a { color: var(--primary); }
+
+/* Телефон: шапка в одну строку. Слева время, значок цикла и адрес платы, справа колокольчик и настройки.
+   Всё сжато: значки одной высоты с меньшими отступами, у адреса нет значка 📶. Контейнер значков высотой
+   в одну строку: то, что не поместилось, переносится на скрытую вторую строку, поэтому при нехватке места
+   первым пропадает адрес платы, а значок цикла остаётся целым (в самом узком случае он обрезается
+   многоточием). Строка шапки не переносится, кнопки не уезжают за край экрана. */
+@media (max-width: 600px) {
+    header.main-header { flex-wrap: nowrap; justify-content: flex-start; gap: 4px; } /* только главная: у настроек своя шапка */
+    .header-status {
+        flex: 0 1 auto; flex-wrap: wrap; align-content: flex-start; justify-content: flex-start;
+        height: 26px; overflow: hidden; margin-left: 0; gap: 4px;
+    }
+    .header-actions { flex: 0 0 auto; margin-left: auto; gap: 8px; }
+    #box-time, .cycle-badge, .net-badge { box-sizing: border-box; height: 26px; line-height: 24px; padding: 0 6px; }
+    #box-time { flex: 0 0 auto; font-size: 13px; }
+    .cycle-badge { gap: 4px; }
+    .net-badge { flex: 0 0 auto; padding: 0 5px; font-size: 11px; }
+    .net-icon { display: none; }
+    .bell, .icon-btn { width: 34px; height: 34px; }
+    .bell svg { width: 20px; height: 20px; }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .bell-count { top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; font-size: 11px; }
+}
 
 /* Состояние подключения к роутеру и IP-адрес платы (страница настроек, раздел «WiFi») */
 .wifi-status {
