@@ -117,3 +117,73 @@ test('со страницы графиков есть ссылка на плат
   // страница графиков показывает название платы, а не только её имя в системе
   assert.match(read('static', 'app.js'), /d\.name \|\| d\.device/);
 });
+
+test('числительные: 1 плата, 2 платы, 5 плат, 11 плат, 21 плата', () => {
+  const forms = [0, 1, 2, 4, 5, 11, 12, 14, 21, 22, 25, 101, 111].map((n) => n + ' ' + Lib.plural(n, 'плата', 'платы', 'плат'));
+  assert.deepEqual(forms, ['0 плат', '1 плата', '2 платы', '4 платы', '5 плат', '11 плат', '12 плат', '14 плат', '21 плата', '22 платы',
+    '25 плат', '101 плата', '111 плат']);
+});
+
+test('значок связи на карточке: онлайн, нет связи с давностью, данных не было', () => {
+  assert.deepEqual(Lib.boardChip({ last_seen: NOW - 30, online: true }, NOW),
+    { state: 'online', text: 'Онлайн', title: 'Данные пришли только что' });
+  const off = Lib.boardChip({ last_seen: NOW - 3 * 3600, online: false }, NOW);
+  assert.deepEqual([off.state, off.text], ['offline', 'Нет связи · 3 ч назад']);
+  assert.deepEqual(Lib.boardChip({ last_seen: null, online: false }, NOW),
+    { state: 'never', text: 'Нет данных', title: 'Плата ещё не присылала данные' });
+});
+
+test('строка под заголовком: сколько плат и сколько из них онлайн', () => {
+  assert.equal(Lib.summary([]), 'Плат пока нет');
+  assert.equal(Lib.summary([{ online: true }]), '1 плата · онлайн');
+  assert.equal(Lib.summary([{ online: false }]), '1 плата · нет связи');
+  assert.equal(Lib.summary([{ online: true }, { online: true }]), '2 платы · все онлайн');
+  assert.equal(Lib.summary([{ online: true }, { online: false }, { online: false }]), '3 платы · 1 онлайн');
+  assert.equal(Lib.summary(Array(5).fill({ online: false })), '5 плат · нет связи');
+});
+
+test('токен в одной строке: когда использовался, «используется», отозван', () => {
+  const base = { active: true, last_ip: '10.0.0.5', revoked_at: null };
+  assert.deepEqual(Lib.tokenUse({ ...base, last_used_at: null }, NOW), { text: 'не использовался', live: false, title: '' });
+  assert.deepEqual(Lib.tokenUse({ ...base, last_used_at: NOW - 120 }, NOW),
+    { text: '2 мин назад', live: true, title: 'Последний раз с адреса 10.0.0.5' });
+  assert.equal(Lib.tokenUse({ ...base, last_used_at: NOW - Lib.IN_USE_SEC }, NOW).live, false, 'после 10 минут тишины токен уже не «используется»');
+  assert.deepEqual(Lib.tokenUse({ ...base, active: false, revoked_at: NOW - 7200, last_used_at: NOW - 9000 }, NOW),
+    { text: 'отозван 2 ч назад', live: false, title: '' });
+  assert.equal(Lib.tokenUse({ ...base, active: false, revoked_at: null }, NOW).text, 'отозван');
+});
+
+test('страница плат: мало текста, а опасные действия подтверждаются на самой странице', () => {
+  const html = read('static', 'boards.html');
+  const script = read('static', 'boards.js');
+  const body = html.split('<body>')[1].replace(/<script[\s\S]*?<\/script>/g, '');
+  const text = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.ok(text.length < 600, 'пояснений на странице без плат не больше 600 знаков, сейчас ' + text.length);
+  assert.ok(!/\bconfirm\(|\bprompt\(|\balert\(/.test(script), 'подтверждения и переименование идут не окнами браузера');
+  for (const name of ['askRevoke', 'askRemoveToken', 'askDelete', 'startRename']) assert.match(script, new RegExp('function ' + name + '\\('));
+  assert.match(script, /remove\.disabled = locked;/, 'плату с действующим токеном удалить нельзя');
+  assert.match(script, /no\.focus\(\);/, 'фокус на «Отмене»: случайный Enter ничего не удалит');
+  assert.match(script, /document\.querySelector\('\.confirm-bar, \.rename'\)/, 'пока открыто подтверждение, список не перерисовывается');
+  assert.ok(!/innerHTML/.test(script), 'названия, имена и токены попадают на страницу только как текст');
+});
+
+test('все значки, которые просит страница плат, нарисованы', () => {
+  const script = read('static', 'boards.js');
+  const drawn = new Set([...script.match(/const ICONS = \{([\s\S]*?)\n  \};/)[1].matchAll(/^ {4}(\w+):/gm)].map((m) => m[1]));
+  assert.ok(drawn.size >= 10);
+  const asked = [
+    ...script.matchAll(/\bicon\('(\w+)'/g),
+    ...script.matchAll(/\b(?:tool|textButton|item)\('[^']*',\s*'(\w+)'/g),
+    ...script.matchAll(/linkButton\('[^']*',\s*[^,]+,\s*'(\w+)'\)/g),
+  ].map((m) => m[1]);
+  assert.ok(asked.length >= 12, 'найдены обращения к значкам: ' + asked.length);
+  for (const name of asked) assert.ok(drawn.has(name), 'значок «' + name + '» нарисован');
+  for (const name of drawn) assert.ok(asked.includes(name), 'значок «' + name + '» нужен');
+});
+
+test('карточка ведёт на графики и настройки нужной платы, главная страница понимает адрес с ?device=', () => {
+  assert.match(read('static', 'app.js'), /device: new URLSearchParams\(location\.search\)\.get\('device'\) \|\| null/);
+  const script = read('static', 'boards.js');
+  assert.match(script, /'\/\?device=' \+ encodeURIComponent\(board\.device\)/);
+  assert.match(script, /'\/settings\?device=' \+ encodeURIComponent\(board\.device\)/);
+});
