@@ -53,7 +53,7 @@ function page(statusPayload) {
         operation_mode: 0, drying_temp_target: 16, drying_temp_delta: 0.5,
         drying_hum_target: 55, drying_hum_band: 5, hum_target_night: 55, hum_band_night: 10,
         rgb_brightness: 19, rgb_night_mode: 1,
-        wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP',
+        wifi_ssid: 'Box"\\Lab', ap_ssid: 'Private AP', wifi_power: 1,
         telemetry_url: 'https://dash.example.lat/api/ingest', device_label: 'box-1',
         led_on_hour: 6, led_on_minute: 0, led_off_hour: 18, led_off_minute: 0,
         watering_days: 0, start_time: 0})};
@@ -71,6 +71,7 @@ test('settings keep secrets empty, preserve special characters and attach CSRF t
   assert.equal(p.fields.get('wifi_ssid').value, 'Box"\\Lab');
   assert.equal(p.fields.get('rgb_brightness').value, 19);
   assert.equal(p.fields.get('rgb_night_mode').value, 1);
+  assert.equal(p.fields.get('wifi_power').value, 1);
   assert.equal(p.fields.get('operation_mode').value, '0');
   assert.equal(p.fields.get('drying_temp_target').value, 16);
   assert.equal(p.fields.get('drying_hum_target').value, 55);
@@ -365,4 +366,86 @@ test('WiFi роутера: все элементы, которые заполн�
   }
   // Адрес сначала скрыт: до ответа платы страница не показывает пустую строку «IP-адрес: —»
   assert.match(html, /id="wifi-ip-line" hidden/);
+});
+
+// ----- Сила сигнала WiFi платы: слабый, средний, сильный --------------------------------------------
+test('сила сигнала: список на странице совпадает с уровнями и мощностью в прошивке', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const header = fs.readFileSync(path.join(__dirname, '../firmware/LiteControl.h'), 'utf8');
+  const select = html.match(/<select id="wifi_power" name="wifi_power"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(select, 'на странице есть список wifi_power');
+  const options = [...select[1].matchAll(/<option value="(\d+)"(?: selected)?>([^<]+)<\/option>/g)].map(m => [m[1], m[2]]);
+  // По умолчанию в разметке выбран «Сильный»: так же, как у платы без сохранённого значения
+  assert.match(select[1], /<option value="2" selected>/);
+  // Уровни и четверти дБм из LiteControl.h: слабая 28, средняя 52, сильная 78
+  assert.match(header, /WIFI_POWER_WEAK = 0, WIFI_POWER_MEDIUM = 1, WIFI_POWER_STRONG = 2/);
+  const q = header.match(/level == WIFI_POWER_WEAK \? (\d+) : level == WIFI_POWER_MEDIUM \? (\d+) : (\d+);/);
+  assert.ok(q, 'wifiPowerQuarterDbm() найдена');
+  const dbm = [q[1], q[2], q[3]].map(n => String(Number(n) / 4).replace('.', ','));
+  assert.deepEqual(options, [
+    ['0', `Слабый (${dbm[0]} дБм)`],
+    ['1', `Средний (${dbm[1]} дБм)`],
+    ['2', `Сильный (${dbm[2]} дБм)`],
+  ]);
+  assert.deepEqual(dbm, ['7', '13', '19,5']);
+});
+
+test('сила сигнала: по умолчанию сильная, как у SDK, и мощность применяется при старте, сохранении и в задаче WiFi', () => {
+  const sketch = fs.readFileSync(path.join(__dirname, '../firmware/firmware.ino'), 'utf8');
+  assert.match(sketch,
+    /SET_INT\s*\(\s*"wifi_power"\s*,\s*"wifi_power"\s*,\s*wifi_power\s*,\s*WIFI_POWER_WEAK\s*,\s*WIFI_POWER_STRONG\s*,\s*WIFI_POWER_STRONG\s*\)/,
+    'без сохранённого значения плата остаётся на сильной мощности: поведение прошитых плат не меняется');
+  // Настройка, которую сохранили и ни разу не применили, ничего не меняет: проверяем все три места
+  assert.match(sketch, /WiFi\.softAP\(cfg\.ap_ssid[^\n]*\n\s*applyWifiPower\(cfg\.wifi_power\)/, 'setup() применяет после запуска точки доступа');
+  assert.match(sketch, /WiFi\.softAP\(next\.ap_ssid[\s\S]{0,400}applyWifiPower\(next\.wifi_power\)/, 'сохранение применяет сразу');
+  assert.match(sketch, /Settings cfg = settingsSnapshot\(\);\s*\n\s*applyWifiPower\(cfg\.wifi_power\)/, 'задача WiFi сверяет мощность в каждом проходе');
+  assert.match(sketch, /"\\"wifi_tx_dbm\\":"/, '/api/status отдаёт мощность, которую держит драйвер');
+});
+
+test('сила сигнала: страница показывает мощность, которую держит радио платы', async () => {
+  const p = page({wifi_state: 'connected', wifi_ip: '192.168.1.57', wifi_rssi: -58, ap_ip: '192.168.4.1', wifi_tx_dbm: 13});
+  wifiTab(p);
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.fields.get('wifi-power-now').textContent, 'Сейчас на плате: 13 дБм.');
+  const text = d => vm.runInContext('wifiPowerNow(' + JSON.stringify(d) + ')', p.context);
+  assert.equal(text({wifi_tx_dbm: 19.5}), 'Сейчас на плате: 19,5 дБм.');
+  assert.equal(text({wifi_tx_dbm: 7}), 'Сейчас на плате: 7 дБм.');
+  assert.equal(text({wifi_tx_dbm: -1}), 'Сейчас на плате: −1 дБм.');
+  for (const none of [{}, null, {wifi_tx_dbm: null}, {wifi_tx_dbm: 'x'}, {wifi_tx_dbm: NaN}]) {
+    assert.equal(text(none), '', JSON.stringify(none));
+  }
+});
+
+test('сила сигнала: плата не ответила — строка про мощность пустая, страница не падает', async () => {
+  const p = page('down');
+  wifiTab(p);
+  p.fields.set('wifi-power-now', {textContent: 'старое значение'});
+  await vm.runInContext('updateWifiStatus()', p.context);
+  assert.equal(p.fields.get('wifi-power-now').textContent, '');
+});
+
+test('сила сигнала: список и строка про мощность лежат в форме точки доступа на вкладке «WiFi»', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../firmware/data/settings.html'), 'utf8');
+  const panel = html.slice(html.indexOf('id="tab-network"'), html.indexOf('class="tab-panel', html.indexOf('id="tab-network"')));
+  const form = panel.slice(panel.indexOf('id="ap-form"'), panel.indexOf('</form>', panel.indexOf('id="ap-form"')));
+  assert.ok(form.includes('name="wifi_power"'), 'список wifi_power отправляется вместе с точкой доступа');
+  assert.ok(form.includes('id="wifi-power-now"'), 'строка «Сейчас на плате» стоит в той же форме');
+  assert.equal(html.split('id="wifi_power"').length - 1, 1);
+  assert.equal(html.split('id="wifi-power-now"').length - 1, 1);
+});
+
+test('сила сигнала: старая прошивка без поля wifi_power не обнуляет список', async () => {
+  const p = page();
+  p.fields.set('wifi_power', {value: '2'}); // как в разметке: выбран «Сильный»
+  const original = p.context.fetch;
+  p.context.fetch = async (url, options) => {
+    const res = await original(url, options);
+    if (url !== '/api/settings') return res;
+    const data = await res.json();
+    delete data.wifi_power;
+    return {ok: true, json: async () => data};
+  };
+  await vm.runInContext('loadCurrentSettings()', p.context);
+  assert.equal(p.fields.get('wifi_ssid').value, 'Box"\\Lab', 'остальные настройки загрузились');
+  assert.equal(p.fields.get('wifi_power').value, '2');
 });

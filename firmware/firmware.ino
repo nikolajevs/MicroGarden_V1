@@ -125,6 +125,7 @@ struct Settings {
   char wifi_pass[WIFI_PASS_MAX + 1];
   char ap_ssid[WIFI_SSID_MAX + 1];   // Точка доступа платы — к ней подключается телефон/ноутбук
   char ap_pass[WIFI_PASS_MAX + 1];   // WPA2 only; empty form means keep existing password
+  int wifi_power;                    // Мощность WiFi: 0 слабая, 1 средняя, 2 сильная (радио одно: точка доступа и роутер)
 
   // Отправка на сервер панели телеметрии
   char telemetry_url[TELEMETRY_URL_MAX + 1];
@@ -618,6 +619,8 @@ static const SettingDef SETTING_DEFS[] = {
   SET_STR  ("wifi_pass",           "wifi_pass",       wifi_pass,      8,   WIFI_PASS_MAX,  DEFAULT_WIFI_PASS,     SF_SECRET,           "wifi"),
   SET_STR  ("ap_ssid",             "ap_ssid",         ap_ssid,        1,   WIFI_SSID_MAX,  DEFAULT_AP_SSID,       SF_TRIM,             "ap"),
   SET_STR  ("ap_pass",             "ap_pass",         ap_pass,        8,   WIFI_PASS_MAX,  DEFAULT_AP_PASS,       SF_SECRET,           "ap"),
+  // Мощность WiFi: по умолчанию сильная, как у SDK, поэтому у прошитых плат ничего не меняется
+  SET_INT  ("wifi_power",          "wifi_power",      wifi_power,            WIFI_POWER_WEAK, WIFI_POWER_STRONG, WIFI_POWER_STRONG),
   // --- Отправка телеметрии (ключи NVS не длиннее 15 символов) ---
   SET_STR  ("telemetry_url",       "telem_url",       telemetry_url,  TELEMETRY_URL_MIN, TELEMETRY_URL_MAX, DEFAULT_TELEMETRY_URL, SF_TRIM,    "telemetry"),
   SET_STR  ("telemetry_token",     "telem_token",     telemetry_token, TELEMETRY_TOKEN_MIN, TELEMETRY_TOKEN_MAX, DEFAULT_TELEMETRY_TOKEN, SF_SECRET | SF_TRIM, "telemetry"),
@@ -792,6 +795,27 @@ void appendSettingsJson(String &json, const Settings &s) {
   }
 }
 
+// Мощность передатчика WiFi по настройке. Радио одно, поэтому уровень действует и на точку доступа платы,
+// и на связь с роутером. Вызывается после запуска WiFi (setup, сохранение настроек) и в каждом проходе задачи
+// WiFi: драйвер может вернуть своё значение при перезапуске точки доступа, подключении или смене режима,
+// а прочитать его и сверить дёшево. В журнал строка попадает только при смене уровня или результата.
+static_assert(WIFI_POWER_7dBm == 28 && WIFI_POWER_13dBm == 52 && WIFI_POWER_19_5dBm == 78,
+              "wifiPowerQuarterDbm() must match wifi_power_t of the SDK");
+static int loggedWifiPower = -1;
+static bool loggedWifiPowerOk = false;
+
+static void applyWifiPower(int level) {
+  if (level < WIFI_POWER_WEAK || level > WIFI_POWER_STRONG) level = WIFI_POWER_STRONG;
+  const wifi_power_t want = (wifi_power_t)wifiPowerQuarterDbm(level);
+  const bool ok = WiFi.getTxPower() == want || WiFi.setTxPower(want);
+  if (level == loggedWifiPower && ok == loggedWifiPowerOk) return;
+  loggedWifiPower = level;
+  loggedWifiPowerOk = ok;
+  static const char *const NAMES[] = {"слабая", "средняя", "сильная"};
+  logPrintf("WiFi: мощность %s, %s дБм%s.\n", NAMES[level], String(wifiPowerQuarterDbm(level) / 4.0f, 1).c_str(),
+            ok ? "" : " (драйвер не принял значение, повторю позже)");
+}
+
 // Пауза перед первой попыткой подключиться к роутеру и период повторных попыток.
 static const uint32_t WIFI_FIRST_DELAY_MS = 5000;
 static const uint32_t WIFI_RETRY_MS       = 120000;
@@ -815,6 +839,8 @@ void vWifiTask(void *pvParameters) {
 
     // Своя копия: глобальные данные других задач здесь напрямую не читаются
     Settings cfg = settingsSnapshot();
+
+    applyWifiPower(cfg.wifi_power); // и без роутера: радио работает ради точки доступа
 
     if (cfg.wifi_ssid[0] == '\0') {
       if (WiFi.status() == WL_CONNECTED) WiFi.disconnect();
@@ -845,6 +871,7 @@ void vWifiTask(void *pvParameters) {
       attempts++;
     }
     wifi_connecting = false;
+    applyWifiPower(cfg.wifi_power); // подключение к роутеру могло вернуть мощность драйвера по умолчанию
 
     if (WiFi.status() == WL_CONNECTED) {
       logPrintf("[Core 0] Роутер: подключено, веб-интерфейс на http://%s/\n",
@@ -1645,6 +1672,7 @@ void setup() {
   // автоподключение при недоступном роутере сканировало эфир непрерывно и мешало точке доступа.
   WiFi.setAutoReconnect(false);
   WiFi.softAP(cfg.ap_ssid, cfg.ap_pass[0] ? cfg.ap_pass : NULL);
+  applyWifiPower(cfg.wifi_power); // после смены режима драйвер начинает с мощности по умолчанию
 
   cached_unixtime = getSafeDateTime().unixtime(); // Веб-обработчики читают только этот снимок
   state.clock_usable = state.clock_trusted || backup_clock_synced;
@@ -1730,6 +1758,8 @@ void setup() {
     json += "\"wifi_ip\":" + (wifiUp ? "\"" + staIp + "\"" : String("null")) + ",";
     json += "\"wifi_rssi\":" + (wifiUp ? String(WiFi.RSSI()) : String("null")) + ",";
     json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
+    // Мощность, которую сейчас держит драйвер, дБм: страница показывает, принято ли значение из настройки
+    json += "\"wifi_tx_dbm\":" + String((int)WiFi.getTxPower() / 4.0f, 1) + ",";
     json += "\"heater_today_s\":" + String((unsigned long)st.heater_on_s); // Наработка за сутки платы
     json += "}";
     request->send(200, "application/json", json);
@@ -1809,6 +1839,9 @@ void setup() {
     if (strcmp(prev.ap_ssid, next.ap_ssid) != 0 || strcmp(prev.ap_pass, next.ap_pass) != 0) {
       WiFi.softAP(next.ap_ssid, next.ap_pass[0] ? next.ap_pass : NULL);
     }
+    // Мощность WiFi действует сразу, без перезагрузки; после перезапуска точки доступа выше
+    // драйвер мог вернуть своё значение по умолчанию, поэтому применяем и без смены уровня.
+    applyWifiPower(next.wifi_power);
 
     // saved=1 — страница показывает "Настройки сохранены" и остаётся на той же вкладке
     if (rejected.length()) request->redirect("/settings?error=" + rejected);
