@@ -75,6 +75,8 @@ def build(store, days=7, now=None, device="microgarden-demo", step=60):
             body["log"] = {"boot": BOOT, "from": offset, "text": text}
             offset += len(text.encode("utf-8"))
         store.ingest(device, body, now=ts)
+    if not store.board_exists(device):
+        store.add_board("Демо-плата", device)  # принимаются только зарегистрированные платы; токен демо-базе не нужен
     return device
 
 

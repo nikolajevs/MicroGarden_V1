@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -221,6 +222,8 @@ class HttpTests(unittest.TestCase):
         cfg = make_config(Path(cls.tmp.name) / "h.sqlite3")
         cls.cfg = cfg
         cls.store = server.Store(cfg.db)
+        for device in ("m", "http-m", "utf8-m"):    # принимаются только зарегистрированные платы
+            cls.store.add_board("Плата " + device, device)
         cls.httpd = server.DashServer(cfg, cls.store)
         cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
@@ -365,7 +368,410 @@ class HttpTests(unittest.TestCase):
         self.assertFalse(limiter.blocked("5.6.7.8", now=1010))
 
 
+class BoardStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "t.sqlite3"
+        self.store = server.Store(self.path)
+
+    def test_registration_issues_a_token_once_and_stores_only_a_hash(self):
+        token, board, item = self.store.add_board("  Теплица   два ", "microgarden-2", now=NOW)
+        self.assertTrue(token.startswith(server.TOKEN_PREFIX))
+        self.assertTrue(24 <= len(token) <= 128)              # плата принимает токены от 24 до 128 символов
+        self.assertTrue(all(32 < ord(c) < 127 for c in token))
+        self.assertEqual(board, {"device": "microgarden-2", "name": "Теплица два", "created_at": NOW})
+        self.assertEqual((item["name"], item["device"], item["prefix"], item["source"]),
+                         (server.FIRST_TOKEN_NAME, "microgarden-2", token[:8], "ui"))
+        self.assertNotIn("hash", item)
+        # открытого токена нет ни в списке, ни в файлах базы (вместе с журналом WAL)
+        listing = self.store.list_boards(180, now=NOW)
+        self.assertNotIn(token, json.dumps(listing))
+        for path in Path(self.tmp.name).iterdir():
+            self.assertNotIn(token.encode(), path.read_bytes(), path.name)
+        self.assertEqual(self.store.authenticate(token, now=NOW), {"id": item["id"], "device": "microgarden-2"})
+        self.assertTrue(self.store.board_exists("microgarden-2"))
+        self.assertFalse(self.store.board_exists("microgarden-3"))
+
+    def test_board_name_and_device_are_validated(self):
+        for bad in ("", "   ", "x" * 41, "a\x00b", 5, None):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self.store.add_board(bad, "ok-device")
+        for bad in ("", "../x", "bad name", "m\n", "x" * 33, 7, None):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self.store.add_board("ok", bad)
+        self.assertEqual(self.store.list_boards(180)["boards"], [])
+
+    def test_device_names_are_unique_and_boards_are_limited(self):
+        self.store.add_board("первая", "a-1")
+        with self.assertRaises(server.Conflict):
+            self.store.add_board("вторая", "a-1")
+        old = server.MAX_BOARDS
+        self.addCleanup(setattr, server, "MAX_BOARDS", old)
+        server.MAX_BOARDS = 2
+        self.store.add_board("вторая", "a-2")
+        with self.assertRaises(server.Conflict):
+            self.store.add_board("третья", "a-3")
+
+    def test_unknown_empty_and_revoked_tokens_are_rejected(self):
+        token, _, item = self.store.add_board("a", "a-1", now=NOW)
+        self.assertIsNone(self.store.authenticate(token + "x", now=NOW))
+        self.assertIsNone(self.store.authenticate("", now=NOW))
+        revoked = self.store.revoke_token(item["id"], now=NOW + 5)
+        self.assertEqual((revoked["active"], revoked["revoked_at"]), (False, NOW + 5))
+        self.assertIsNone(self.store.authenticate(token, now=NOW + 6))
+        self.assertEqual(self.store.revoke_token(item["id"], now=NOW + 99)["revoked_at"], NOW + 5)  # повторный отзыв ничего не меняет
+        self.assertIsNone(self.store.revoke_token(9999))
+
+    def test_last_use_is_written_at_most_once_a_minute(self):
+        token, _, _ = self.store.add_board("a", "a-1", now=NOW)
+        self.store.authenticate(token, "1.1.1.1", now=NOW)
+        self.store.authenticate(token, "2.2.2.2", now=NOW + 30)     # меньше минуты: запись не обновляется
+        row = self.store.list_tokens()[0]
+        self.assertEqual((row["last_used_at"], row["last_ip"]), (NOW, "1.1.1.1"))
+        self.store.authenticate(token, "2.2.2.2", now=NOW + 61)
+        row = self.store.list_tokens()[0]
+        self.assertEqual((row["last_used_at"], row["last_ip"]), (NOW + 61, "2.2.2.2"))
+
+    def test_a_second_token_replaces_the_first_without_a_gap(self):
+        first, _, first_item = self.store.add_board("a", "a-1", now=NOW)
+        second, second_item = self.store.add_board_token("a-1", "Запасной", now=NOW + 10)
+        self.assertEqual((second_item["name"], second_item["device"]), ("Запасной", "a-1"))
+        self.assertIsNotNone(self.store.authenticate(first, now=NOW + 11))      # пока старый не отозван, плата работает
+        self.assertIsNotNone(self.store.authenticate(second, now=NOW + 11))
+        self.store.revoke_token(first_item["id"], now=NOW + 12)
+        self.assertIsNone(self.store.authenticate(first, now=NOW + 13))
+        self.assertIsNotNone(self.store.authenticate(second, now=NOW + 13))
+        self.assertEqual(self.store.add_board_token("a-1", None, now=NOW + 14)[1]["name"], "Новый токен")
+        self.assertIsNone(self.store.add_board_token("no-such-board"))           # платы нет: токен не выдаётся
+        with self.assertRaises(ValueError):
+            self.store.add_board_token("../x")
+
+    def test_token_limits(self):
+        old = server.MAX_ACTIVE_TOKENS, server.MAX_TOKEN_ROWS
+        self.addCleanup(lambda: setattr(server, "MAX_ACTIVE_TOKENS", old[0]) or setattr(server, "MAX_TOKEN_ROWS", old[1]))
+        server.MAX_ACTIVE_TOKENS, server.MAX_TOKEN_ROWS = 2, 3
+        _, _, first = self.store.add_board("a", "a-1", now=NOW)
+        self.store.add_board_token("a-1")
+        with self.assertRaises(server.Conflict):                    # действующих не больше двух
+            self.store.add_board_token("a-1")
+        self.store.revoke_token(first["id"])
+        self.store.add_board_token("a-1")                           # место освободилось
+        self.store.revoke_token(self.store.list_tokens()[0]["id"])
+        with self.assertRaises(server.Conflict):                    # всего записей не больше трёх, отозванные тоже считаются
+            self.store.add_board_token("a-1")
+        self.assertTrue(self.store.delete_token(first["id"]))
+        self.store.add_board_token("a-1")
+
+    def test_only_revoked_tokens_can_be_deleted(self):
+        _, _, item = self.store.add_board("a", "a-1")
+        with self.assertRaises(server.Conflict):
+            self.store.delete_token(item["id"])
+        self.store.revoke_token(item["id"])
+        self.assertTrue(self.store.delete_token(item["id"]))
+        self.assertFalse(self.store.delete_token(item["id"]))
+        self.assertEqual(self.store.list_tokens(), [])
+
+    def test_rename(self):
+        self.store.add_board("старое", "a-1", now=NOW)
+        self.assertEqual(self.store.rename_board("a-1", " Новое  имя "),
+                         {"device": "a-1", "name": "Новое имя", "created_at": NOW})
+        self.assertIsNone(self.store.rename_board("no-such-board", "x"))
+        with self.assertRaises(ValueError):
+            self.store.rename_board("a-1", "")
+        self.store.ingest("a-1", {"sample": {"temp": 20.0, "sht_ok": True}}, now=NOW)    # имя видно и в списке плат панели
+        self.assertEqual(self.store.devices(now=NOW)[0]["name"], "Новое имя")
+
+    def test_deleting_a_board_removes_its_data_and_keeps_the_others(self):
+        _, _, mine = self.store.add_board("моя", "a-1", now=NOW)
+        other_token, _, _ = self.store.add_board("чужая", "a-2", now=NOW)
+        for device in ("a-1", "a-2"):
+            self.store.ingest(device, {"sample": {"temp": 21.0, "sht_ok": True},
+                                       "log": {"boot": "b", "from": 0, "text": "ОШИБКА: что-то\n"}}, now=NOW)
+        with self.assertRaises(server.Conflict):                   # пока токен действует, платы не удалить
+            self.store.delete_board("a-1")
+        self.store.revoke_token(mine["id"])
+        self.assertTrue(self.store.delete_board("a-1"))
+        self.assertFalse(self.store.delete_board("a-1"))
+        self.assertFalse(self.store.board_exists("a-1"))
+        self.assertIsNone(self.store.status("a-1", 180, now=NOW))
+        self.assertEqual(self.store.logs("a-1", "all"), [])
+        self.assertEqual(self.store.series("a-1", NOW - 10, NOW + 10)["t"], [])
+        self.assertEqual([t["device"] for t in self.store.list_tokens()], ["a-2"])
+        self.assertTrue(self.store.board_exists("a-2"))
+        self.assertIsNotNone(self.store.status("a-2", 180, now=NOW))
+        self.assertIsNotNone(self.store.authenticate(other_token, now=NOW))
+
+    def test_listing_shows_state_firmware_and_shared_tokens(self):
+        self.store.sync_env_token(TOKEN, now=NOW)
+        _, _, item = self.store.add_board("Теплица", "a-1", now=NOW)
+        self.store.add_board("Новая", "a-2", now=NOW + 1)
+        self.store.ingest("a-1", {"sample": {"temp": 20.0, "sht_ok": True, "fw": "lite-1"}}, now=NOW + 5)
+        listing = self.store.list_boards(180, now=NOW + 60)
+        first, second = listing["boards"]
+        self.assertEqual((first["device"], first["name"], first["online"], first["fw"]), ("a-1", "Теплица", True, "lite-1"))
+        self.assertEqual([t["id"] for t in first["tokens"]], [item["id"]])
+        self.assertEqual((second["device"], second["last_seen"], second["online"], second["fw"]), ("a-2", None, False, None))
+        self.assertFalse(self.store.list_boards(180, now=NOW + 5 + 181)["boards"][0]["online"])
+        self.assertEqual([t["source"] for t in listing["shared_tokens"]], ["env"])
+        self.assertEqual(listing["shared_tokens"][0]["name"], server.ENV_TOKEN_NAME)
+
+    def test_boards_already_sending_data_are_registered_once_on_upgrade(self):
+        self.store.ingest("old-m", {"sample": {"temp": 20.0}}, now=NOW)     # плата работала до реестра плат
+        with closing(self.store._connect()) as cx, cx:
+            cx.execute("DELETE FROM boards")
+            cx.execute("DELETE FROM meta")
+        upgraded = server.Store(self.path)
+        boards = upgraded.list_boards(180, now=NOW)["boards"]
+        self.assertEqual([(b["device"], b["name"], b["created_at"]) for b in boards], [("old-m", "old-m", NOW)])
+        self.assertTrue(upgraded.delete_board("old-m"))                     # токенов у платы нет, удалить можно сразу
+        self.assertFalse(server.Store(self.path).board_exists("old-m"))     # удалённая плата при перезапуске не возвращается
+
+
+class EnvTokenTests(unittest.TestCase):
+    """Токен из DASH_INGEST_TOKEN: подхватывается сам, чтобы уже настроенная плата продолжала работать."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = server.Store(Path(self.tmp.name) / "t.sqlite3")
+
+    def test_env_token_is_imported_once_and_works(self):
+        self.store.sync_env_token(TOKEN, now=NOW)
+        self.store.sync_env_token(TOKEN, now=NOW + 5)               # перезапуск сервера
+        items = self.store.list_tokens()
+        self.assertEqual([(i["name"], i["source"], i["device"], i["prefix"]) for i in items],
+                         [(server.ENV_TOKEN_NAME, "env", None, TOKEN[:8])])
+        self.assertEqual(self.store.authenticate(TOKEN, now=NOW + 6)["device"], None)   # общий: подходит любой плате
+
+    def test_replacing_the_env_token_stops_the_old_one(self):
+        self.store.sync_env_token(TOKEN, now=NOW)
+        new = "n" * 32
+        self.store.sync_env_token(new, now=NOW + 10)
+        self.assertIsNone(self.store.authenticate(TOKEN, now=NOW + 11))
+        self.assertIsNotNone(self.store.authenticate(new, now=NOW + 11))
+
+    def test_removing_the_env_token_keeps_the_tokens_of_boards(self):
+        board_token, _, _ = self.store.add_board("a", "a-1", now=NOW)
+        self.store.sync_env_token(TOKEN, now=NOW)
+        self.store.sync_env_token("", now=NOW + 10)
+        self.assertIsNone(self.store.authenticate(TOKEN, now=NOW + 11))
+        self.assertIsNotNone(self.store.authenticate(board_token, now=NOW + 11))
+
+    def test_revoked_env_token_is_not_revived_by_a_restart(self):
+        self.store.sync_env_token(TOKEN, now=NOW)
+        env_id = self.store.list_tokens()[0]["id"]
+        self.store.revoke_token(env_id, now=NOW + 1)
+        self.store.sync_env_token(TOKEN, now=NOW + 2)
+        self.assertIsNone(self.store.authenticate(TOKEN, now=NOW + 3))
+        self.assertEqual(len(self.store.list_tokens()), 1)
+        with self.assertRaises(server.Conflict):                    # пока токен записан в .env, удаление вернуло бы его при запуске
+            self.store.delete_token(env_id)
+        self.store.sync_env_token("", now=NOW + 4)                  # убрали из .env
+        self.assertTrue(self.store.delete_token(env_id))
+
+
+class BoardHttpTests(unittest.TestCase):
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = make_config(Path(cls.tmp.name) / "k.sqlite3")
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+
+    def request(self, method, path, body=None, headers=None, auth=True):
+        headers = dict(headers or {})
+        if auth and "Authorization" not in headers:
+            headers["Authorization"] = "Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode()
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read()
+        finally:
+            conn.close()
+
+    def ingest(self, payload, token):
+        headers = {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+        return self.request("POST", "/api/ingest", json.dumps(payload).encode("utf-8"), headers, auth=False)
+
+    def post(self, path, payload=None, headers=None):
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        return self.request("POST", path, body, headers or self.ACTION)
+
+    def register(self, name, device):
+        status, _, body = self.post("/api/boards", {"name": name, "device": device})
+        return status, json.loads(body)
+
+    def boards(self):
+        return json.loads(self.request("GET", "/api/boards")[2])
+
+    def test_manager_needs_the_viewer_password(self):
+        for method, path in (("GET", "/api/boards"), ("POST", "/api/boards"), ("POST", "/api/boards/a-1/tokens"),
+                             ("POST", "/api/boards/a-1/rename"), ("DELETE", "/api/boards/a-1"),
+                             ("POST", "/api/tokens/1/revoke"), ("DELETE", "/api/tokens/1")):
+            body = b"{}" if method == "POST" else None
+            self.assertEqual(self.request(method, path, body, self.ACTION, auth=False)[0], 401, (method, path))
+        self.assertEqual(self.request("GET", "/boards", auth=False)[0], 401)
+        # токен приёма не открывает менеджер плат
+        self.assertEqual(self.request("GET", "/api/boards", headers={"Authorization": "Bearer " + TOKEN}, auth=False)[0], 401)
+
+    def test_register_a_board_use_its_token_and_remove_it(self):
+        status, created = self.register("Теплица", "reg-m")
+        self.assertEqual(status, 201, created)
+        token, item = created["token"], created["item"]
+        self.assertEqual(created["board"]["name"], "Теплица")
+        # новая плата сразу присылает данные под своим именем
+        self.assertEqual(self.ingest({"device": "reg-m", "sample": {"temp": 21.0, "sht_ok": True, "fw": "lite-2"}}, token)[0], 200)
+        # токен выдан этой плате: от имени другой он не годится, даже если та зарегистрирована
+        self.register("Другая", "reg-other")
+        status, _, body = self.ingest({"device": "reg-other"}, token)
+        self.assertEqual(status, 403)
+        self.assertIn("reg-m", json.loads(body)["error"])
+        # список: плата, её токен и состояние связи; самого токена в ответе нет
+        status, headers, body = self.request("GET", "/api/boards")
+        self.assertEqual((status, headers["Cache-Control"]), (200, "no-store"))
+        self.assertNotIn(token, body.decode("utf-8"))
+        mine = [b for b in json.loads(body)["boards"] if b["device"] == "reg-m"][0]
+        self.assertEqual((mine["name"], mine["online"], mine["fw"]), ("Теплица", True, "lite-2"))
+        self.assertEqual([t["id"] for t in mine["tokens"]], [item["id"]])
+        # у платы есть действующий токен: удалить её нельзя
+        self.assertEqual(self.request("DELETE", "/api/boards/reg-m", None, self.ACTION)[0], 409)
+        # отзыв токена действует сразу, потом плату можно удалить вместе с данными
+        status, _, body = self.post("/api/tokens/%d/revoke" % item["id"])
+        self.assertEqual((status, json.loads(body)["item"]["active"]), (200, False))
+        self.assertEqual(self.ingest({"device": "reg-m"}, token)[0], 401)
+        self.assertEqual(self.request("DELETE", "/api/boards/reg-m", None, self.ACTION)[0], 200)
+        self.assertEqual(self.request("DELETE", "/api/boards/reg-m", None, self.ACTION)[0], 404)
+        self.assertEqual(self.request("GET", "/api/status?device=reg-m")[0], 404)
+
+    def test_only_registered_boards_can_send_data(self):
+        # даже с действующим общим токеном из .env незарегистрированная плата отклоняется
+        status, _, body = self.ingest({"device": "stranger", "sample": {"temp": 20.0}}, TOKEN)
+        self.assertEqual(status, 403)
+        self.assertIn("не зарегистрирована", json.loads(body)["error"])
+        self.assertEqual(self.request("GET", "/api/status?device=stranger")[0], 404)
+        # после регистрации тот же общий токен принимается: старые платы без своего токена продолжают работать
+        self.register("Гость", "stranger")
+        self.assertEqual(self.ingest({"device": "stranger", "sample": {"temp": 20.0}}, TOKEN)[0], 200)
+        listed = self.boards()
+        self.assertEqual([t["name"] for t in listed["shared_tokens"]], [server.ENV_TOKEN_NAME])
+
+    def test_duplicate_registration_and_bad_input(self):
+        self.assertEqual(self.register("Первая", "dup-m")[0], 201)
+        self.assertEqual(self.register("Вторая", "dup-m")[0], 409)
+        before = len(self.boards()["boards"])
+        self.assertEqual(self.post("/api/boards", {"name": "", "device": "ok-m"})[0], 400)
+        self.assertEqual(self.post("/api/boards", {"name": "ok", "device": "../x"})[0], 400)
+        self.assertEqual(self.post("/api/boards", {"name": "ok"})[0], 400)                        # имя платы обязательно
+        self.assertEqual(self.request("POST", "/api/boards", b"{oops", self.ACTION)[0], 400)
+        self.assertEqual(self.request("POST", "/api/boards", b"[1]", self.ACTION)[0], 400)
+        self.assertEqual(self.request("POST", "/api/boards", b"{}", {"X-Dash-Action": "1", "Content-Type": "text/plain"})[0], 400)
+        self.assertEqual(self.request("POST", "/api/boards", b" " * (server.MAX_ACTION_BODY + 1), self.ACTION)[0], 400)
+        self.assertEqual(len(self.boards()["boards"]), before)
+
+    def test_replace_a_token_and_rename_a_board(self):
+        _, created = self.register("Старое имя", "swap-m")
+        first = created["token"]
+        status, _, body = self.post("/api/boards/swap-m/tokens", {"name": "Запасной"})
+        self.assertEqual(status, 201)
+        second = json.loads(body)
+        self.assertEqual((second["item"]["name"], second["item"]["device"]), ("Запасной", "swap-m"))
+        self.assertEqual(self.ingest({"device": "swap-m"}, first)[0], 200)      # оба токена действуют, пока старый не отозван
+        self.assertEqual(self.ingest({"device": "swap-m"}, second["token"])[0], 200)
+        self.assertEqual(self.post("/api/tokens/%d/revoke" % created["item"]["id"])[0], 200)
+        self.assertEqual(self.ingest({"device": "swap-m"}, first)[0], 401)
+        self.assertEqual(self.ingest({"device": "swap-m"}, second["token"])[0], 200)
+        status, _, body = self.post("/api/boards/swap-m/rename", {"name": "Новое имя"})
+        self.assertEqual((status, json.loads(body)["board"]["name"]), (200, "Новое имя"))
+        self.assertEqual(self.post("/api/boards/no-such-board/tokens", {})[0], 404)
+        self.assertEqual(self.post("/api/boards/no-such-board/rename", {"name": "x"})[0], 404)
+        status, _, body = self.request("GET", "/api/devices")
+        self.assertIn(("swap-m", "Новое имя"), [(d["device"], d["name"]) for d in json.loads(body)["devices"]])
+
+    def test_changes_must_come_from_the_boards_page(self):
+        body = json.dumps({"name": "чужой запрос", "device": "csrf-m"}).encode("utf-8")
+        before = len(self.boards()["boards"])
+        # чужая страница не может отправить заголовок X-Dash-Action без разрешения сервера
+        self.assertEqual(self.request("POST", "/api/boards", body, {"Content-Type": "application/json"})[0], 403)
+        self.assertEqual(self.request("DELETE", "/api/boards/csrf-m")[0], 403)
+        self.assertEqual(self.request("POST", "/api/tokens/1/revoke")[0], 403)
+        # и браузер помечает такие запросы как кросс-сайтовые
+        for site in ("cross-site", "same-site"):
+            headers = dict(self.ACTION, **{"Sec-Fetch-Site": site})
+            self.assertEqual(self.request("POST", "/api/boards", body, headers)[0], 403, site)
+            self.assertEqual(self.request("POST", "/api/tokens/1/revoke", None, headers)[0], 403, site)
+            self.assertEqual(self.request("DELETE", "/api/boards/csrf-m", None, headers)[0], 403, site)
+        self.assertEqual(len(self.boards()["boards"]), before)
+        # свой запрос со страницы проходит
+        headers = dict(self.ACTION, **{"Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(self.request("POST", "/api/boards", body, headers)[0], 201)
+        self.assertEqual(len(self.boards()["boards"]), before + 1)
+
+    def test_wrong_methods_and_paths(self):
+        self.assertEqual(self.request("GET", "/api/tokens/abc")[0], 404)
+        self.assertEqual(self.request("GET", "/api/tokens/5")[0], 405)
+        self.assertEqual(self.request("POST", "/api/tokens/5", None, self.ACTION)[0], 405)
+        self.assertEqual(self.request("POST", "/api/tokens/99999/revoke", None, self.ACTION)[0], 404)
+        self.assertEqual(self.request("GET", "/api/boards/bad%20name")[0], 404)
+        self.assertEqual(self.request("GET", "/api/boards/a-1/unknown")[0], 404)
+        self.assertEqual(self.post("/api/boards/a-1/unknown", {})[0], 404)
+        self.assertEqual(self.request("GET", "/api/boards/a-1/tokens")[0], 405)     # токен создают только запросом POST
+        self.assertEqual(self.request("GET", "/api/boards/a-1")[0], 405)             # плату удаляют только запросом DELETE
+
+    def test_limits_give_409(self):
+        old = server.MAX_BOARDS
+        server.MAX_BOARDS = 0
+        self.addCleanup(setattr, server, "MAX_BOARDS", old)
+        self.assertEqual(self.register("Лишняя", "limit-m")[0], 409)
+
+    def test_keep_alive_survives_registering_a_board(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = dict(self.ACTION, Authorization="Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode())
+        try:
+            conn.request("POST", "/api/boards", body=json.dumps({"name": "ka", "device": "keep-m"}).encode(), headers=headers)
+            first = conn.getresponse()
+            first.read()
+            self.assertEqual(first.status, 201)
+            conn.request("GET", "/api/boards", headers=headers)
+            second = conn.getresponse()
+            second.read()
+            self.assertEqual(second.status, 200)
+        finally:
+            conn.close()
+
+    def test_boards_page_is_served_without_inline_code(self):
+        status, headers, body = self.request("GET", "/boards")
+        self.assertEqual(status, 200)
+        self.assertIn("script-src 'self'", headers["Content-Security-Policy"])
+        html = body.decode("utf-8")
+        self.assertNotIn("<script>", html)
+        self.assertNotIn(" style=", html)
+        self.assertLess(html.index("/boards-lib.js"), html.index("/boards.js"))
+        for path in ("/boards.html", "/boards-lib.js", "/boards.js"):
+            self.assertEqual(self.request("GET", path)[0], 200, path)
+        self.assertIn('href="/boards"', self.request("GET", "/")[2].decode("utf-8"))   # со страницы графиков есть ссылка
+
+
 class ConfigTests(unittest.TestCase):
+    def test_ingest_token_is_optional_but_never_weak(self):
+        server.Config({"DASH_VIEW_PASSWORD": PASSWORD}).validate()            # токены создаются на странице /boards
+        with self.assertRaises(SystemExit):
+            server.Config({"DASH_INGEST_TOKEN": "short", "DASH_VIEW_PASSWORD": PASSWORD}).validate()
+
     def test_refuses_weak_secrets(self):
         with self.assertRaises(SystemExit):
             server.Config({"DASH_INGEST_TOKEN": "short", "DASH_VIEW_PASSWORD": PASSWORD}).validate()

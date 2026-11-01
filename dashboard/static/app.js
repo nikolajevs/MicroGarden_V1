@@ -367,7 +367,8 @@
     select.textContent = '';
     for (const d of list) {
       const o = document.createElement('option');
-      o.value = o.textContent = d.device;
+      o.value = d.device;
+      o.textContent = d.name || d.device; // название платы со страницы «Платы», а если его нет, её имя в системе
       select.appendChild(o);
     }
     select.hidden = list.length < 2;
