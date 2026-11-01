@@ -173,6 +173,49 @@ test('связь с платой: нет настроек, правка выкл
   assert.match(old.text, /прошивка/);
 });
 
+// Группы с режимами, как их присылает сервер: в сушке нет света, полива, климата выращивания и цикла
+const MODE_SCHEMA = [
+  { id: 'mode', title: 'Режим работы', fields: [{ type: 'select', param: 'operation_mode', label: 'Режим', options: [[0, 'Выращивание'], [1, 'Сушка']] }] },
+  { id: 'climate', title: 'Климат при выращивании', modes: [0], fields: [{ type: 'number', param: 'temp_target', label: 'Дневная целевая температура' }] },
+  { id: 'drying', title: 'Климат сушки', modes: [1], fields: [{ type: 'number', param: 'drying_temp_target', label: 'Целевая температура' }] },
+  { id: 'light', title: 'Освещение', modes: [0], fields: [{ type: 'time', params: ['led_on_hour', 'led_on_minute'], label: 'Свет включается' }] },
+  { id: 'fans', title: 'Вентиляция', fields: [{ type: 'number', param: 'fan1_min_limit', label: 'Вентилятор 1: минимум' }] },
+];
+
+test('режим платы: сушка — это 1, всё остальное выращивание, как на странице самой платы', () => {
+  assert.deepEqual([0, 1, 2, -1, '1', '0', 'x', null].map(Lib.modeOf), [0, 1, 0, 0, 1, 0, 0, 0]);
+});
+
+test('группы по режиму: в сушке нет света и полива, в выращивании нет климата сушки, а группы без режима видны всегда', () => {
+  const visible = (mode) => MODE_SCHEMA.filter((g) => Lib.groupVisible(g, mode)).map((g) => g.id);
+  assert.deepEqual(visible(0), ['mode', 'climate', 'light', 'fans']);
+  assert.deepEqual(visible(1), ['mode', 'drying', 'fans']);
+  assert.deepEqual(visible(2), ['mode', 'climate', 'light', 'fans'], 'неизвестное число — выращивание, как на плате');
+  for (const unknown of [undefined, null, NaN, '1', 'сушка']) {
+    assert.deepEqual(visible(unknown), ['mode', 'climate', 'drying', 'light', 'fans'], 'режим неизвестен: ничего не прячем: ' + String(unknown));
+  }
+});
+
+test('видимые настройки и правки: что не видно, то не отправляется', () => {
+  assert.deepEqual([...Lib.visibleParams(MODE_SCHEMA, 1)].sort(), ['drying_temp_target', 'fan1_min_limit', 'operation_mode']);
+  assert.deepEqual([...Lib.visibleParams(MODE_SCHEMA, 0)].sort(),
+    ['fan1_min_limit', 'led_on_hour', 'led_on_minute', 'operation_mode', 'temp_target']);
+  const edits = { operation_mode: 1, temp_target: 26, drying_temp_target: 17, led_on_hour: 7, fan1_min_limit: 30 };
+  assert.deepEqual(Lib.visibleEdits(MODE_SCHEMA, edits, 1), { operation_mode: 1, drying_temp_target: 17, fan1_min_limit: 30 });
+  assert.deepEqual(Lib.visibleEdits(MODE_SCHEMA, edits, 0), { operation_mode: 1, temp_target: 26, led_on_hour: 7, fan1_min_limit: 30 });
+  assert.deepEqual(Lib.visibleEdits(MODE_SCHEMA, edits, undefined), edits, 'режим неизвестен: отправляется всё');
+  assert.deepEqual(Lib.visibleEdits(MODE_SCHEMA, {}, 1), {});
+});
+
+test('строка о спрятанном: какие группы не показаны и как их увидеть', () => {
+  assert.equal(Lib.hiddenNote(MODE_SCHEMA, 1),
+    'В режиме сушки не работают и не показаны: Климат при выращивании, Освещение. Чтобы увидеть, выберите режим «Выращивание».');
+  assert.equal(Lib.hiddenNote(MODE_SCHEMA, 0),
+    'В режиме выращивания не работают и не показаны: Климат сушки. Чтобы увидеть, выберите режим «Сушка».');
+  assert.equal(Lib.hiddenNote(MODE_SCHEMA, undefined), '');
+  assert.equal(Lib.hiddenNote([{ id: 'x', title: 'Х', fields: [] }], 1), '');
+});
+
 const PAGE = ['settings.html', 'settings.js'];
 
 test('все элементы, которые ищет скрипт страницы, есть в разметке ровно один раз, встроенного кода нет', () => {
@@ -205,6 +248,20 @@ test('запросы страницы идут с заголовком X-Dash-Ac
   for (const call of script.matchAll(/api\('(\w+)', '([^']+)'/g)) {
     assert.ok(['GET', 'POST'].includes(call[1]) && call[2].startsWith('/api/'), call[0]);
   }
+});
+
+test('страница прячет поля неработающих групп и не отправляет их правки', () => {
+  const script = read('static', 'settings.js');
+  assert.match(script, /Lib\.groupVisible\(entry\.group, mode\)/, 'группы прячутся по режиму');
+  assert.match(script, /'operation_mode' in state\.edits \? state\.edits\.operation_mode : baseValues\(\)\.operation_mode/,
+    'режим берётся из формы, а если его не трогали, то с платы и из ждущего запроса');
+  assert.match(script, /Lib\.changesOf\(Lib\.visibleEdits\(state\.data\.schema, state\.edits, currentMode\(\)\), baseValues\(\)\)/);
+  assert.match(script, /const patch = visibleChanges\(\);/, 'отправляются только правки видимых полей');
+  assert.equal((script.match(/c\.invalid && !c\.hidden/g) || []).length, 2, 'ошибка в спрятанном поле не мешает отправить остальное');
+  const applyAfterEdit = script.match(/function onEdit\(control\) \{[\s\S]*?\n  \}\n/)[0];
+  assert.ok(applyAfterEdit.indexOf('applyMode()') > 0 && applyAfterEdit.indexOf('applyMode()') < applyAfterEdit.indexOf('refreshActions()'),
+    'выбор режима сразу меняет набор полей');
+  assert.match(script, /applyMode\(\);\n  \}\n\n  function refreshActions/, 'после каждого обновления с платы набор полей пересчитывается');
 });
 
 test('схема страницы: каждое поле выбора и числа несёт пределы, а время и дни разбираются библиотекой', () => {

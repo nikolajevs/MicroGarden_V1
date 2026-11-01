@@ -117,24 +117,27 @@ CFG_LOCAL_HI = {"watering_duration": 3600}  # то, что плата может
 CFG_READONLY = ("water_sensor_enabled",)    # плата сообщает, менять нельзя: отключение датчика снимает защиту насоса
 CFG_PAIRS = (("led_min_limit", "led_max_limit", "Мощность лампы"), ("fan1_min_limit", "fan1_max_limit", "Вентилятор 1"),
              ("fan2_min_limit", "fan2_max_limit", "Вентилятор 2"))   # (минимум, максимум, подпись): минимум не больше максимума
-# Как страница показывает настройки: группы и подписи (пределы берутся из CFG_SPECS)
+# Как страница показывает настройки: группы и подписи (пределы берутся из CFG_SPECS). "modes" — при каком режиме
+# платы (operation_mode) группа работает и показывается; без него группа видна всегда. Так же устроена страница
+# самой платы (data-modes и data-mode-only в firmware/data/settings.html), тест сверяет оба списка.
+GROWING, DRYING = 0, 1
 CFG_GROUPS = [
     {"id": "mode", "title": "Режим работы", "fields": [
-        {"type": "select", "param": "operation_mode", "label": "Режим", "options": [[0, "Выращивание"], [1, "Сушка"]],
-         "hint": "В режиме сушки свет и полив выключены."}]},
-    {"id": "climate", "title": "Климат при выращивании", "fields": [
+        {"type": "select", "param": "operation_mode", "label": "Режим", "options": [[GROWING, "Выращивание"], [DRYING, "Сушка"]],
+         "hint": "В режиме сушки свет и полив выключены, поэтому их настройки не показываются."}]},
+    {"id": "climate", "title": "Климат при выращивании", "modes": [GROWING], "fields": [
         {"type": "number", "param": "temp_target", "label": "Дневная целевая температура", "unit": "°C", "step": 0.1},
         {"type": "number", "param": "temp_target_night", "label": "Ночная целевая температура", "unit": "°C", "step": 0.1},
         {"type": "number", "param": "temp_delta", "label": "Гистерезис (дельта ±)", "unit": "°C", "step": 0.1},
         {"type": "number", "param": "hum_target_night", "label": "Ночью: влажность, выше которой вентиляторы разгоняются",
          "unit": "% RH", "step": 1},
         {"type": "number", "param": "hum_band_night", "label": "Ночью: диапазон разгона вентиляторов", "unit": "% RH", "step": 0.1}]},
-    {"id": "drying", "title": "Климат сушки", "fields": [
+    {"id": "drying", "title": "Климат сушки", "modes": [DRYING], "fields": [
         {"type": "number", "param": "drying_temp_target", "label": "Целевая температура", "unit": "°C", "step": 0.1},
         {"type": "number", "param": "drying_temp_delta", "label": "Гистерезис нагрева", "unit": "°C", "step": 0.1},
         {"type": "number", "param": "drying_hum_target", "label": "Целевая влажность", "unit": "% RH", "step": 1},
         {"type": "number", "param": "drying_hum_band", "label": "Диапазон разгона вентиляторов", "unit": "% RH", "step": 0.1}]},
-    {"id": "light", "title": "Освещение", "fields": [
+    {"id": "light", "title": "Освещение", "modes": [GROWING], "fields": [
         {"type": "time", "params": ["led_on_hour", "led_on_minute"], "label": "Свет включается"},
         {"type": "time", "params": ["led_off_hour", "led_off_minute"], "label": "Свет выключается"},
         {"type": "number", "param": "led_min_limit", "label": "Минимальная мощность лампы", "unit": "%", "step": 1},
@@ -147,7 +150,7 @@ CFG_GROUPS = [
     {"id": "heater", "title": "Обогрев", "fields": [
         {"type": "select", "param": "heater_mode", "label": "Режим обогревателя",
          "options": [[0, "Только днём"], [1, "Только ночью"], [2, "Всегда"], [3, "Никогда"]]}]},
-    {"id": "watering", "title": "Автополив", "fields": [
+    {"id": "watering", "title": "Автополив", "modes": [GROWING], "fields": [
         {"type": "days", "param": "watering_days", "label": "Дни полива"},
         {"type": "time", "params": ["watering_hour", "watering_minute"], "label": "Время полива"},
         {"type": "number", "param": "watering_duration", "label": "Длительность полива", "unit": "с", "step": 1,
@@ -158,7 +161,7 @@ CFG_GROUPS = [
         {"type": "number", "param": "rgb_brightness", "label": "Яркость", "unit": "%", "step": 1},
         {"type": "select", "param": "rgb_night_mode", "label": "Ночью",
          "options": [[0, "Как днём"], [1, "Только неисправности"], [2, "Выключен"]]}]},
-    {"id": "cycle", "title": "Цикл выращивания", "fields": [
+    {"id": "cycle", "title": "Цикл выращивания", "modes": [GROWING], "fields": [
         {"type": "date", "param": "start_time", "label": "Дата начала", "hint": "Пустая дата — цикл не начат."}]},
 ]
 
@@ -177,7 +180,8 @@ def _cfg_schema():
                 kind, lo, hi = CFG_SPECS[item["param"]]
                 item.update({"kind": kind, "lo": lo, "hi": hi})
             fields.append(item)
-        groups.append({"id": group["id"], "title": group["title"], "fields": fields})
+        groups.append(dict({"id": group["id"], "title": group["title"], "fields": fields},
+                           **({"modes": group["modes"]} if "modes" in group else {})))
     return groups, labels
 
 
