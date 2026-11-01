@@ -29,6 +29,7 @@
   let busy = false;
   let deviceTouched = false; // имя платы вписал владелец: подсказку не перезаписываем
   let autoOpened = false;    // у человека без плат форма добавления открывается сама, но один раз
+  let addBlocked = false;    // почта не подтверждена: платы пока добавлять нельзя, форма сама не открывается
 
   // Запросы, которые что-то меняют, идут с заголовком X-Dash-Action: чужая страница не может его отправить
   // (сервер не разрешает CORS), поэтому браузер не даст ей зарегистрировать или удалить плату от имени владельца.
@@ -227,7 +228,7 @@
     list.textContent = '';
     data.boards.forEach((board) => list.append(boardCard(board, now)));
     renderShared(now);
-    if (!data.boards.length && !autoOpened) { autoOpened = true; setAddOpen(true, false); }
+    if (!data.boards.length && !autoOpened && !addBlocked) { autoOpened = true; setAddOpen(true, false); }
     syncEmpty();
     if (!deviceTouched && $('new-device') !== document.activeElement) {
       $('new-device').value = Lib.suggestDevice(data.boards.map((board) => board.device));
@@ -380,7 +381,19 @@
   });
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenus(null); });
 
-  api('GET', '/api/me').then((answer) => { me = answer.user; }).catch(() => { /* без имени покажем владельцев всех плат */ }).then(load);
+  // Когда на сервере настроена почта, платы добавляет только человек с подтверждённым адресом (иначе ответ сервера «403»)
+  function showVerifyBanner(answer) {
+    const address = answer.email && (answer.email.pending || answer.email.address);
+    const need = !!answer.mail_enabled && answer.user.role !== 'admin' && !(answer.email && answer.email.verified);
+    addBlocked = need;
+    $('verify-banner').hidden = !need;
+    if (need) {
+      $('verify-text').textContent = address ? 'Чтобы добавлять платы, подтвердите почту ' + address + ': откройте ссылку из письма.'
+        : 'Чтобы добавлять платы, укажите и подтвердите почту.';
+    }
+  }
+
+  api('GET', '/api/me').then((answer) => { me = answer.user; showVerifyBanner(answer); }).catch(() => { /* без имени покажем владельцев всех плат */ }).then(load);
   // Пока открыто подтверждение или идёт переименование, список не перерисовывается: он сбросил бы их
   setInterval(() => { if (!document.hidden && !busy && !document.querySelector('.confirm-bar, .rename')) load(); }, REFRESH_MS);
 })();

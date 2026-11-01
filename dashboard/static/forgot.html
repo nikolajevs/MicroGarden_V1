@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Забыли пароль</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap auth-wrap">
+  <header class="top">
+    <div>
+      <h1>MicroGarden</h1>
+      <p class="sub">Телеметрия плат</p>
+    </div>
+  </header>
+
+  <section class="panel auth-card" aria-labelledby="forgot-title">
+    <h2 id="forgot-title">Забыли пароль</h2>
+    <p id="off" class="empty plain" hidden>На этом сервере восстановление по почте не настроено. Попросите администратора сбросить пароль.</p>
+    <form id="forgot-form" class="auth-form" novalidate>
+      <label class="field">
+        <span class="label">Почта</span>
+        <input class="input" id="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+      </label>
+      <button type="submit" class="btn primary" id="submit">Отправить ссылку</button>
+    </form>
+    <p id="error" class="form-error" role="alert" hidden></p>
+    <p id="done" class="empty" role="status" hidden>Если такой адрес есть в системе, мы отправили на него письмо со ссылкой. Она действует час. Не пришло? Посмотрите в «Спаме».</p>
+    <p class="legend-note">Ссылка придёт на адрес, указанный в записи. Вспомнили пароль? <a href="/login">Войти</a></p>
+  </section>
+</div>
+<script src="/auth-lib.js"></script>
+<script src="/forgot.js"></script>
+</body>
+</html>

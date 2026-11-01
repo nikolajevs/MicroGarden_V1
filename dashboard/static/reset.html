@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Новый пароль</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap auth-wrap">
+  <header class="top">
+    <div>
+      <h1>MicroGarden</h1>
+      <p class="sub">Телеметрия плат</p>
+    </div>
+  </header>
+
+  <section class="panel auth-card" aria-labelledby="reset-title">
+    <h2 id="reset-title">Новый пароль</h2>
+    <p id="checking" class="empty plain">Проверяем ссылку…</p>
+    <form id="reset-form" class="auth-form" novalidate hidden>
+      <label class="field">
+        <span class="label">Новый пароль</span>
+        <input class="input" id="password" type="password" autocomplete="new-password" maxlength="128" required>
+      </label>
+      <label class="field">
+        <span class="label">Пароль ещё раз</span>
+        <input class="input" id="repeat" type="password" autocomplete="new-password" maxlength="128" required>
+      </label>
+      <button type="submit" class="btn primary" id="submit">Сохранить пароль</button>
+    </form>
+    <p id="error" class="form-error" role="alert" hidden></p>
+    <p id="done" class="empty" role="status" hidden>Пароль изменён, все прежние входы закрыты. <a href="/login?reset=1">Войти</a></p>
+    <p id="again" class="legend-note" hidden>Ссылка не работает? <a href="/forgot">Запросить новую</a></p>
+  </section>
+</div>
+<script src="/auth-lib.js"></script>
+<script src="/reset.js"></script>
+</body>
+</html>

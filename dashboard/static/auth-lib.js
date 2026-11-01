@@ -1,10 +1,12 @@
-// Страницы входа, регистрации, аккаунта и администратора: чистые функции без DOM; их проверяет
-// dashboard/tests/auth.test.cjs. Правила имени и пароля такие же, как на сервере (server.py: clean_username,
-// clean_password), сервер всё равно проверяет их ещё раз.
+// Страницы входа, регистрации, восстановления пароля, аккаунта и администратора: чистые функции без DOM; их проверяет
+// dashboard/tests/auth.test.cjs. Правила имени, почты и пароля такие же, как на сервере (server.py: clean_username,
+// clean_email, clean_password), сервер всё равно проверяет их ещё раз.
 (function () {
   'use strict';
 
   const USERNAME_RE = /^[A-Za-z0-9_.-]{3,32}$/;
+  const EMAIL_RE = /^[a-z0-9][a-z0-9._%+-]{0,63}@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+  const EMAIL_MAX = 254;
   const PASSWORD_MIN = 10;
   const PASSWORD_MAX = 128;
   const RESERVED = ['admin', 'administrator', 'root', 'system', 'support', 'api', 'null'];
@@ -14,6 +16,15 @@
     if (!USERNAME_RE.test(name)) return { ok: false, error: 'Имя: от 3 до 32 символов, латиница, цифры, _ . -' };
     if (RESERVED.includes(name.toLowerCase())) return { ok: false, error: 'Это имя зарезервировано: выберите другое' };
     return { ok: true, username: name };
+  }
+
+  // Адрес почты хранится в нижнем регистре; кириллица в адресе пока не поддерживается
+  function validateEmail(value) {
+    const email = String(value == null ? '' : value).trim().toLowerCase();
+    if (email.length > EMAIL_MAX || !EMAIL_RE.test(email) || email.includes('..') || email.split('@')[0].endsWith('.')) {
+      return { ok: false, error: 'Почта: нужен адрес вида name@example.com (латиница)' };
+    }
+    return { ok: true, email };
   }
 
   function validatePassword(value, username) {
@@ -28,14 +39,22 @@
     return { ok: true, password };
   }
 
-  // Форма регистрации: имя, пароль и повтор пароля (повтор проверяется только на странице)
-  function validateRegistration(username, password, repeat) {
+  // Форма регистрации: имя, почта (только если сервер её просит: тогда email передан), пароль и повтор пароля
+  // (повтор проверяется только на странице)
+  function validateRegistration(username, password, repeat, email) {
     const name = validateUsername(username);
     if (!name.ok) return name;
+    let mail = null;
+    if (email !== undefined) {
+      mail = validateEmail(email);
+      if (!mail.ok) return mail;
+    }
     const pass = validatePassword(password, name.username);
     if (!pass.ok) return pass;
     if (password !== repeat) return { ok: false, error: 'Пароли не совпадают' };
-    return { ok: true, username: name.username, password: pass.password };
+    const result = { ok: true, username: name.username, password: pass.password };
+    if (mail) result.email = mail.email;
+    return result;
   }
 
   // Смена пароля: новый пароль проверяется по тем же правилам, а повтор должен совпасть
@@ -47,13 +66,35 @@
     return { ok: true, old: oldPassword, new: pass.password };
   }
 
+  // Новый пароль по ссылке из письма: имени на странице нет, поэтому сравнивать с ним нечего
+  function validateNewPassword(password, repeat) {
+    const pass = validatePassword(password, '');
+    if (!pass.ok) return pass;
+    if (password !== repeat) return { ok: false, error: 'Пароли не совпадают' };
+    return { ok: true, password: pass.password };
+  }
+
+  // Привязка или смена почты в аккаунте: адрес и текущий пароль
+  function validateEmailChange(email, password) {
+    const mail = validateEmail(email);
+    if (!mail.ok) return mail;
+    if (!password) return { ok: false, error: 'Введите пароль' };
+    return { ok: true, email: mail.email, password };
+  }
+
+  // Ссылка из письма выглядит как https://сайт/reset#token=...; значение после «#» в журналы сервера и в Referer не попадает
+  function tokenFromHash(hash) {
+    const match = /^#token=([A-Za-z0-9_-]{20,64})$/.exec(String(hash == null ? '' : hash));
+    return match ? match[1] : '';
+  }
+
   // Куда вести после входа: только путь на этом же сайте. Адрес чужого сайта, «//хост», обратный слэш,
   // управляющие символы и сами страницы входа заменяются главной (защита от перенаправления на чужой сайт).
   function safeNext(value) {
     if (typeof value !== 'string' || value.length > 300) return '/';
     if (!value.startsWith('/') || value.startsWith('//') || /[\\\u0000-\u001f\u007f]/.test(value)) return '/';
     const path = value.split(/[?#]/)[0];
-    if (path === '/login' || path === '/register' || path === '/login.html' || path === '/register.html') return '/';
+    if (['/login', '/register', '/forgot'].some((page) => path === page || path === page + '.html')) return '/';
     return value;
   }
 
@@ -83,6 +124,7 @@
       statusText: item.disabled ? 'Заблокирован' : admin ? 'Администратор' : 'Активен',
       lastLogin: 'Вход: ' + agoText(item.last_login_at, now),
       boards: item.boards + ' ' + plural(item.boards, 'плата', 'платы', 'плат'),
+      email: item.email ? 'Почта: ' + item.email + (item.email_verified ? ' (подтверждена)' : ' (не подтверждена)') : 'Почта не указана',
       canBlock: !admin && !item.disabled,
       canUnblock: !admin && item.disabled,
       canReset: !admin,
@@ -90,8 +132,25 @@
     };
   }
 
-  const api = { USERNAME_RE, PASSWORD_MIN, PASSWORD_MAX, validateUsername, validatePassword, validateRegistration,
-                validatePasswordChange, safeNext, agoText, plural, describeUser };
+  // Что показать про почту на странице «Аккаунт». state — раздел email из /api/me: {address, verified, pending}:
+  // адрес записи, подтверждён ли он, и адрес, который ждёт подтверждения по ссылке из письма.
+  function describeEmail(state) {
+    const address = state && state.address;
+    const pending = state && state.pending;
+    if (!address && !pending) {
+      return { status: 'none', text: 'Почта не указана', note: 'Укажите адрес: на него придёт ссылка для подтверждения, и по нему можно будет восстановить пароль.', canResend: false };
+    }
+    if (state.verified) {
+      const note = pending && pending !== address ? 'Ждём подтверждения нового адреса ' + pending + ': откройте ссылку из письма.' : '';
+      return { status: 'ok', text: address + ' · подтверждена', note, canResend: !!note };
+    }
+    return { status: 'wait', text: (address || pending) + ' · не подтверждена',
+      note: 'Откройте ссылку из письма, чтобы подтвердить адрес. Пока он не подтверждён, добавлять платы нельзя.', canResend: true };
+  }
+
+  const api = { USERNAME_RE, EMAIL_RE, EMAIL_MAX, PASSWORD_MIN, PASSWORD_MAX, validateUsername, validateEmail, validatePassword,
+                validateRegistration, validatePasswordChange, validateNewPassword, validateEmailChange, tokenFromHash,
+                safeNext, agoText, plural, describeUser, describeEmail };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.AuthLib = api;
 })();

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Подтверждение почты</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap auth-wrap">
+  <header class="top">
+    <div>
+      <h1>MicroGarden</h1>
+      <p class="sub">Телеметрия плат</p>
+    </div>
+  </header>
+
+  <section class="panel auth-card" aria-labelledby="verify-title">
+    <h2 id="verify-title">Подтверждение почты</h2>
+    <p id="ask" class="lead" hidden>Нажмите кнопку, чтобы подтвердить адрес почты своей записи в MicroGarden.</p>
+    <button type="button" class="btn primary" id="confirm" hidden>Подтвердить почту</button>
+    <p id="error" class="form-error" role="alert" hidden></p>
+    <p id="done" class="empty" role="status" hidden>Почта <b id="address"></b> подтверждена. <a href="/boards">Перейти к платам</a></p>
+  </section>
+</div>
+<script src="/auth-lib.js"></script>
+<script src="/verify.js"></script>
+</body>
+</html>

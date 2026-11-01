@@ -27,6 +27,29 @@
     <a class="btn primary" href="/boards">Мои платы</a>
   </section>
 
+  <section class="panel" aria-labelledby="email-title">
+    <h2 id="email-title">Почта</h2>
+    <p id="email-off" class="legend-note" hidden>На этом сервере почта не настроена: подтвердить адрес и восстановить пароль по почте нельзя.</p>
+    <div id="email-box" hidden>
+      <p id="email-state" class="lead"></p>
+      <p id="email-note" class="legend-note" hidden></p>
+      <button type="button" class="btn" id="email-resend" hidden>Отправить письмо ещё раз</button>
+      <form id="email-form" class="auth-form" novalidate>
+        <label class="field">
+          <span class="label">Новый адрес</span>
+          <input class="input" id="email-new" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+        </label>
+        <label class="field">
+          <span class="label">Текущий пароль</span>
+          <input class="input" id="email-password" type="password" autocomplete="current-password" maxlength="128" required>
+        </label>
+        <button type="submit" class="btn primary" id="email-submit">Сохранить и отправить письмо</button>
+      </form>
+      <p id="email-error" class="form-error" role="alert" hidden></p>
+      <p id="email-done" class="empty" role="status" hidden>Письмо со ссылкой отправлено. Оно может прийти не сразу: посмотрите и в «Спаме».</p>
+    </div>
+  </section>
+
   <section class="panel" aria-labelledby="password-title">
     <h2 id="password-title">Сменить пароль</h2>
     <p id="admin-note" class="legend-note" hidden>Пароль администратора задаётся в файле .env на сервере (DASH_VIEW_PASSWORD) и здесь не меняется.</p>

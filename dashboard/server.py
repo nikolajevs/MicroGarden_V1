@@ -12,6 +12,10 @@
 платы свой токен приёма. Данные принимаются только от зарегистрированных плат; человек видит только
 свои платы, администратор (DASH_VIEW_USER, пароль из .env) видит все. Токен из DASH_INGEST_TOKEN, если
 он задан, подхватывается сам как общий токен администратора.
+
+Почта (необязательна): если в .env заданы DASH_SMTP_HOST, DASH_MAIL_FROM и DASH_PUBLIC_URL, регистрация просит адрес
+и присылает ссылку для его подтверждения, а забытый пароль восстанавливается по ссылке из письма. Письма уходят через
+внешний SMTP-сервис в фоновом потоке. `python server.py test-mail адрес` отправляет пробное письмо.
 """
 import base64
 import csv
@@ -22,13 +26,19 @@ import json
 import logging
 import math
 import os
+import queue
 import re
 import secrets
+import smtplib
+import socket
 import sqlite3
+import ssl
 import sys
 import threading
 import time
 from contextlib import closing
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
@@ -69,6 +79,22 @@ MAX_USERS = 200
 REGISTRATIONS_PER_HOUR = 10    # попыток регистрации с одного адреса
 ADMIN_PASSWORD_MARK = "env"    # у администратора пароль берётся из .env, а не из базы
 _SCRYPT_GATE = threading.Semaphore(2)   # одновременно не больше двух хешей: каждый занимает около 16 МБ
+
+# Почта. Свой почтовый сервер на VPS не годится: у его адреса нет обратной записи (PTR), SPF и DKIM, и письма уходят в
+# спам. Поэтому письма отправляются через внешний SMTP-сервис, его данные лежат в .env (DASH_SMTP_*).
+EMAIL_RE = re.compile(r"[a-z0-9][a-z0-9._%+-]{0,63}@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}")
+EMAIL_MAX = 254
+PUBLIC_URL_RE = re.compile(r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?")   # адрес сайта без пути: к нему дописываются /verify и /reset
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+MAIL_TOKEN_TTL = {"email": 86400, "reset": 3600}   # срок ссылки из письма: подтверждение адреса сутки, сброс пароля час
+MAIL_PATHS = {"email": "/verify", "reset": "/reset"}
+MAIL_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,64}")
+MAIL_PER_ADDRESS = 3           # писем на один адрес за час: чужой адрес нельзя заваливать письмами через форму
+MAIL_PER_IP = 10               # запросов, после которых уходит письмо, с одного адреса за час
+MAIL_DAILY_LIMIT = 100         # писем в сутки на весь сервер: бесплатные тарифы сервисов почты тоже ограничены
+MAIL_QUEUE_MAX = 50
+MAIL_ATTEMPTS = 2              # доставка письма пробуется дважды: сбой сети бывает коротким
+SMTP_TIMEOUT = 20
 
 # Числовые поля показаний: имя -> (минимум, максимум, целое). Всё, что вне диапазона или не
 # число, отбрасывается: плата с повреждённым ответом датчика не должна ломать графики.
@@ -267,15 +293,20 @@ PAGES = {
     "/settings": "settings.html", "/settings.html": "settings.html",
 }
 ADMIN_PAGES = {"/admin": "admin.html", "/admin.html": "admin.html"}
-# Страницы входа и регистрации открыты всем
+# Страницы входа и регистрации открыты всем; вошедшего с них уводит на главную
 PUBLIC_PAGES = {"/login": "login.html", "/login.html": "login.html",
-                "/register": "register.html", "/register.html": "register.html"}
+                "/register": "register.html", "/register.html": "register.html",
+                "/forgot": "forgot.html", "/forgot.html": "forgot.html"}
+# Страницы по ссылкам из писем: открываются кому угодно и без перенаправления, вошёл человек или нет. Сама ссылка лежит
+# после «#», поэтому в журналы сервера и в Referer она не попадает.
+OPEN_PAGES = {"/verify": "verify.html", "/reset": "reset.html"}
 # Скрипты и стили открыты: в них нет секретов, а странице входа они нужны до входа
 ASSETS = {
     "/style.css": ("style.css", CSS),
     "/app.js": ("app.js", JS), "/alerts.js": ("alerts.js", JS),
     "/boards-lib.js": ("boards-lib.js", JS), "/boards.js": ("boards.js", JS),
     "/auth-lib.js": ("auth-lib.js", JS), "/login.js": ("login.js", JS), "/register.js": ("register.js", JS),
+    "/forgot.js": ("forgot.js", JS), "/reset.js": ("reset.js", JS), "/verify.js": ("verify.js", JS),
     "/account.js": ("account.js", JS), "/admin.js": ("admin.js", JS),
     "/settings-lib.js": ("settings-lib.js", JS), "/settings.js": ("settings.js", JS),
 }
@@ -344,9 +375,59 @@ class Config:
         self.max_boards_per_user = int(env.get("DASH_MAX_BOARDS_PER_USER", str(MAX_BOARDS_PER_USER)))
         self.session_days = int(env.get("DASH_SESSION_DAYS", str(SESSION_DAYS)))
         self.cookie_secure = env.get("DASH_COOKIE_SECURE", "") == "1"  # иначе Secure ставится по заголовку X-Forwarded-Proto
+        # Почта: все настройки необязательны, но если задан сервер SMTP, нужны ещё отправитель и адрес сайта (для ссылок в письмах)
+        self.public_url = env.get("DASH_PUBLIC_URL", "").strip().rstrip("/")
+        self.smtp_host = env.get("DASH_SMTP_HOST", "").strip()
+        self.smtp_port = int(env.get("DASH_SMTP_PORT", "587"))
+        self.smtp_user = env.get("DASH_SMTP_USER", "")
+        self.smtp_password = env.get("DASH_SMTP_PASSWORD", "")
+        self.smtp_security = env.get("DASH_SMTP_SECURITY", "").strip().lower()   # starttls | ssl | none; пусто: порт 465 — ssl, иначе starttls
+        self.mail_from = env.get("DASH_MAIL_FROM", "").strip()
+        self.mail_reply_to = env.get("DASH_MAIL_REPLY_TO", "").strip()
+        self.mail_daily_limit = int(env.get("DASH_MAIL_DAILY_LIMIT", str(MAIL_DAILY_LIMIT)))
+
+    @property
+    def mail_enabled(self):
+        return bool(self.smtp_host and self.mail_from and self.public_url)
+
+    @property
+    def smtp_mode(self):
+        return self.smtp_security or ("ssl" if self.smtp_port == 465 else "starttls")
+
+    def mail_problems(self):
+        """Что не так с настройками почты (пустой список, если всё в порядке или почта не настроена совсем)."""
+        problems = []
+        if self.public_url:
+            if not PUBLIC_URL_RE.fullmatch(self.public_url):
+                problems.append("DASH_PUBLIC_URL: адрес сайта вида https://dash.dvinsk.lat (без пути и без слэша в конце)")
+            elif self.public_url.startswith("http://") and urlsplit(self.public_url).hostname not in LOCAL_HOSTS:
+                problems.append("DASH_PUBLIC_URL: ссылки из писем должны вести на https (http допустим только для localhost)")
+        if not (self.smtp_host or self.mail_from or self.smtp_user or self.smtp_password):
+            return problems
+        if not self.smtp_host:
+            problems.append("DASH_SMTP_HOST: задан отправитель или логин, но нет сервера SMTP")
+        if not self.public_url:
+            problems.append("DASH_PUBLIC_URL: для ссылок в письмах нужен адрес сайта, например https://dash.dvinsk.lat")
+        if not 1 <= self.smtp_port <= 65535:
+            problems.append("DASH_SMTP_PORT: порт от 1 до 65535")
+        if self.smtp_security not in ("", "starttls", "ssl", "none"):
+            problems.append("DASH_SMTP_SECURITY: starttls, ssl или none")
+        if self.smtp_mode == "none" and self.smtp_host not in LOCAL_HOSTS:
+            problems.append("DASH_SMTP_SECURITY=none допустим только для localhost: пароль нельзя отправлять открытым текстом")
+        if bool(self.smtp_user) != bool(self.smtp_password):
+            problems.append("DASH_SMTP_USER и DASH_SMTP_PASSWORD задаются вместе")
+        for name, value in (("DASH_MAIL_FROM", self.mail_from), ("DASH_MAIL_REPLY_TO", self.mail_reply_to)):
+            if name == "DASH_MAIL_REPLY_TO" and not value:
+                continue
+            address = parseaddr(value)[1].lower()
+            if "\n" in value or "\r" in value or not EMAIL_RE.fullmatch(address):
+                problems.append("%s: адрес вида name@example.com или MicroGarden <noreply@example.com>" % name)
+        if not 1 <= self.mail_daily_limit <= 100000:
+            problems.append("DASH_MAIL_DAILY_LIMIT: от 1 до 100000")
+        return problems
 
     def validate(self):
-        problems = []
+        problems = self.mail_problems()
         # Токен из .env необязателен: токены приёма создаются на странице /boards.
         if self.ingest_token and len(self.ingest_token) < 24:
             problems.append("DASH_INGEST_TOKEN: нужен токен не короче 24 символов (или уберите его из .env)")
@@ -415,7 +496,14 @@ CREATE TABLE IF NOT EXISTS users(
   pass_hash TEXT NOT NULL,            -- scrypt$N$r$p$соль$хеш; у администратора 'env': его пароль в .env
   role TEXT NOT NULL DEFAULT 'user',  -- 'admin' (владелец сервера) или 'user'
   created_at INTEGER NOT NULL, last_login_at INTEGER, reg_ip TEXT,
-  disabled INTEGER NOT NULL DEFAULT 0);
+  disabled INTEGER NOT NULL DEFAULT 0);   -- столбцы email и email_verified_at добавляет Store._migrate_email
+CREATE TABLE IF NOT EXISTS mail_tokens(
+  token_hash TEXT PRIMARY KEY,        -- SHA-256 значения из ссылки в письме; самого значения в базе нет
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,                 -- 'email' (подтвердить адрес) или 'reset' (задать новый пароль)
+  email TEXT NOT NULL,                -- адрес, на который ушло письмо
+  created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS mail_tokens_user ON mail_tokens(user_id, kind);
 CREATE TABLE IF NOT EXISTS sessions(
   token_hash TEXT PRIMARY KEY,        -- SHA-256 значения из cookie; самого значения в базе нет
   user_id INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, ip TEXT);
@@ -533,6 +621,23 @@ def clean_password(value, username=""):
     return value
 
 
+def clean_email(value):
+    """Адрес почты в нижнем регистре. Разбор строгий: в заголовок письма не должно попасть лишнее, а опечатки вроде
+    «name@com» отсеиваются сразу. Адреса с кириллицей в домене пока не поддерживаются."""
+    email = value.strip().lower() if isinstance(value, str) else ""
+    if len(email) > EMAIL_MAX or not EMAIL_RE.fullmatch(email) or ".." in email or email.partition("@")[0].endswith("."):
+        raise ValueError("Почта: нужен адрес вида name@example.com (латиница)")
+    return email
+
+
+_EMAIL_IN_TEXT = re.compile(r"[^\s<>\"',;:()]+@[^\s<>\"',;:()]+")
+
+
+def redact_emails(text):
+    """Ответы SMTP-серверов повторяют адрес получателя; в журнал адреса людей не пишем."""
+    return _EMAIL_IN_TEXT.sub("<адрес>", str(text))
+
+
 def pick_bucket(span, target=500):
     need = span / target
     for bucket in BUCKETS:
@@ -559,6 +664,7 @@ class Store:
             cx.executescript(SCHEMA)
         self._migrate_boards()
         self._migrate_accounts()
+        self._migrate_email()
 
     def _migrate_boards(self):
         """При первом запуске с реестром плат уже присылавшие данные платы вносятся в него сами, чтобы
@@ -576,6 +682,18 @@ class Store:
         with self._write_lock, closing(self._connect()) as cx, cx:
             if "owner_id" not in [row[1] for row in cx.execute("PRAGMA table_info(boards)")]:
                 cx.execute("ALTER TABLE boards ADD COLUMN owner_id INTEGER")
+
+    def _migrate_email(self):
+        """У человека появляются адрес почты и время его подтверждения. Подтверждённый адрес принадлежит одной записи
+        (уникальный индекс), а неподтверждённый может быть заявлен несколькими: кто подтвердит первым, тот и владелец."""
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            columns = [row[1] for row in cx.execute("PRAGMA table_info(users)")]
+            if "email" not in columns:
+                cx.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            if "email_verified_at" not in columns:
+                cx.execute("ALTER TABLE users ADD COLUMN email_verified_at INTEGER")
+            cx.execute("CREATE INDEX IF NOT EXISTS users_email ON users(email)")
+            cx.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_verified ON users(email) WHERE email_verified_at IS NOT NULL")
 
     def _connect(self):
         cx = sqlite3.connect(self.path, timeout=10)
@@ -1001,8 +1119,9 @@ class Store:
         with self._write_lock, closing(self._connect()) as cx, cx:
             cx.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('registration', ?)", ("open" if is_open else "closed",))
 
-    def register_user(self, username, password, ip=None, now=None):
-        """Новый человек. -> {"id", "username", "role"}. Имена различаются без учёта регистра."""
+    def register_user(self, username, password, ip=None, now=None, email=None):
+        """Новый человек. -> {"id", "username", "role"}. Имена различаются без учёта регистра. email (уже проверенный
+        clean_email) записывается как неподтверждённый; подтверждает его ссылка из письма."""
         username = clean_username(username)
         password = clean_password(password, username)
         now = int(time.time() if now is None else now)
@@ -1010,20 +1129,26 @@ class Store:
         with self._write_lock, closing(self._connect()) as cx, cx:
             if cx.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= self.max_users:
                 raise Conflict("регистрация закрыта: на сервере уже %d человек" % self.max_users)
+            if email and cx.execute("SELECT 1 FROM users WHERE email=? AND email_verified_at IS NOT NULL", (email,)).fetchone():
+                raise Conflict("эта почта уже привязана к другой записи: войдите или восстановите пароль")
             try:
-                user_id = cx.execute("INSERT INTO users(username, pass_hash, role, created_at, reg_ip) VALUES (?, ?, 'user', ?, ?)",
-                                     (username, pass_hash, now, ip)).lastrowid
+                user_id = cx.execute("INSERT INTO users(username, pass_hash, role, created_at, reg_ip, email) VALUES (?, ?, 'user', ?, ?, ?)",
+                                     (username, pass_hash, now, ip, email or None)).lastrowid
             except sqlite3.IntegrityError:
                 raise Conflict("имя %s уже занято" % username) from None
         return {"id": user_id, "username": username, "role": "user"}
 
     def login_user(self, username, password, now=None):
-        """-> {"id", "username", "role"} или None (нет такого, неверный пароль или заблокирован). Время ответа
-        не зависит от того, есть ли такое имя."""
+        """-> {"id", "username", "role"} или None (нет такого, неверный пароль или заблокирован). Вместо имени можно
+        назвать подтверждённую почту. Время ответа не зависит от того, есть ли такое имя."""
         now = int(time.time() if now is None else now)
         with closing(self._connect()) as cx:
-            row = cx.execute("SELECT id, username, pass_hash, role, disabled FROM users WHERE username=?",
-                             (username,)).fetchone()
+            if "@" in username:   # в имени @ быть не может, поэтому почта и имя не путаются
+                row = cx.execute("SELECT id, username, pass_hash, role, disabled FROM users WHERE email=? AND email_verified_at IS NOT NULL",
+                                 (username.strip().lower(),)).fetchone()
+            else:
+                row = cx.execute("SELECT id, username, pass_hash, role, disabled FROM users WHERE username=?",
+                                 (username,)).fetchone()
         if row is None:
             verify_password(password, dummy_hash())
             return None
@@ -1072,6 +1197,7 @@ class Store:
         now = int(time.time() if now is None else now)
         with self._write_lock, closing(self._connect()) as cx, cx:
             cx.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+            cx.execute("DELETE FROM mail_tokens WHERE expires_at <= ?", (now,))
 
     def change_password(self, user_id, old_password, new_password, keep_token=None):
         """Смена своего пароля: остальные сессии этого человека закрываются, текущая остаётся.
@@ -1089,23 +1215,152 @@ class Store:
         with self._write_lock, closing(self._connect()) as cx, cx:
             cx.execute("UPDATE users SET pass_hash=? WHERE id=?", (new_hash, user_id))
             cx.execute("DELETE FROM sessions WHERE user_id=? AND token_hash != ?", (user_id, keep))
+            cx.execute("DELETE FROM mail_tokens WHERE user_id=? AND kind='reset'", (user_id,))   # письмо о сбросе, пришедшее раньше, теряет силу
+
+    # --- почта: адрес, подтверждение, восстановление пароля ---------------------------------
+    @staticmethod
+    def _mail_hash(token):
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def issue_mail_token(self, user_id, kind, email, now=None):
+        """Одноразовая ссылка для письма: kind 'email' (подтвердить адрес) или 'reset' (задать новый пароль).
+        -> значение для ссылки; в базе только его отпечаток. Прежняя неиспользованная ссылка того же вида гаснет."""
+        now = int(time.time() if now is None else now)
+        token = secrets.token_urlsafe(32)
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            cx.execute("DELETE FROM mail_tokens WHERE user_id=? AND kind=?", (user_id, kind))
+            cx.execute("INSERT INTO mail_tokens(token_hash, user_id, kind, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+                       (self._mail_hash(token), user_id, kind, email, now, now + MAIL_TOKEN_TTL[kind]))
+        return token
+
+    def email_state(self, user_id, now=None):
+        """-> {"address", "verified", "pending"}: адрес записи, подтверждён ли он, и адрес, который ждёт подтверждения."""
+        now = int(time.time() if now is None else now)
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT email, email_verified_at FROM users WHERE id=?", (user_id,)).fetchone()
+            sent = cx.execute("SELECT email FROM mail_tokens WHERE user_id=? AND kind='email' AND expires_at>?",
+                              (user_id, now)).fetchone()
+        address, verified = (row[0], bool(row[1])) if row else (None, False)
+        return {"address": address, "verified": verified,
+                "pending": sent[0] if sent else (address if address and not verified else None)}
+
+    def email_verified(self, user_id):
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT email_verified_at FROM users WHERE id=?", (user_id,)).fetchone()
+        return bool(row and row[0])
+
+    def set_email(self, user_id, email, password, now=None):
+        """Привязывает почту или меняет её после проверки пароля. Подтверждённый адрес действует, пока не подтверждён новый.
+        -> значение для ссылки в письме."""
+        email = clean_email(email)
+        now = int(time.time() if now is None else now)
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT pass_hash, email, email_verified_at FROM users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise ValueError("человек не найден")
+        pass_hash, current, verified = row
+        if not isinstance(password, str) or not (self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK
+                                                 else verify_password(password, pass_hash)):
+            raise WrongPassword("пароль неверен")
+        if verified and current == email:
+            raise Conflict("этот адрес уже подтверждён")
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            if cx.execute("SELECT 1 FROM users WHERE email=? AND email_verified_at IS NOT NULL AND id != ?", (email, user_id)).fetchone():
+                raise Conflict("эта почта уже привязана к другой записи")
+            if not verified:
+                cx.execute("UPDATE users SET email=? WHERE id=?", (email, user_id))   # подтверждать пока нечего: адрес меняется сразу
+        return self.issue_mail_token(user_id, "email", email, now)
+
+    def resend_verification(self, user_id, now=None):
+        """Новая ссылка на тот адрес, который ждёт подтверждения. -> (адрес, ссылка) или None, если ждать нечего."""
+        state = self.email_state(user_id, now)
+        if not state["pending"]:
+            return None
+        return state["pending"], self.issue_mail_token(user_id, "email", state["pending"], now)
+
+    def confirm_email(self, token, now=None):
+        """Ссылка «подтвердить почту». -> {"email", "username"} или None (нет такой ссылки, она устарела или человек
+        заблокирован). Адрес становится подтверждённым, а чужие неподтверждённые заявки на него снимаются."""
+        now = int(time.time() if now is None else now)
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            row = cx.execute("SELECT t.user_id, t.email, t.expires_at, u.disabled, u.username FROM mail_tokens t JOIN users u ON u.id=t.user_id"
+                             " WHERE t.token_hash=? AND t.kind='email'", (self._mail_hash(token),)).fetchone()
+            if row is None or row[2] <= now or row[3]:
+                return None
+            user_id, email, username = row[0], row[1], row[4]
+            taken = cx.execute("SELECT 1 FROM users WHERE email=? AND email_verified_at IS NOT NULL AND id != ?",
+                               (email, user_id)).fetchone() is not None
+            if not taken:
+                cx.execute("UPDATE users SET email=?, email_verified_at=? WHERE id=?", (email, now, user_id))
+                cx.execute("UPDATE users SET email=NULL WHERE email=? AND id != ? AND email_verified_at IS NULL", (email, user_id))
+                cx.execute("DELETE FROM mail_tokens WHERE kind='email' AND email=? AND user_id != ?", (email, user_id))
+            cx.execute("DELETE FROM mail_tokens WHERE user_id=? AND kind='email'", (user_id,))
+        if taken:   # исключение вне транзакции: иначе откатилось бы и удаление ссылки
+            raise Conflict("эта почта уже подтверждена другой записью")
+        return {"email": email, "username": username}
+
+    def find_reset_targets(self, email):
+        """Чьи записи восстанавливаются по этому адресу: подтверждённая одна (адрес принадлежит ей), иначе все, кто его
+        заявил, не больше трёх, новые первыми. Письмо придёт настоящему владельцу адреса, и свою запись он узнает по
+        имени в письме: чужая заявка не должна закрывать ему восстановление. Администратор (пароль в .env) и
+        заблокированные не восстанавливаются. -> [{"id", "username"}]."""
+        with closing(self._connect()) as cx:
+            rows = cx.execute("SELECT id, username, email_verified_at IS NOT NULL FROM users WHERE email=? AND disabled=0"
+                              " AND pass_hash != ? ORDER BY email_verified_at IS NULL, id DESC LIMIT 3",
+                              (email, ADMIN_PASSWORD_MARK)).fetchall()
+        if rows and rows[0][2]:
+            rows = rows[:1]
+        return [{"id": row[0], "username": row[1]} for row in rows]
+
+    def _reset_row(self, token, now):
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT t.user_id, t.email, t.expires_at, u.username FROM mail_tokens t JOIN users u ON u.id=t.user_id"
+                             " WHERE t.token_hash=? AND t.kind='reset' AND u.disabled=0", (self._mail_hash(token),)).fetchone()
+        return row if row and row[2] > now else None
+
+    def check_reset_token(self, token, now=None):
+        return self._reset_row(token, int(time.time() if now is None else now)) is not None
+
+    def reset_with_token(self, token, new_password, now=None):
+        """Новый пароль по ссылке из письма. -> {"username"} или None (ссылка недействительна). Слабый пароль отклоняется
+        до того, как ссылка израсходована. Все входы закрываются, а адрес, на который пришла ссылка, считается подтверждённым."""
+        now = int(time.time() if now is None else now)
+        row = self._reset_row(token, now)
+        if row is None:
+            return None
+        user_id, email, _, username = row
+        new_hash = hash_password(clean_password(new_password, username))
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            if cx.execute("DELETE FROM mail_tokens WHERE token_hash=? AND kind='reset'", (self._mail_hash(token),)).rowcount != 1:
+                return None   # ссылкой успели воспользоваться
+            cx.execute("UPDATE users SET pass_hash=? WHERE id=?", (new_hash, user_id))
+            cx.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+            owner = cx.execute("SELECT email, email_verified_at FROM users WHERE id=?", (user_id,)).fetchone()
+            taken = cx.execute("SELECT 1 FROM users WHERE email=? AND email_verified_at IS NOT NULL AND id != ?", (email, user_id)).fetchone()
+            if owner and owner[0] == email and not owner[1] and not taken:
+                cx.execute("UPDATE users SET email_verified_at=? WHERE id=?", (now, user_id))
+                cx.execute("UPDATE users SET email=NULL WHERE email=? AND id != ? AND email_verified_at IS NULL", (email, user_id))
+                cx.execute("DELETE FROM mail_tokens WHERE kind='email' AND email=?", (email,))
+        return {"username": username}
 
     # --- администратор: люди ---------------------------------------------------------------
+    _USER_COLUMNS = ("u.id, u.username, u.role, u.created_at, u.last_login_at, u.disabled, u.reg_ip,"
+                     " (SELECT COUNT(*) FROM boards b WHERE b.owner_id=u.id), u.email, u.email_verified_at")
+
     @staticmethod
     def _user_item(row):
-        user_id, name, role, created, last_login, disabled, reg_ip, boards = row
+        user_id, name, role, created, last_login, disabled, reg_ip, boards, email, verified = row
         return {"id": user_id, "username": name, "role": role, "created_at": created, "last_login_at": last_login,
-                "disabled": bool(disabled), "reg_ip": reg_ip, "boards": boards}
+                "disabled": bool(disabled), "reg_ip": reg_ip, "boards": boards, "email": email,
+                "email_verified": bool(verified)}
 
     def list_users(self):
         with closing(self._connect()) as cx:
-            rows = cx.execute("SELECT u.id, u.username, u.role, u.created_at, u.last_login_at, u.disabled, u.reg_ip,"
-                              " (SELECT COUNT(*) FROM boards b WHERE b.owner_id=u.id) FROM users u ORDER BY u.id").fetchall()
+            rows = cx.execute("SELECT %s FROM users u ORDER BY u.id" % self._USER_COLUMNS).fetchall()
         return [self._user_item(row) for row in rows]
 
     def _user_row(self, cx, user_id):
-        return cx.execute("SELECT u.id, u.username, u.role, u.created_at, u.last_login_at, u.disabled, u.reg_ip,"
-                          " (SELECT COUNT(*) FROM boards b WHERE b.owner_id=u.id) FROM users u WHERE u.id=?", (user_id,)).fetchone()
+        return cx.execute("SELECT %s FROM users u WHERE u.id=?" % self._USER_COLUMNS, (user_id,)).fetchone()
 
     def set_user_disabled(self, user_id, disabled):
         """Блокировка: входить нельзя, сессии закрыты, платы перестают принимать данные. -> запись или None."""
@@ -1132,6 +1387,7 @@ class Store:
                 raise Conflict("пароль администратора задаётся в файле .env на сервере")
             cx.execute("UPDATE users SET pass_hash=? WHERE id=?", (pass_hash, user_id))
             cx.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+            cx.execute("DELETE FROM mail_tokens WHERE user_id=? AND kind='reset'", (user_id,))
         return temp
 
     def delete_user(self, user_id):
@@ -1145,6 +1401,7 @@ class Store:
             for (device,) in cx.execute("SELECT device FROM boards WHERE owner_id=?", (user_id,)).fetchall():
                 self._delete_board_rows(cx, device)
             cx.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+            cx.execute("DELETE FROM mail_tokens WHERE user_id=?", (user_id,))
             cx.execute("DELETE FROM users WHERE id=?", (user_id,))
         return True
 
@@ -1226,6 +1483,147 @@ class Store:
             stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
             writer.writerow([stamp] + ["" if v is None else v for v in values])
         return buf.getvalue().encode("utf-8")
+
+
+def mail_text(kind, username, link, ttl_text):
+    """Тема и текст письма со ссылкой. Только текст: так письма реже попадают в спам и одинаково читаются везде."""
+    footer = "\n--\nMicroGarden, панель телеметрии. Письмо отправлено автоматически, отвечать на него не нужно.\n"
+    if kind == "email":
+        return ("MicroGarden: подтвердите почту",
+                "Здравствуйте, %s!\n\n"
+                "Чтобы подтвердить этот адрес в панели MicroGarden, откройте ссылку и нажмите «Подтвердить почту»:\n\n%s\n\n"
+                "Ссылка действует %s. Если вы ничего не делали на сайте, просто проигнорируйте письмо: "
+                "без подтверждения адрес ни к чему не привязывается.\n%s" % (username, link, ttl_text, footer))
+    return ("MicroGarden: восстановление пароля",
+            "Здравствуйте, %s!\n\n"
+            "Для вашей записи в панели MicroGarden запросили сброс пароля. Чтобы задать новый, откройте ссылку:\n\n%s\n\n"
+            "Ссылка действует %s и работает один раз. После смены пароля все выполненные входы будут закрыты.\n"
+            "Если вы не просили сброс, ничего делать не нужно: пароль остаётся прежним.\n%s" % (username, link, ttl_text, footer))
+
+
+TTL_TEXT = {"email": "сутки", "reset": "час"}
+
+
+class Mailer:
+    """Исходящая почта. Письма попадают в очередь и уходят в фоновом потоке, поэтому медленный или недоступный
+    SMTP-сервер не задерживает ответ страницы. В журнал пишутся только причины сбоев и без адресов получателей."""
+
+    def __init__(self, cfg, transport=None):
+        self.cfg = cfg
+        self.transport = transport or self._smtp      # тесты подменяют: принимает готовое письмо (EmailMessage)
+        self.synchronous = False                      # тесты: доставка в том же потоке, без очереди
+        self.retry_pause = 3
+        self._queue = queue.Queue(maxsize=MAIL_QUEUE_MAX)
+        self._lock = threading.Lock()
+        self._day, self._sent_today = "", 0
+        self._thread = None
+
+    @property
+    def enabled(self):
+        return self.cfg.mail_enabled
+
+    def build(self, to, subject, body):
+        message = EmailMessage()
+        message["From"] = self.cfg.mail_from
+        message["To"] = to
+        message["Subject"] = subject
+        message["Date"] = formatdate(usegmt=True)
+        message["Message-ID"] = make_msgid(domain=parseaddr(self.cfg.mail_from)[1].rpartition("@")[2] or None)
+        message["Auto-Submitted"] = "auto-generated"   # автоответчики на такие письма не отвечают
+        if self.cfg.mail_reply_to:
+            message["Reply-To"] = self.cfg.mail_reply_to
+        message.set_content(body)
+        return message
+
+    def send(self, to, subject, body, now=None):
+        """Ставит письмо в очередь. False: почта не настроена, исчерпан суточный предел или очередь переполнена."""
+        if not self.enabled:
+            return False
+        day = time.strftime("%Y-%m-%d", time.gmtime(time.time() if now is None else now))
+        with self._lock:
+            if day != self._day:
+                self._day, self._sent_today = day, 0
+            if self._sent_today >= self.cfg.mail_daily_limit:
+                LOG.warning("почта: суточный предел %d писем исчерпан, письмо не отправлено", self.cfg.mail_daily_limit)
+                return False
+            self._sent_today += 1
+        message = self.build(to, subject, body)
+        if self.synchronous:
+            self._deliver(message)
+            return True
+        try:
+            self._queue.put_nowait(message)
+        except queue.Full:
+            LOG.warning("почта: очередь переполнена, письмо не отправлено")
+            return False
+        self._start()
+        return True
+
+    def _start(self):
+        with self._lock:
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._run, name="mailer", daemon=True)
+                self._thread.start()
+
+    def _run(self):
+        while True:
+            self._deliver(self._queue.get())
+
+    def _deliver(self, message):
+        for attempt in range(1, MAIL_ATTEMPTS + 1):
+            try:
+                self.transport(message)
+                return
+            except Exception as exc:  # noqa: BLE001 - любая ошибка SMTP или сети; письмо не должно ронять поток
+                LOG.warning("почта: письмо не отправлено (попытка %d из %d): %s", attempt, MAIL_ATTEMPTS, describe_mail_error(exc))
+                if attempt < MAIL_ATTEMPTS and not self.synchronous:
+                    time.sleep(self.retry_pause)
+
+    def _smtp(self, message):
+        cfg = self.cfg
+        context = ssl.create_default_context()
+        local_name = urlsplit(cfg.public_url).hostname or None   # приветствие EHLO с настоящим именем сайта, а не именем машины
+        if cfg.smtp_mode == "ssl":
+            smtp = smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, local_hostname=local_name, timeout=SMTP_TIMEOUT, context=context)
+        else:
+            smtp = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, local_hostname=local_name, timeout=SMTP_TIMEOUT)
+        with smtp:
+            smtp.ehlo()
+            if cfg.smtp_mode == "starttls":
+                smtp.starttls(context=context)   # если сервер не умеет шифровать, письмо не уходит: пароль открытым текстом не отправляется
+                smtp.ehlo()
+            if cfg.smtp_user:
+                smtp.login(cfg.smtp_user, cfg.smtp_password)
+            smtp.send_message(message)
+
+
+def _smtp_text(value):
+    text = value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+    return redact_emails(" ".join(text.split()))[:120]
+
+
+def describe_mail_error(exc):
+    """Причина сбоя доставки для журнала и для пробного письма: без паролей и без адресов."""
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "сервис не принял логин или пароль (SMTP %s)" % exc.smtp_code
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        refused = next(iter(exc.recipients.values()), (0, b""))
+        return "сервис отклонил получателя (SMTP %s): %s" % (refused[0], _smtp_text(refused[1]))
+    if isinstance(exc, smtplib.SMTPSenderRefused):
+        return "сервис отклонил отправителя (SMTP %s): проверьте DASH_MAIL_FROM и подтверждение домена у сервиса" % exc.smtp_code
+    if isinstance(exc, smtplib.SMTPNotSupportedError):
+        return "сервер не поддерживает шифрование STARTTLS или вход по паролю: %s" % _smtp_text(exc)
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return "ответ сервера (SMTP %s): %s" % (exc.smtp_code, _smtp_text(exc.smtp_error))
+    if isinstance(exc, ssl.SSLError):
+        return "ошибка шифрования (%s): проверьте порт и DASH_SMTP_SECURITY" % type(exc).__name__
+    if isinstance(exc, socket.gaierror):
+        return "имя сервера SMTP не найдено: проверьте DASH_SMTP_HOST"
+    if isinstance(exc, TimeoutError):
+        return "сервер SMTP не ответил за %d с" % SMTP_TIMEOUT
+    if isinstance(exc, OSError):
+        return "нет соединения с сервером SMTP (%s)" % type(exc).__name__
+    return "%s: %s" % (type(exc).__name__, _smtp_text(exc))
 
 
 class FailureLimiter:
@@ -1439,11 +1837,15 @@ class Handler(BaseHTTPRequestHandler):
                 name, ctype = ASSETS[path]
                 return self._send(200, (STATIC_DIR / name).read_bytes(), ctype, {"Cache-Control": "no-cache"})
             if path == "/api/registration" and reading:
-                return self._json(200, {"open": self.server.store.registration_open()})
+                return self._json(200, self.server.registration_info())
             if path == "/api/login":
                 return self._login()
             if path == "/api/register":
                 return self._register()
+            if path in ("/api/forgot", "/api/verify", "/api/reset", "/api/reset/check"):
+                return self._mail_api(path)
+            if path in OPEN_PAGES and reading:
+                return self._page(OPEN_PAGES[path])
 
             try:
                 who = self._principal()
@@ -1466,11 +1868,15 @@ class Handler(BaseHTTPRequestHandler):
 
             # --- дальше только для вошедших ---
             if path == "/api/me" and reading:
-                return self._json(200, {"user": who, "registration_open": self.server.store.registration_open()})
+                return self._json(200, {"user": who, "registration_open": self.server.store.registration_open(),
+                                        "mail_enabled": self.server.mailer.enabled,
+                                        "email": self.server.store.email_state(who["id"])})
             if path == "/api/logout":
                 return self._logout()
             if path == "/api/account/password":
                 return self._account_password(who)
+            if path in ("/api/account/email", "/api/account/email/resend"):
+                return self._account_email(path, who)
             if path.startswith("/api/admin/"):
                 return self._admin_api(path, who)
             if path in ("/api/boards", "/api/tokens") or path.startswith(("/api/boards/", "/api/tokens/")):
@@ -1590,9 +1996,10 @@ class Handler(BaseHTTPRequestHandler):
         if server.limiter.blocked(ip):
             return self._error(429, "слишком много неудачных попыток входа", {"Retry-After": "600"})
         body = self._read_json()
-        username, password = body.get("username"), body.get("password")
-        if not isinstance(username, str) or not isinstance(password, str) or len(username) > 64 or len(password) > PASSWORD_MAX:
+        username, password = body.get("username"), body.get("password")   # вместо имени можно назвать подтверждённую почту
+        if not isinstance(username, str) or not isinstance(password, str) or len(username) > EMAIL_MAX or len(password) > PASSWORD_MAX:
             raise ValueError("нужны имя и пароль")
+        username = username.strip() if "@" in username else username
         if server.name_limiter.blocked(username.lower()):
             return self._error(429, "слишком много неудачных попыток для этого имени, подождите", {"Retry-After": "600"})
         who = server.store.login_user(username, password)
@@ -1600,7 +2007,7 @@ class Handler(BaseHTTPRequestHandler):
             # Успешный вход счётчик не сбрасывает: иначе, чередуя свой вход с чужими подборами, лимит обойти
             server.limiter.fail(ip)
             server.name_limiter.fail(username.lower())
-            LOG.warning("вход: неверное имя или пароль, имя %r, с %s", username[:40], ip)
+            LOG.warning("вход: неверное имя или пароль, имя %r, с %s", redact_emails(username[:40]), ip)   # адреса почты в журнал не пишем
             return self._error(401, "неверное имя или пароль")
         token = server.store.create_session(who["id"], ip)
         return self._json(200, {"ok": True, "user": who}, self._session_cookie(token, server.store.session_days * 86400))
@@ -1615,10 +2022,16 @@ class Handler(BaseHTTPRequestHandler):
         if not server.store.registration_open():
             return self._error(403, "регистрация закрыта")
         body = self._read_json()
-        who = server.store.register_user(body.get("username"), body.get("password"), ip)
+        # Когда почта настроена, адрес обязателен: ссылка для его подтверждения уходит сразу. Без почты поле игнорируется
+        email = clean_email(body.get("email")) if server.mailer.enabled else None
+        who = server.store.register_user(body.get("username"), body.get("password"), ip, email=email)
         LOG.info("зарегистрирован человек %s с %s", who["username"], ip)
+        sent = False
+        if email and server.mail_allowed(email):
+            sent = server.send_link("email", email, server.store.issue_mail_token(who["id"], "email", email), who["username"])
         token = server.store.create_session(who["id"], ip)
-        return self._json(201, {"ok": True, "user": who}, self._session_cookie(token, server.store.session_days * 86400))
+        return self._json(201, {"ok": True, "user": who, "mail_sent": sent},
+                          self._session_cookie(token, server.store.session_days * 86400))
 
     def _logout(self):
         if not self._action("POST", "POST"):
@@ -1641,6 +2054,84 @@ class Handler(BaseHTTPRequestHandler):
             server.limiter.fail(ip)
             raise
         return self._json(200, {"ok": True})
+
+    # --- почта: восстановление пароля, подтверждение адреса, свой адрес --------------------
+    def _mail_api(self, path):
+        """Запросы без входа: «забыл пароль» и страницы по ссылкам из писем (подтвердить адрес, задать новый пароль)."""
+        if not self._action("POST", "POST"):
+            return None
+        server, store, ip = self.server, self.server.store, self._client_ip()
+        body = self._read_json()
+        if path == "/api/forgot":
+            if not server.mailer.enabled:
+                return self._error(409, "восстановление по почте на этом сервере не настроено: обратитесь к администратору")
+            if server.mail_ip_limiter.blocked(ip):
+                return self._error(429, "слишком много запросов с вашего адреса, попробуйте через час", {"Retry-After": "3600"})
+            server.mail_ip_limiter.fail(ip)
+            email = clean_email(body.get("email"))
+            targets = store.find_reset_targets(email)
+            if targets and server.mail_allowed(email):
+                for target in targets:
+                    server.send_link("reset", email, store.issue_mail_token(target["id"], "reset", email), target["username"])
+            # Ответ одинаков, есть такой адрес в базе или нет: по нему нельзя узнать, кто здесь зарегистрирован
+            return self._json(200, {"ok": True})
+        # Ссылки из писем подобрать нельзя (256 бит), но лишние попытки всё равно считаются
+        if server.token_limiter.blocked(ip):
+            return self._error(429, "слишком много неверных ссылок, попробуйте позже", {"Retry-After": "600"})
+        token = body.get("token")
+        stale = "ссылка недействительна или устарела: " + ("запросите письмо заново на странице «Забыли пароль»" if "reset" in path
+                                                         else "запросите письмо заново на странице «Аккаунт»")
+        if not isinstance(token, str) or not MAIL_TOKEN_RE.fullmatch(token):
+            server.token_limiter.fail(ip)
+            return self._error(400, stale)
+        if path == "/api/reset/check":
+            if not store.check_reset_token(token):
+                server.token_limiter.fail(ip)
+                return self._error(400, stale)
+            return self._json(200, {"ok": True})
+        if path == "/api/reset":
+            done = store.reset_with_token(token, body.get("password"))
+            if done is None:
+                server.token_limiter.fail(ip)
+                return self._error(400, stale)
+            LOG.info("пароль задан заново по ссылке из письма: %s, с %s", done["username"], ip)
+            return self._json(200, {"ok": True})
+        done = store.confirm_email(token)
+        if done is None:
+            server.token_limiter.fail(ip)
+            return self._error(400, stale)
+        LOG.info("почта подтверждена: %s, с %s", done["username"], ip)
+        return self._json(200, {"ok": True, "email": done["email"]})
+
+    def _account_email(self, path, who):
+        """Привязать почту или сменить её (нужен пароль) и отправить письмо ещё раз."""
+        if not self._action("POST", "POST"):
+            return None
+        server, store, ip = self.server, self.server.store, self._client_ip()
+        if not server.mailer.enabled:
+            return self._error(409, "почта на этом сервере не настроена")
+        if server.limiter.blocked(ip):
+            return self._error(429, "слишком много неудачных попыток", {"Retry-After": "600"})
+        if server.mail_ip_limiter.blocked(ip):
+            return self._error(429, "слишком много писем с вашего адреса, попробуйте через час", {"Retry-After": "3600"})
+        body = self._read_json()
+        resend = path.endswith("/resend")
+        email = store.email_state(who["id"])["pending"] if resend else clean_email(body.get("email"))
+        if not email:
+            raise Conflict("подтверждать нечего: адрес уже подтверждён или не указан")
+        if not server.mail_allowed(email):
+            return self._error(429, "на этот адрес уже ушло много писем, попробуйте через час", {"Retry-After": "3600"})
+        if resend:
+            token = store.resend_verification(who["id"])[1]
+        else:
+            try:
+                token = store.set_email(who["id"], email, body.get("password"))
+            except WrongPassword:
+                server.limiter.fail(ip)
+                raise
+        server.mail_ip_limiter.fail(ip)
+        sent = server.send_link("email", email, token, who["username"])
+        return self._json(200, {"ok": True, "mail_sent": sent, "email": store.email_state(who["id"])})
 
     # --- администратор: люди и регистрация ------------------------------------------------
     def _admin_api(self, path, who):
@@ -1710,6 +2201,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, data)
             if not self._action("POST", "GET, HEAD, POST"):
                 return None
+            if who["role"] != "admin" and self.server.mailer.enabled and not store.email_verified(who["id"]):
+                # Подтверждённая почта — условие для новых плат: так одноразовые записи не плодят платы и токены приёма
+                return self._json(403, {"ok": False, "code": "email_unverified",
+                                        "error": "Сначала подтвердите почту: ссылка отправлена на адрес из вашей записи (страница «Аккаунт»)"})
             body = self._read_json()
             token, board, item = store.add_board(body.get("name"), body.get("device"), who["id"],
                                                  limit_owner=who["role"] != "admin")
@@ -1854,10 +2349,33 @@ class DashServer(ThreadingHTTPServer):
         self.reg_limiter = FailureLimiter(limit=REGISTRATIONS_PER_HOUR, window=3600)
         self.ingest_gate = RateGate(INGEST_MIN_GAP)
         self.cfg_gate = RateGate(2)                                      # запросы на смену настроек: не чаще раза в 2 с на человека и плату
+        self.mailer = Mailer(cfg)
+        self.mail_ip_limiter = FailureLimiter(limit=MAIL_PER_IP, window=3600)           # запросы, после которых уходит письмо
+        self.mail_addr_limiter = FailureLimiter(limit=MAIL_PER_ADDRESS, window=3600)    # письма на один адрес
+        self.token_limiter = FailureLimiter(limit=20, window=600)                       # недействительные ссылки из писем
         store.configure(cfg)
         store.ensure_admin(cfg.view_user, cfg.view_password)
         # Токен из .env попадает в список токенов, чтобы у платы, которая уже его использует, ничего не сломалось
         store.sync_env_token(cfg.ingest_token)
+
+    def registration_info(self):
+        """Что страницам входа знать до входа: открыта ли регистрация и какие способы входа и почты есть."""
+        return {"open": self.store.registration_open(), "mail": self.mailer.enabled, "google": False}
+
+    def mail_allowed(self, email):
+        """Можно ли слать письмо на этот адрес (почта настроена, за час на него ушло меньше MAIL_PER_ADDRESS писем).
+        Проверять надо до выпуска новой ссылки: новая ссылка гасит прежнюю, а письма с ней не будет."""
+        return self.mailer.enabled and not self.mail_addr_limiter.blocked(email)
+
+    def send_link(self, kind, email, token, username):
+        """Письмо со ссылкой: подтвердить адрес (kind 'email') или задать новый пароль (kind 'reset').
+        Сама ссылка лежит после «#»: в журналы сервера и в Referer она не попадает. False: письмо не поставлено в очередь."""
+        if not self.mailer.enabled:
+            return False
+        self.mail_addr_limiter.fail(email)
+        link = "%s%s#token=%s" % (self.cfg.public_url, MAIL_PATHS[kind], token)
+        subject, body = mail_text(kind, username, link, TTL_TEXT[kind])
+        return self.mailer.send(email, subject, body)
 
     def handle_error(self, request, client_address):
         # Обрыв соединения клиентом (плата ушла в сон, браузер закрыл вкладку) — не ошибка сервера.
@@ -1877,10 +2395,42 @@ def prune_loop(store, cfg, stop):
             return
 
 
-def main():
+def test_mail(cfg, to):
+    """`python server.py test-mail адрес`: пробное письмо с теми же настройками, что у сервера. Ошибка печатается понятным
+    текстом: логин, пароль и адрес получателя в неё не попадают."""
+    problems = cfg.mail_problems()
+    if not problems and not cfg.mail_enabled:
+        problems = ["почта не настроена: задайте DASH_SMTP_HOST, DASH_MAIL_FROM и DASH_PUBLIC_URL в .env"]
+    if problems:
+        print("Почта настроена неверно:\n  " + "\n  ".join(problems))
+        return 2
+    try:
+        email = clean_email(to)
+    except ValueError as exc:
+        print(exc)
+        return 2
+    mailer = Mailer(cfg)
+    body = ("Если вы читаете это письмо, почта панели MicroGarden настроена верно.\n\n"
+            "Сервер SMTP: %s:%d, шифрование: %s.\n" % (cfg.smtp_host, cfg.smtp_port, cfg.smtp_mode))
+    try:
+        mailer.transport(mailer.build(email, "MicroGarden: пробное письмо", body))
+    except Exception as exc:  # noqa: BLE001 - причина выводится человеку
+        print("Письмо не отправлено: " + describe_mail_error(exc))
+        return 1
+    print("Письмо принято сервером SMTP. Если его нет во «Входящих», посмотрите в «Спаме»: письма нового домена иногда попадают туда первое время.")
+    return 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     load_env_file(HERE / ".env")
     cfg = Config(os.environ)
+    if argv[:1] == ["test-mail"] and len(argv) == 2:
+        return test_mail(cfg, argv[1])
+    if argv:
+        print("Запуск без аргументов — сервер. Пробное письмо: python server.py test-mail адрес@example.com")
+        return 2
     cfg.validate()
     store = Store(cfg.db)
     server = DashServer(cfg, store)
