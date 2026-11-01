@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
 """Тесты сервера телеметрии: python -m unittest discover -s dashboard/tests -v"""
 import base64
+import contextlib
 import http.client
+import io
 import json
 import re
+import smtplib
+import socket
 import sqlite3
+import ssl
 import sys
 import tempfile
 import threading
 import time
 import unittest
 from contextlib import closing
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -1095,7 +1101,7 @@ class AccountHttpTests(unittest.TestCase):
             self.assertNotIn(" style=", html)
         for path in ("/", "/boards", "/account", "/admin"):
             self.assertEqual(self.request("GET", path)[0], 302, path)
-        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": True})
+        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": True, "mail": False, "google": False})
         self.assertEqual(self.request("GET", "/api/me")[0], 401)
         self.assertEqual(self.request("GET", "/api/devices")[0], 401)
         # устаревший вход в браузере не закрывает страницу входа
@@ -1145,7 +1151,7 @@ class AccountHttpTests(unittest.TestCase):
         self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
         # администратор закрывает регистрацию одним нажатием
         self.assertEqual(self.call("POST", "/api/admin/registration", {"open": False}, admin=True)[0], 200)
-        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": False})
+        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": False, "mail": False, "google": False})
         self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})[0], 403)
         self.assertEqual(self.call("POST", "/api/admin/registration", {"open": True}, admin=True)[0], 200)
         self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})[0], 201)
@@ -1154,6 +1160,22 @@ class AccountHttpTests(unittest.TestCase):
         self.store.max_users = len(self.store.list_users())
         status, data, _ = self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})
         self.assertEqual(status, 409)
+
+    def test_without_mail_settings_the_old_flow_is_unchanged(self):
+        # Почта не настроена: адрес не просят, платы добавляются сразу, а письма отправить нечем
+        name = self.unique()
+        status, data, headers = self.call("POST", "/api/register", {"username": name, "password": self.PW, "email": "ivan@example.com"})
+        self.assertEqual((status, data["mail_sent"]), (201, False))
+        cookie = self.cookie_of(headers)
+        me = json.loads(self.request("GET", "/api/me", cookie=cookie)[2])
+        self.assertEqual((me["mail_enabled"], me["email"]), (False, {"address": None, "verified": False, "pending": None}))   # адрес без почты не запоминается
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Теплица", "device": name + "-1"}, cookie=cookie)[0], 201)
+        self.assertEqual(self.call("POST", "/api/forgot", {"email": "ivan@example.com"})[0], 409)
+        self.assertEqual(self.call("POST", "/api/account/email", {"email": "ivan@example.com", "password": self.PW}, cookie=cookie)[0], 409)
+        self.assertEqual(self.call("POST", "/api/account/email/resend", {}, cookie=cookie)[0], 409)
+        self.assertEqual(self.call("POST", "/api/login", {"username": "ivan@example.com", "password": self.PW})[0], 401)
+        for path in ("/verify", "/reset", "/forgot"):
+            self.assertEqual(self.request("GET", path)[0], 200, path)                  # страницы есть всегда, они сами скажут, что почты нет
 
     def test_login_logout_and_generic_failures(self):
         cookie, name = self.person()
@@ -1867,6 +1889,753 @@ class CloudSettingsHttpTests(unittest.TestCase):
         self.assertNotIn("cfg", self.send(dev_b, tok_b, board_report(temp_target=29))[1])   # запрос чужой платы ей не уходит
         self.assertEqual(self.call("GET", "/api/settings?device=" + dev_b, cookie=b)[1]["values"]["temp_target"], 29.0)
         self.assertEqual(self.call("GET", "/api/settings", cookie=b)[1]["device"], dev_b)    # без device — первая своя плата
+
+
+def mail_config(db, **extra):
+    env = {"DASH_INGEST_TOKEN": TOKEN, "DASH_VIEW_PASSWORD": PASSWORD, "DASH_PORT": "0", "DASH_DB": str(db),
+           "DASH_PUBLIC_URL": "https://dash.example.org", "DASH_SMTP_HOST": "smtp.example.org",
+           "DASH_MAIL_FROM": "MicroGarden <noreply@example.org>"}
+    env.update(extra)
+    return server.Config(env)
+
+
+class Outbox:
+    """Вместо SMTP: письма копятся в списке, ссылка достаётся из текста письма."""
+
+    def __init__(self):
+        self.sent = []
+
+    def __call__(self, message):
+        self.sent.append(message)
+
+    @staticmethod
+    def token_of(message):
+        match = re.search(r"#token=([A-Za-z0-9_-]+)", message.get_content())
+        assert match, message.get_content()
+        return match.group(1)
+
+    def to(self, address):
+        return [m for m in self.sent if m["To"] == address]
+
+    def last_token(self, address):
+        return self.token_of(self.to(address)[-1])
+
+
+class FakeSmtp:
+    """Минимальный SMTP-сервер, чтобы проверить настоящий smtplib: без шифрования, вход PLAIN, по письму за раз."""
+
+    def __init__(self, login=("mailer", "s3cret"), can_starttls=False):
+        self.login, self.can_starttls = login, can_starttls
+        self.messages, self.commands = [], []
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(5)
+        self.port = self.sock.getsockname()[1]
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def close(self):
+        self.sock.close()
+
+    def _serve(self):
+        while True:
+            try:
+                conn, _ = self.sock.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._session, args=(conn,), daemon=True).start()
+
+    def _session(self, conn):
+        with conn, conn.makefile("rwb") as stream:
+            def say(text):
+                stream.write((text + "\r\n").encode())
+                stream.flush()
+
+            say("220 fake ESMTP")
+            sender, recipients, authed = None, [], False
+            while True:
+                raw = stream.readline()
+                if not raw:
+                    return
+                line = raw.decode("utf-8", "replace").rstrip("\r\n")
+                verb = line.split(" ")[0].upper()
+                self.commands.append(verb)
+                if verb == "EHLO":
+                    say("250-fake")
+                    if self.can_starttls:
+                        say("250-STARTTLS")
+                    say("250-AUTH PLAIN")
+                    say("250 8BITMIME")
+                elif verb == "AUTH":
+                    decoded = base64.b64decode(line.split(" ")[2]).split(b"\0")
+                    authed = (decoded[1].decode(), decoded[2].decode()) == self.login
+                    say("235 2.7.0 ok" if authed else "535 5.7.8 bad credentials")
+                elif verb == "MAIL":
+                    sender = re.search(r"<([^>]*)>", line).group(1)
+                    say("250 ok")
+                elif verb == "RCPT":
+                    recipients.append(re.search(r"<([^>]*)>", line).group(1))
+                    say("250 ok")
+                elif verb == "DATA":
+                    say("354 go")
+                    lines = []
+                    while True:
+                        row = stream.readline().decode("utf-8", "replace").rstrip("\r\n")
+                        if row == ".":
+                            break
+                        lines.append(row[1:] if row.startswith("..") else row)
+                    self.messages.append({"from": sender, "to": list(recipients), "authed": authed, "data": "\r\n".join(lines).encode()})
+                    say("250 queued")
+                elif verb == "QUIT":
+                    say("221 bye")
+                    return
+                else:
+                    say("250 ok")
+
+
+class MailConfigTests(unittest.TestCase):
+    def test_mail_is_off_until_configured(self):
+        cfg = server.Config({"DASH_VIEW_PASSWORD": PASSWORD})
+        self.assertEqual((cfg.mail_enabled, cfg.mail_problems()), (False, []))
+        self.assertFalse(server.Mailer(cfg).send("ivan@example.com", "тема", "текст"))
+
+    def test_settings_turn_mail_on(self):
+        cfg = mail_config("x.sqlite3", DASH_SMTP_USER="mailer", DASH_SMTP_PASSWORD="s3cret")
+        self.assertEqual((cfg.mail_enabled, cfg.mail_problems(), cfg.smtp_mode, cfg.smtp_port), (True, [], "starttls", 587))
+        self.assertEqual(mail_config("x", DASH_SMTP_PORT="465").smtp_mode, "ssl")                   # порт 465 — шифрование с первого байта
+        self.assertEqual(mail_config("x", DASH_SMTP_PORT="465", DASH_SMTP_SECURITY="starttls").smtp_mode, "starttls")
+        self.assertEqual(mail_config("x", DASH_SMTP_HOST="localhost", DASH_SMTP_SECURITY="none").mail_problems(), [])
+        self.assertEqual(mail_config("x", DASH_PUBLIC_URL="http://localhost:8790").mail_problems(), [])
+        self.assertEqual(mail_config("x", DASH_PUBLIC_URL="https://dash.example.org/").public_url, "https://dash.example.org")
+
+    def test_wrong_settings_are_named(self):
+        cases = {
+            "DASH_PUBLIC_URL": [{"DASH_PUBLIC_URL": ""}, {"DASH_PUBLIC_URL": "http://dash.example.org"},
+                                {"DASH_PUBLIC_URL": "https://dash.example.org/app"}, {"DASH_PUBLIC_URL": "dash.example.org"}],
+            "DASH_MAIL_FROM": [{"DASH_MAIL_FROM": ""}, {"DASH_MAIL_FROM": "noreply"}, {"DASH_MAIL_FROM": "a@example.org\nBcc: x@example.org"}],
+            "DASH_SMTP_HOST": [{"DASH_SMTP_HOST": ""}],
+            "DASH_SMTP_PORT": [{"DASH_SMTP_PORT": "0"}, {"DASH_SMTP_PORT": "70000"}],
+            "DASH_SMTP_SECURITY": [{"DASH_SMTP_SECURITY": "plain"}, {"DASH_SMTP_SECURITY": "none"}],   # none только для localhost
+            "DASH_SMTP_USER": [{"DASH_SMTP_USER": "mailer"}, {"DASH_SMTP_PASSWORD": "s3cret"}],
+            "DASH_MAIL_REPLY_TO": [{"DASH_MAIL_REPLY_TO": "not an address"}],
+            "DASH_MAIL_DAILY_LIMIT": [{"DASH_MAIL_DAILY_LIMIT": "0"}],
+        }
+        for name, variants in cases.items():
+            for extra in variants:
+                problems = mail_config("x", **extra).mail_problems()
+                self.assertTrue(any(p.startswith(name) for p in problems), (extra, problems))
+        with self.assertRaises(SystemExit):
+            mail_config("x", DASH_MAIL_FROM="").validate()         # сервер с неверной почтой не запускается
+        mail_config("x").validate()
+
+    def test_partial_mail_settings_do_not_turn_mail_on(self):
+        cfg = server.Config({"DASH_VIEW_PASSWORD": PASSWORD, "DASH_PUBLIC_URL": "https://dash.example.org"})
+        self.assertEqual((cfg.mail_enabled, cfg.mail_problems()), (False, []))       # адрес сайта нужен и для входа через Google
+        self.assertEqual(cfg.public_url, "https://dash.example.org")
+
+
+class EmailRulesTests(unittest.TestCase):
+    def test_clean_email(self):
+        self.assertEqual(server.clean_email("  Ivan.P+garden@Example.COM "), "ivan.p+garden@example.com")
+        for good in ("a@b.co", "x" * 64 + "@example.com", "a.b-c_d%e@sub.example.org"):
+            server.clean_email(good)
+        for bad in ("", "ivan", "ivan@", "@example.com", "ivan@example", "ivan@@example.com", "iv an@example.com", "ivan@exa_mple.com",
+                    ".ivan@example.com", "ivan.@example.com", "iv..an@example.com", "ivan@example..com", "ivan@-example.com",
+                    "иван@example.com", "ivan@пример.рф", "ivan@example.com\r\nBcc: x@example.org", "<ivan@example.com>",
+                    "x" * 65 + "@example.com", "a@" + "b" * 250 + ".com", None, 5):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                server.clean_email(bad)
+
+    def test_addresses_are_removed_from_log_text(self):
+        text = server.redact_emails("550 5.1.1 <ivan@example.com>: user unknown; also a.b+c@mail.example.org")
+        self.assertNotIn("ivan", text)
+        self.assertNotIn("example", text)
+        self.assertIn("user unknown", text)
+
+
+class MailerTests(unittest.TestCase):
+    def mailer(self, **extra):
+        box = Outbox()
+        return server.Mailer(mail_config("x.sqlite3", **extra), transport=box), box
+
+    def test_message_headers_and_body(self):
+        mailer, _ = self.mailer(DASH_MAIL_REPLY_TO="owner@example.org")
+        message = mailer.build("ivan@example.com", "MicroGarden: тема", "Привет, Иван!\nhttps://dash.example.org/verify#token=abc\n")
+        self.assertEqual(message["From"], "MicroGarden <noreply@example.org>")
+        self.assertEqual((message["To"], message["Reply-To"], message["Auto-Submitted"]),
+                         ("ivan@example.com", "owner@example.org", "auto-generated"))
+        self.assertEqual(message["Subject"], "MicroGarden: тема")
+        self.assertTrue(message["Message-ID"].endswith("@example.org>"))
+        self.assertLess(abs(parsedate_to_datetime(str(message["Date"])).timestamp() - time.time()), 60)
+        self.assertIn("Привет, Иван!", message.get_content())
+        self.assertIsNone(self.mailer()[0].build("ivan@example.com", "t", "b")["Reply-To"])
+        with self.assertRaises(ValueError):                       # перевод строки в адресе не превращается во второй заголовок
+            mailer.build("ivan@example.com\r\nBcc: x@example.org", "t", "b")
+
+    def test_letters_are_sent_in_the_background(self):
+        mailer, box = self.mailer()
+        self.assertTrue(mailer.send("ivan@example.com", "тема", "текст"))
+        deadline = time.time() + 5
+        while not box.sent and time.time() < deadline:
+            time.sleep(0.02)
+        self.assertEqual([m["To"] for m in box.sent], ["ivan@example.com"])
+
+    def test_failed_delivery_is_retried_and_logged_without_addresses(self):
+        calls = []
+
+        def flaky(message):
+            calls.append(message["To"])
+            if len(calls) == 1:
+                raise smtplib.SMTPResponseException(451, b"4.3.0 try later for <ivan@example.com>")
+
+        mailer = server.Mailer(mail_config("x"), transport=flaky)
+        mailer.synchronous = True
+        with self.assertLogs("dash", level="WARNING") as logs:
+            self.assertTrue(mailer.send("ivan@example.com", "t", "b"))
+        self.assertEqual(len(calls), 2)
+        text = "\n".join(logs.output)
+        self.assertIn("451", text)
+        self.assertNotIn("ivan", text)
+
+        def broken(message):
+            raise OSError("down")
+
+        mailer = server.Mailer(mail_config("x"), transport=broken)
+        mailer.synchronous = True
+        with self.assertLogs("dash", level="WARNING") as logs:
+            mailer.send("ivan@example.com", "t", "b")                      # письмо потеряно, но сервер продолжает работать
+        self.assertEqual(len(logs.output), server.MAIL_ATTEMPTS)
+
+    def test_daily_limit(self):
+        mailer, box = self.mailer(DASH_MAIL_DAILY_LIMIT="2")
+        mailer.synchronous = True
+        with self.assertLogs("dash", level="WARNING"):
+            self.assertEqual([mailer.send("a@example.com", "t", "b", now=NOW) for _ in range(3)], [True, True, False])
+        self.assertEqual(len(box.sent), 2)
+        self.assertTrue(mailer.send("a@example.com", "t", "b", now=NOW + 86400))             # на следующие сутки счёт с нуля
+
+    def test_error_texts_do_not_leak_addresses_or_passwords(self):
+        describe = server.describe_mail_error
+        text = describe(smtplib.SMTPAuthenticationError(535, b"5.7.8 bad s3cret"))
+        self.assertIn("535", text)
+        self.assertNotIn("s3cret", text)
+        text = describe(smtplib.SMTPRecipientsRefused({"ivan@example.com": (550, b"no mailbox ivan@example.com")}))
+        self.assertIn("550", text)
+        self.assertNotIn("ivan", text)
+        self.assertIn("DASH_MAIL_FROM", describe(smtplib.SMTPSenderRefused(550, b"sender not verified", "noreply@example.org")))
+        self.assertIn("DASH_SMTP_HOST", describe(socket.gaierror(-2, "Name or service not known")))
+        self.assertIn("не ответил", describe(TimeoutError()))
+        self.assertIn("нет соединения", describe(ConnectionRefusedError()))
+        self.assertIn("шифрования", describe(ssl.SSLError("bad certificate")))
+        self.assertNotIn("ivan", describe(ValueError("boom ivan@example.com")))
+
+
+class SmtpWireTests(unittest.TestCase):
+    """Письмо проходит через настоящий smtplib до поддельного SMTP-сервера."""
+
+    def setUp(self):
+        self.smtp = FakeSmtp()
+        self.addCleanup(self.smtp.close)
+
+    def mailer(self, **extra):
+        env = dict(DASH_SMTP_HOST="127.0.0.1", DASH_SMTP_PORT=str(self.smtp.port), DASH_SMTP_SECURITY="none",
+                   DASH_SMTP_USER="mailer", DASH_SMTP_PASSWORD="s3cret")
+        env.update(extra)
+        return server.Mailer(mail_config("x.sqlite3", **env))
+
+    def test_message_goes_through_smtp_with_login(self):
+        mailer = self.mailer()
+        body = "Привет, Иван!\nhttps://dash.example.org/verify#token=abc\n"
+        mailer.transport(mailer.build("ivan@example.com", "MicroGarden: подтвердите почту", body))
+        sent = self.smtp.messages[0]
+        self.assertEqual((sent["from"], sent["to"], sent["authed"]), ("noreply@example.org", ["ivan@example.com"], True))
+        import email
+        import email.policy
+        parsed = email.message_from_bytes(sent["data"], policy=email.policy.default)
+        self.assertEqual((parsed["Subject"], parsed["To"]), ("MicroGarden: подтвердите почту", "ivan@example.com"))
+        self.assertIn("Привет, Иван!", parsed.get_content())
+
+    def test_wrong_password_is_reported_and_nothing_is_sent(self):
+        mailer = self.mailer(DASH_SMTP_PASSWORD="wrong-password")
+        with self.assertRaises(smtplib.SMTPAuthenticationError) as caught:
+            mailer.transport(mailer.build("ivan@example.com", "t", "b"))
+        text = server.describe_mail_error(caught.exception)
+        self.assertIn("логин или пароль", text)
+        self.assertNotIn("wrong-password", text)
+        self.assertEqual(self.smtp.messages, [])
+
+    def test_starttls_is_required_when_the_server_cannot_encrypt(self):
+        cfg = mail_config("x.sqlite3", DASH_SMTP_HOST="localhost", DASH_SMTP_PORT=str(self.smtp.port), DASH_SMTP_SECURITY="starttls",
+                          DASH_SMTP_USER="mailer", DASH_SMTP_PASSWORD="s3cret")
+        mailer = server.Mailer(cfg)
+        with self.assertRaises(smtplib.SMTPNotSupportedError):
+            mailer.transport(mailer.build("ivan@example.com", "t", "b"))
+        self.assertNotIn("AUTH", self.smtp.commands)                       # пароль открытым текстом не отправлен
+        self.assertEqual(self.smtp.messages, [])
+
+    def test_test_mail_command(self):
+        cfg = mail_config("x.sqlite3", DASH_SMTP_HOST="127.0.0.1", DASH_SMTP_PORT=str(self.smtp.port), DASH_SMTP_SECURITY="none",
+                          DASH_SMTP_USER="mailer", DASH_SMTP_PASSWORD="s3cret")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(server.test_mail(cfg, "Ivan@Example.com"), 0)
+        self.assertIn("принято", out.getvalue())
+        self.assertEqual(self.smtp.messages[0]["to"], ["ivan@example.com"])
+        bad = mail_config("x.sqlite3", DASH_SMTP_HOST="127.0.0.1", DASH_SMTP_PORT=str(self.smtp.port), DASH_SMTP_SECURITY="none",
+                          DASH_SMTP_USER="mailer", DASH_SMTP_PASSWORD="nope")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(server.test_mail(bad, "ivan@example.com"), 1)
+        self.assertIn("логин или пароль", out.getvalue())
+        self.assertNotIn("nope", out.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(server.test_mail(server.Config({"DASH_VIEW_PASSWORD": PASSWORD}), "ivan@example.com"), 2)
+            self.assertEqual(server.test_mail(cfg, "не адрес"), 2)
+            self.assertEqual(server.main(["что-то лишнее"]), 2)
+
+
+class EmailStoreTests(unittest.TestCase):
+    PW = "correct horse battery"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = server.Store(Path(self.tmp.name) / "m.sqlite3")
+        self.admin_id = self.store.ensure_admin("garden", "admin-password-123", now=NOW)
+
+    def person(self, name, email=None):
+        return self.store.register_user(name, self.PW, "1.2.3.4", now=NOW, email=email)
+
+    def verified(self, name, email):
+        ivan = self.person(name, email)
+        self.store.confirm_email(self.store.issue_mail_token(ivan["id"], "email", email, NOW), NOW + 1)
+        return ivan
+
+    def test_registered_address_waits_for_confirmation_and_cannot_log_in_yet(self):
+        ivan = self.person("ivan", "ivan@example.com")
+        self.assertEqual(self.store.email_state(ivan["id"], NOW),
+                         {"address": "ivan@example.com", "verified": False, "pending": "ivan@example.com"})
+        self.assertFalse(self.store.email_verified(ivan["id"]))
+        self.assertIsNone(self.store.login_user("ivan@example.com", self.PW))        # по неподтверждённой почте не входят
+        self.assertEqual(self.store.login_user("ivan", self.PW)["id"], ivan["id"])
+        self.assertEqual(self.store.email_state(self.person("ann")["id"], NOW), {"address": None, "verified": False, "pending": None})
+
+    def test_confirming_the_link_verifies_the_address(self):
+        ivan = self.person("ivan", "ivan@example.com")
+        link = self.store.issue_mail_token(ivan["id"], "email", "ivan@example.com", NOW)
+        self.assertNotIn(link, "".join(p.read_bytes().decode("latin-1") for p in Path(self.tmp.name).iterdir()))   # в базе только отпечаток
+        self.assertEqual(self.store.confirm_email(link, NOW + 60), {"email": "ivan@example.com", "username": "ivan"})
+        self.assertEqual(self.store.email_state(ivan["id"], NOW + 61), {"address": "ivan@example.com", "verified": True, "pending": None})
+        self.assertEqual(self.store.login_user("IVAN@Example.com", self.PW, now=NOW + 62)["username"], "ivan")
+        self.assertIsNone(self.store.login_user("ivan@example.com", self.PW + "x"))
+        self.assertIsNone(self.store.confirm_email(link, NOW + 63))                  # ссылка одноразовая
+        self.assertIsNone(self.store.confirm_email("не-ссылка", NOW + 63))
+
+    def test_links_expire_and_a_new_one_replaces_the_old_one(self):
+        ivan = self.person("ivan", "ivan@example.com")
+        old = self.store.issue_mail_token(ivan["id"], "email", "ivan@example.com", NOW)
+        new = self.store.issue_mail_token(ivan["id"], "email", "ivan@example.com", NOW + 10)
+        self.assertIsNone(self.store.confirm_email(old, NOW + 11))
+        self.assertIsNone(self.store.confirm_email(new, NOW + 10 + server.MAIL_TOKEN_TTL["email"]))       # срок вышел ровно сейчас
+        self.assertEqual(self.store.email_state(ivan["id"], NOW + 20 + server.MAIL_TOKEN_TTL["email"])["verified"], False)
+        fresh = self.store.issue_mail_token(ivan["id"], "email", "ivan@example.com", NOW + 100)
+        self.assertEqual(self.store.confirm_email(fresh, NOW + 101)["email"], "ivan@example.com")
+
+    def test_first_to_confirm_owns_the_address(self):
+        ann, bob = self.person("ann", "x@example.com"), self.person("bob", "x@example.com")      # заявки не мешают друг другу
+        ann_link = self.store.issue_mail_token(ann["id"], "email", "x@example.com", NOW)
+        bob_link = self.store.issue_mail_token(bob["id"], "email", "x@example.com", NOW)
+        self.assertEqual(self.store.confirm_email(bob_link, NOW + 5)["username"], "bob")
+        self.assertEqual(self.store.email_state(ann["id"], NOW + 5), {"address": None, "verified": False, "pending": None})
+        self.assertIsNone(self.store.confirm_email(ann_link, NOW + 6))
+        with self.assertRaises(server.Conflict):
+            self.person("carol", "x@example.com")
+        with self.assertRaises(server.Conflict):
+            self.store.set_email(ann["id"], "x@example.com", self.PW, NOW + 7)
+        with closing(sqlite3.connect(self.store.path)) as cx:                        # уникальность держит и сама база
+            with self.assertRaises(sqlite3.IntegrityError):
+                cx.execute("UPDATE users SET email='x@example.com', email_verified_at=1 WHERE id=?", (ann["id"],))
+
+    def test_changing_a_verified_address_keeps_the_old_one_until_the_new_is_confirmed(self):
+        ivan = self.verified("ivan", "old@example.com")
+        with self.assertRaises(server.WrongPassword):
+            self.store.set_email(ivan["id"], "new@example.com", "wrong password 123", NOW + 5)
+        with self.assertRaises(server.Conflict):
+            self.store.set_email(ivan["id"], "old@example.com", self.PW, NOW + 5)      # уже подтверждён
+        link = self.store.set_email(ivan["id"], "New@Example.com", self.PW, NOW + 10)
+        self.assertEqual(self.store.email_state(ivan["id"], NOW + 11),
+                         {"address": "old@example.com", "verified": True, "pending": "new@example.com"})
+        self.assertEqual(self.store.login_user("old@example.com", self.PW)["id"], ivan["id"])
+        self.assertIsNone(self.store.login_user("new@example.com", self.PW))
+        self.store.confirm_email(link, NOW + 12)
+        self.assertEqual(self.store.email_state(ivan["id"], NOW + 13), {"address": "new@example.com", "verified": True, "pending": None})
+        self.assertIsNone(self.store.login_user("old@example.com", self.PW))
+        self.assertEqual(self.store.login_user("new@example.com", self.PW)["id"], ivan["id"])
+
+    def test_an_unconfirmed_address_is_replaced_at_once_and_the_admin_can_bind_one(self):
+        ivan = self.person("ivan", "typo@example.com")
+        self.store.set_email(ivan["id"], "right@example.com", self.PW, NOW + 5)
+        self.assertEqual(self.store.email_state(ivan["id"], NOW + 6),
+                         {"address": "right@example.com", "verified": False, "pending": "right@example.com"})
+        link = self.store.set_email(self.admin_id, "owner@example.com", "admin-password-123", NOW + 7)     # пароль администратора из .env
+        self.assertEqual(self.store.confirm_email(link, NOW + 8)["username"], "garden")
+        with self.assertRaises(server.WrongPassword):
+            self.store.set_email(self.admin_id, "other@example.com", "wrong-password-123", NOW + 9)
+
+    def test_resend_goes_to_the_address_that_waits_for_confirmation(self):
+        ivan = self.person("ivan", "ivan@example.com")
+        address, link = self.store.resend_verification(ivan["id"], NOW + 5)
+        self.assertEqual(address, "ivan@example.com")
+        self.store.confirm_email(link, NOW + 6)
+        self.assertIsNone(self.store.resend_verification(ivan["id"], NOW + 7))        # ждать нечего
+        self.assertIsNone(self.store.resend_verification(self.person("ann")["id"], NOW + 7))
+
+    def test_reset_by_link_sets_the_password_closes_sessions_and_verifies_the_address(self):
+        ivan = self.person("ivan", "ivan@example.com")
+        session = self.store.create_session(ivan["id"], "1.2.3.4", now=NOW)
+        target = self.store.find_reset_targets("ivan@example.com")[0]
+        self.assertEqual(target, {"id": ivan["id"], "username": "ivan"})
+        link = self.store.issue_mail_token(target["id"], "reset", "ivan@example.com", NOW)
+        self.assertTrue(self.store.check_reset_token(link, NOW + 60))
+        with self.assertRaises(ValueError):
+            self.store.reset_with_token(link, "short", NOW + 61)                      # слабый пароль ссылку не расходует
+        with self.assertRaises(ValueError):
+            self.store.reset_with_token(link, "IVAN", NOW + 61)
+        self.assertTrue(self.store.check_reset_token(link, NOW + 62))
+        self.assertEqual(self.store.reset_with_token(link, "brand new password", NOW + 63), {"username": "ivan"})
+        self.assertIsNone(self.store.session_user(session, now=NOW + 64))             # прежние входы закрыты
+        self.assertIsNone(self.store.login_user("ivan", self.PW))
+        self.assertEqual(self.store.login_user("ivan", "brand new password")["username"], "ivan")
+        self.assertEqual(self.store.login_user("ivan@example.com", "brand new password")["username"], "ivan")   # ссылка пришла на этот адрес
+        self.assertIsNone(self.store.reset_with_token(link, "another new password", NOW + 70))
+        self.assertFalse(self.store.check_reset_token(link, NOW + 70))
+        self.assertFalse(self.store.check_reset_token("не-ссылка", NOW + 70))
+
+    def test_reset_link_expires_and_dies_when_the_password_is_changed_another_way(self):
+        ivan = self.verified("ivan", "ivan@example.com")
+        link = self.store.issue_mail_token(ivan["id"], "reset", "ivan@example.com", NOW)
+        self.assertFalse(self.store.check_reset_token(link, NOW + server.MAIL_TOKEN_TTL["reset"]))
+        self.assertIsNone(self.store.reset_with_token(link, "brand new password", NOW + server.MAIL_TOKEN_TTL["reset"] + 1))
+        link = self.store.issue_mail_token(ivan["id"], "reset", "ivan@example.com", NOW)
+        self.store.change_password(ivan["id"], self.PW, "changed by owner 1")
+        self.assertFalse(self.store.check_reset_token(link, NOW + 5))
+        link = self.store.issue_mail_token(ivan["id"], "reset", "ivan@example.com", NOW)
+        self.assertIsNotNone(self.store.reset_password(ivan["id"]))                   # временный пароль от администратора
+        self.assertFalse(self.store.check_reset_token(link, NOW + 5))
+
+    def test_who_can_be_reset(self):
+        names = lambda email: [t["username"] for t in self.store.find_reset_targets(email)]
+        self.assertEqual(names("nobody@example.com"), [])
+        ann = self.person("ann", "shared@example.com")                                 # заявка без подтверждения
+        self.assertEqual(names("shared@example.com"), ["ann"])
+        self.person("bob", "shared@example.com")                                       # заявили двое: письма получат обе записи
+        self.assertEqual(names("shared@example.com"), ["bob", "ann"])                  # настоящий владелец адреса узнает свою по имени
+        self.person("carol", "shared@example.com")
+        self.person("dave", "shared@example.com")
+        self.assertEqual(names("shared@example.com"), ["dave", "carol", "bob"])        # не больше трёх
+        self.store.confirm_email(self.store.issue_mail_token(ann["id"], "email", "shared@example.com", NOW), NOW + 1)
+        self.assertEqual(names("shared@example.com"), ["ann"])                         # подтверждённая одна: адрес принадлежит ей
+        self.store.set_user_disabled(ann["id"], True)
+        self.assertEqual(names("shared@example.com"), [])
+        link = self.store.issue_mail_token(ann["id"], "reset", "shared@example.com", NOW)
+        self.assertFalse(self.store.check_reset_token(link, NOW + 5))                  # у заблокированного ссылка не работает
+        admin_link = self.store.set_email(self.admin_id, "owner@example.com", "admin-password-123", NOW)
+        self.store.confirm_email(admin_link, NOW + 1)
+        self.assertEqual(names("owner@example.com"), [])                               # пароль администратора живёт в .env
+
+    def test_people_list_shows_the_address_and_deleting_a_person_removes_the_links(self):
+        ivan = self.verified("ivan", "ivan@example.com")
+        self.person("ann", "ann@example.com")
+        rows = {u["username"]: u for u in self.store.list_users()}
+        self.assertEqual((rows["ivan"]["email"], rows["ivan"]["email_verified"]), ("ivan@example.com", True))
+        self.assertEqual((rows["ann"]["email"], rows["ann"]["email_verified"]), ("ann@example.com", False))
+        self.assertEqual((rows["garden"]["email"], rows["garden"]["email_verified"]), (None, False))
+        link = self.store.issue_mail_token(ivan["id"], "reset", "ivan@example.com", NOW)
+        self.assertTrue(self.store.delete_user(ivan["id"]))
+        with closing(sqlite3.connect(self.store.path)) as cx:
+            self.assertEqual(cx.execute("SELECT COUNT(*) FROM mail_tokens WHERE user_id=?", (ivan["id"],)).fetchone()[0], 0)
+        self.assertFalse(self.store.check_reset_token(link, NOW + 5))
+        self.person("ivan2", "ivan@example.com")                                      # адрес освободился
+
+    def test_old_database_gets_the_email_columns(self):
+        old = Path(self.tmp.name) / "old.sqlite3"
+        with closing(sqlite3.connect(old)) as cx, cx:
+            cx.execute("CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE,"
+                       " pass_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', created_at INTEGER NOT NULL,"
+                       " last_login_at INTEGER, reg_ip TEXT, disabled INTEGER NOT NULL DEFAULT 0)")
+            cx.execute("INSERT INTO users(username, pass_hash, created_at) VALUES('old', 'x', ?)", (NOW,))
+        store = server.Store(old)
+        self.assertEqual(store.email_state(1), {"address": None, "verified": False, "pending": None})
+        server.Store(old)                                                              # повторный запуск ничего не ломает
+        with closing(sqlite3.connect(old)) as cx:
+            self.assertIn("users_email_verified", {row[1] for row in cx.execute("PRAGMA index_list(users)")})
+
+
+class MailHttpTests(unittest.TestCase):
+    """Сервер с настроенной почтой: письма копятся в Outbox вместо SMTP."""
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+    PW = "correct horse battery"
+    counter = 0
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = mail_config(Path(cls.tmp.name) / "p.sqlite3")
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.outbox = Outbox()
+        cls.httpd.mailer.transport = cls.outbox
+        cls.httpd.mailer.synchronous = True
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.mail_ip_limiter = server.FailureLimiter(limit=server.MAIL_PER_IP, window=3600)
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)
+        self.httpd.token_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.mailer._day, self.httpd.mailer._sent_today = "", 0
+        self.outbox.sent.clear()
+        self.store.set_registration(True)
+
+    def unique(self, prefix="mail"):
+        type(self).counter += 1
+        return "%s%d" % (prefix, type(self).counter)
+
+    def request(self, method, path, body=None, headers=None, cookie=None, admin=False):
+        headers = dict(headers or {})
+        if cookie:
+            headers["Cookie"] = server.SESSION_COOKIE + "=" + cookie
+        if admin:
+            headers["Authorization"] = "Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode()
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read()
+        finally:
+            conn.close()
+
+    def call(self, method, path, payload=None, cookie=None, admin=False, ip=None):
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        headers = dict(self.ACTION, **({"X-Real-IP": ip} if ip else {}))
+        status, resp_headers, raw = self.request(method, path, body, headers, cookie, admin)
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        return status, data, resp_headers
+
+    @staticmethod
+    def cookie_of(headers):
+        return headers["Set-Cookie"].split(";")[0].split("=", 1)[1]
+
+    def register(self, name=None, email=None, password=None, ip=None):
+        name = name or self.unique()
+        email = email or "%s@example.com" % name.lower()
+        status, data, headers = self.call("POST", "/api/register", {"username": name, "email": email, "password": password or self.PW}, ip=ip)
+        return status, data, (self.cookie_of(headers) if status == 201 else None), name, email
+
+    def person(self, verified=False):
+        status, data, cookie, name, email = self.register()
+        self.assertEqual(status, 201, data)
+        if verified:
+            self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token(email)})[0], 200)
+        return cookie, name, email
+
+    def test_registration_info_and_the_public_pages(self):
+        info = json.loads(self.request("GET", "/api/registration")[2])
+        self.assertEqual(info, {"open": True, "mail": True, "google": False})
+        for path in ("/forgot", "/reset", "/verify", "/forgot.js", "/reset.js", "/verify.js"):
+            status, headers, body = self.request("GET", path)
+            self.assertEqual(status, 200, path)
+            if path.endswith(("forgot", "reset", "verify")):
+                self.assertNotIn(b"<script>", body)
+                self.assertNotIn(b" style=", body)
+                self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
+        cookie, _, _ = self.person()
+        self.assertEqual(self.request("GET", "/verify", cookie=cookie)[0], 200)        # по ссылке из письма страница открывается и вошедшему
+        self.assertEqual(self.request("GET", "/reset", cookie=cookie)[0], 200)
+        self.assertEqual(self.request("GET", "/forgot", cookie=cookie)[0], 302)        # а «Забыли пароль» вошедшему не нужна
+
+    def test_registration_asks_for_an_address_and_sends_the_link(self):
+        name = self.unique()
+        self.assertEqual(self.call("POST", "/api/register", {"username": name, "password": self.PW})[0], 400)          # адрес обязателен
+        for bad in ("not-an-address", "иван@example.com", "x@y"):
+            self.assertEqual(self.call("POST", "/api/register", {"username": name, "email": bad, "password": self.PW})[0], 400, bad)
+        self.assertEqual(self.outbox.sent, [])
+        status, data, cookie, name, email = self.register(name, "Ivan.Mail@Example.com")
+        self.assertEqual((status, data["mail_sent"]), (201, True))
+        letter = self.outbox.to("ivan.mail@example.com")[0]                             # адрес приведён к нижнему регистру
+        self.assertEqual(letter["Subject"], "MicroGarden: подтвердите почту")
+        self.assertRegex(letter.get_content(), r"https://dash\.example\.org/verify#token=[A-Za-z0-9_-]{40,}")
+        self.assertIn(name, letter.get_content())
+        me = json.loads(self.request("GET", "/api/me", cookie=cookie)[2])
+        self.assertEqual((me["mail_enabled"], me["email"]),
+                         (True, {"address": "ivan.mail@example.com", "verified": False, "pending": "ivan.mail@example.com"}))
+        self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "email": "ivan.mail@example.com", "password": self.PW})[0], 201)   # заявка без подтверждения не блокирует
+        self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token("ivan.mail@example.com")})[0], 200)
+        status, data, _ = self.call("POST", "/api/register", {"username": self.unique(), "email": "ivan.mail@example.com", "password": self.PW})
+        self.assertEqual((status, "уже привязана" in data["error"]), (409, True))      # подтверждённый адрес занят
+
+    def test_new_boards_need_a_confirmed_address(self):
+        cookie, name, email = self.person()
+        status, data, _ = self.call("POST", "/api/boards", {"name": "Теплица", "device": name + "-1"}, cookie=cookie)
+        self.assertEqual((status, data["code"]), (403, "email_unverified"))
+        self.assertEqual(self.call("GET", "/api/boards", cookie=cookie)[0], 200)        # смотреть можно
+        self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token(email)})[1]["email"], email)
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Теплица", "device": name + "-1"}, cookie=cookie)[0], 201)
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Админская", "device": self.unique("adm")}, admin=True)[0], 201)   # администратора это не касается
+
+    def test_verify_checks_the_page_header_and_counts_wrong_links(self):
+        _, _, email = self.person()
+        token = self.outbox.last_token(email)
+        body = json.dumps({"token": token}).encode()
+        self.assertEqual(self.request("POST", "/api/verify", body, {"Content-Type": "application/json"})[0], 403)    # нет заголовка страницы
+        self.assertEqual(self.request("GET", "/api/verify")[0], 405)
+        for bad in ("", "короткая", "x" * 19, "x" * 65, "a b" * 10, None, 5):
+            status, data, _ = self.call("POST", "/api/verify", {"token": bad}, ip="10.9.9.1")
+            self.assertEqual(status, 400, repr(bad))
+        self.assertIn("недействительна", data["error"])
+        self.assertEqual(self.call("POST", "/api/verify", {"token": token}, ip="10.9.9.2")[0], 200)
+        self.assertEqual(self.call("POST", "/api/verify", {"token": token}, ip="10.9.9.2")[0], 400)                    # второй раз нельзя
+        self.httpd.token_limiter = server.FailureLimiter(limit=3, window=600)
+        for _ in range(3):
+            self.call("POST", "/api/verify", {"token": "x" * 30}, ip="10.9.9.3")
+        status, _, headers = self.call("POST", "/api/verify", {"token": "x" * 30}, ip="10.9.9.3")
+        self.assertEqual((status, headers["Retry-After"]), (429, "600"))
+        self.assertEqual(self.call("POST", "/api/verify", {"token": "x" * 30}, ip="10.9.9.4")[0], 400)                  # у другого адреса счёт свой
+
+    def test_forgot_answers_the_same_for_every_address_and_mails_only_known_ones(self):
+        _, _, confirmed = self.person(verified=True)
+        _, _, waiting = self.person()
+        self.outbox.sent.clear()
+        answers = [self.call("POST", "/api/forgot", {"email": address}) for address in (confirmed, waiting, "nobody@example.com")]
+        self.assertEqual({(status, json.dumps(data)) for status, data, _ in answers}, {(200, '{"ok": true}')})
+        self.assertEqual(sorted(m["To"] for m in self.outbox.sent), sorted([confirmed, waiting]))
+        self.assertEqual(self.outbox.sent[0]["Subject"], "MicroGarden: восстановление пароля")
+        self.assertEqual(self.call("POST", "/api/forgot", {"email": "не адрес"})[0], 400)
+        self.assertEqual(self.request("POST", "/api/forgot", b"{}", {"Content-Type": "application/json"})[0], 403)
+
+    def test_forgot_reaches_every_claimant_of_an_unconfirmed_address(self):
+        _, first, email = self.person()                                                # адрес не подтверждён
+        status, _, _, second, _ = self.register(email=email)                           # второй заявил тот же адрес
+        self.assertEqual(status, 201)
+        self.outbox.sent.clear()
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)
+        self.assertEqual(self.call("POST", "/api/forgot", {"email": email})[0], 200)
+        letters = self.outbox.to(email)
+        self.assertEqual(sorted(re.search(r"Здравствуйте, (\S+)!", m.get_content()).group(1) for m in letters), sorted([first, second]))
+        for letter in letters:                                                         # настоящий владелец адреса выберет свою запись по имени
+            self.assertEqual(self.call("POST", "/api/reset", {"token": Outbox.token_of(letter), "password": "brand new password"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": email, "password": "brand new password"})[1]["user"]["username"],
+                         re.search(r"Здравствуйте, (\S+)!", letters[0].get_content()).group(1))   # адрес остался у той записи, чью ссылку открыли первой
+
+    def test_forgot_is_limited_per_address_and_per_caller(self):
+        _, _, email = self.person(verified=True)
+        self.outbox.sent.clear()
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)   # письмо при регистрации уже учтено
+        for _ in range(server.MAIL_PER_ADDRESS + 2):
+            self.assertEqual(self.call("POST", "/api/forgot", {"email": email}, ip="10.8.8.1")[0], 200)     # ответ всегда один
+        self.assertEqual(len(self.outbox.to(email)), server.MAIL_PER_ADDRESS)           # а писем не больше трёх в час
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=100, window=3600)
+        for _ in range(server.MAIL_PER_IP - server.MAIL_PER_ADDRESS - 2):
+            self.call("POST", "/api/forgot", {"email": email}, ip="10.8.8.1")
+        status, _, headers = self.call("POST", "/api/forgot", {"email": email}, ip="10.8.8.1")
+        self.assertEqual((status, headers["Retry-After"]), (429, "3600"))
+        self.assertEqual(self.call("POST", "/api/forgot", {"email": email}, ip="10.8.8.2")[0], 200)
+
+    def test_new_password_by_the_link_from_the_letter(self):
+        cookie, name, email = self.person(verified=True)
+        self.outbox.sent.clear()
+        self.call("POST", "/api/forgot", {"email": email})
+        token = self.outbox.last_token(email)
+        self.assertEqual(self.call("POST", "/api/reset/check", {"token": token})[0], 200)
+        self.assertEqual(self.call("POST", "/api/reset/check", {"token": "x" * 40})[0], 400)
+        status, data, _ = self.call("POST", "/api/reset", {"token": token, "password": "short"})
+        self.assertEqual(status, 400)                                                   # слабый пароль ссылку не тратит
+        self.assertIn("Пароль", data["error"])
+        self.assertEqual(self.call("POST", "/api/reset", {"token": token, "password": "brand new password"})[0], 200)
+        self.assertEqual(self.request("GET", "/api/me", cookie=cookie)[0], 401)         # прежний вход закрыт
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": email, "password": "brand new password"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/reset", {"token": token, "password": "another new password"})[0], 400)  # ссылка одноразовая
+
+    def test_reset_by_the_link_also_confirms_the_address(self):
+        _, name, email = self.person()
+        self.assertEqual(self.call("POST", "/api/login", {"username": email, "password": self.PW})[0], 401)           # пока не подтверждена
+        self.outbox.sent.clear()
+        self.call("POST", "/api/forgot", {"email": email})
+        self.call("POST", "/api/reset", {"token": self.outbox.last_token(email), "password": "brand new password"})
+        status, data, _ = self.call("POST", "/api/login", {"username": email.upper(), "password": "brand new password"})
+        self.assertEqual((status, data["user"]["username"]), (200, name))
+
+    def test_login_by_address_gives_the_same_failure_as_by_name(self):
+        _, name, email = self.person(verified=True)
+        with self.assertLogs("dash", level="WARNING") as logs:
+            wrong = self.call("POST", "/api/login", {"username": email, "password": self.PW + "x"})
+            unknown = self.call("POST", "/api/login", {"username": "nobody@example.com", "password": self.PW})
+        self.assertEqual((wrong[0], unknown[0]), (401, 401))
+        self.assertEqual(wrong[1], unknown[1])
+        self.assertEqual(len(logs.output), 2)
+        self.assertNotIn("example.com", "\n".join(logs.output))                     # адреса почты в журнал сервера не попадают
+        self.assertEqual(self.call("POST", "/api/login", {"username": "  " + email + " ", "password": self.PW})[0], 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": "x" * 300, "password": self.PW})[0], 400)
+
+    def test_address_in_the_account_can_be_changed_and_resent(self):
+        cookie, name, email = self.person(verified=True)
+        new = "new-" + email
+        self.outbox.sent.clear()
+        self.assertEqual(self.request("POST", "/api/account/email", json.dumps({"email": new, "password": self.PW}).encode(),
+                                      {"Content-Type": "application/json"}, cookie)[0], 403)
+        self.assertEqual(self.call("POST", "/api/account/email", {"email": new, "password": self.PW}, ip="10.7.7.1")[0], 401)   # без входа нельзя
+        status, data, _ = self.call("POST", "/api/account/email", {"email": new, "password": "wrong-password-123"}, cookie=cookie)
+        self.assertEqual(status, 400)
+        self.assertEqual(self.outbox.sent, [])
+        status, data, _ = self.call("POST", "/api/account/email", {"email": new, "password": self.PW}, cookie=cookie)
+        self.assertEqual((status, data["mail_sent"], data["email"]["pending"]), (200, True, new))
+        self.assertEqual(len(self.outbox.to(new)), 1)
+        first = self.outbox.last_token(new)
+        status, data, _ = self.call("POST", "/api/account/email/resend", {}, cookie=cookie)
+        self.assertEqual((status, data["mail_sent"]), (200, True))
+        self.assertEqual(self.call("POST", "/api/verify", {"token": first})[0], 400)    # прежняя ссылка погасла
+        self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token(new)})[0], 200)
+        self.assertEqual(json.loads(self.request("GET", "/api/me", cookie=cookie)[2])["email"]["address"], new)
+        self.assertEqual(self.call("POST", "/api/account/email/resend", {}, cookie=cookie)[0], 409)    # подтверждать нечего
+
+    def test_address_limit_does_not_burn_the_working_link(self):
+        cookie, name, email = self.person()
+        for _ in range(server.MAIL_PER_ADDRESS):
+            self.httpd.mail_addr_limiter.fail(email)
+        status, _, headers = self.call("POST", "/api/account/email/resend", {}, cookie=cookie)
+        self.assertEqual((status, headers["Retry-After"]), (429, "3600"))
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)
+        self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token(email)})[0], 200)   # письмо при регистрации работает
+
+    def test_admin_sees_addresses_and_the_admin_page_lists_them(self):
+        _, name, email = self.person(verified=True)
+        users = {u["username"]: u for u in self.call("GET", "/api/admin/users", admin=True)[1]["users"]}
+        self.assertEqual((users[name]["email"], users[name]["email_verified"]), (email, True))
+
+    def test_mail_failure_does_not_break_registration(self):
+        def broken(message):
+            raise OSError("down")
+
+        self.httpd.mailer.transport = broken
+        try:
+            with self.assertLogs("dash", level="WARNING"):
+                status, data, cookie, _, _ = self.register()
+        finally:
+            self.httpd.mailer.transport = self.outbox
+        self.assertEqual(status, 201)                                                   # человек зарегистрирован, письмо можно запросить ещё раз
+        self.assertEqual(self.call("POST", "/api/account/email/resend", {}, cookie=cookie)[0], 200)
 
 
 class ConfigTests(unittest.TestCase):

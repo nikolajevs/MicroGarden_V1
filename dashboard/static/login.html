@@ -19,10 +19,11 @@
 
   <section class="panel auth-card" aria-labelledby="login-title">
     <h2 id="login-title">Вход</h2>
+    <p id="notice" class="empty" role="status" hidden>Пароль изменён. Войдите с новым паролем.</p>
     <form id="login-form" class="auth-form" novalidate>
       <label class="field">
-        <span class="label">Имя</span>
-        <input class="input" id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
+        <span class="label">Имя или почта</span>
+        <input class="input" id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" required>
       </label>
       <label class="field">
         <span class="label">Пароль</span>
@@ -31,6 +32,7 @@
       <button type="submit" class="btn primary" id="submit">Войти</button>
     </form>
     <p id="error" class="form-error" role="alert" hidden></p>
+    <p id="forgot-note" class="legend-note" hidden><a href="/forgot">Забыли пароль?</a></p>
     <p id="register-note" class="legend-note">Нет учётной записи? <a href="/register">Зарегистрироваться</a></p>
   </section>
 </div>

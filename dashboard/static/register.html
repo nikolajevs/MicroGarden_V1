@@ -25,6 +25,10 @@
         <span class="label">Имя</span>
         <input class="input" id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" required>
       </label>
+      <label class="field" id="email-field" hidden>
+        <span class="label">Почта</span>
+        <input class="input" id="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254">
+      </label>
       <label class="field">
         <span class="label">Пароль</span>
         <input class="input" id="password" type="password" autocomplete="new-password" maxlength="128" required>
@@ -36,7 +40,9 @@
       <button type="submit" class="btn primary" id="submit">Зарегистрироваться</button>
     </form>
     <p id="error" class="form-error" role="alert" hidden></p>
-    <p class="legend-note">Имя: 3-32 символа, латиница, цифры, _ . - (заглавные и строчные не различаются). Пароль: от 10 символов. Почта не нужна, но и восстановить пароль по почте нельзя: при потере его сбрасывает администратор.</p>
+    <p class="legend-note">Имя: 3-32 символа, латиница, цифры, _ . - (заглавные и строчные не различаются). Пароль: от 10 символов.</p>
+    <p id="note-mail" class="legend-note" hidden>На почту придёт ссылка для подтверждения адреса: пока он не подтверждён, добавлять платы нельзя. Забытый пароль можно будет восстановить по этому адресу.</p>
+    <p id="note-nomail" class="legend-note">Почта не нужна, но и восстановить пароль по почте нельзя: при потере его сбрасывает администратор.</p>
     <p class="legend-note">Это личный сервер. Регистрируясь, вы соглашаетесь, что администратор видит ваши платы и показания и может заблокировать или удалить запись.</p>
     <p class="legend-note">Уже есть запись? <a href="/login">Войти</a></p>
   </section>

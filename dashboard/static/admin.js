@@ -60,6 +60,7 @@
     head.append(title, text('span', 'badge ' + (view.status === 'blocked' ? 'offline' : view.status === 'admin' ? 'in-use' : 'online'), view.statusText));
     li.append(head);
     li.append(text('div', 'meta', 'Зарегистрирован ' + when(user.created_at) + ' · ' + view.lastLogin + (user.reg_ip ? ' · адрес регистрации ' + user.reg_ip : '')));
+    li.append(text('div', 'meta', view.email));
     const actions = document.createElement('div');
     actions.className = 'board-actions';
     if (view.canBlock) actions.append(button('Заблокировать', 'danger', () => block(user, true)));

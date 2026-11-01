@@ -1,4 +1,4 @@
-// Страница аккаунта: кто вошёл, смена своего пароля и выход.
+// Страница аккаунта: кто вошёл, почта (привязать, сменить, получить ссылку ещё раз), смена своего пароля и выход.
 (function () {
   'use strict';
 
@@ -27,6 +27,20 @@
     $('error').hidden = !text;
   }
 
+  function showEmailError(text) {
+    $('email-error').textContent = text || '';
+    $('email-error').hidden = !text;
+  }
+
+  // Состояние почты: подпись, пояснение и кнопка «ещё раз» берутся из AuthLib.describeEmail
+  function showEmail(state) {
+    const view = Lib.describeEmail(state);
+    $('email-state').textContent = view.text;
+    $('email-note').textContent = view.note;
+    $('email-note').hidden = !view.note;
+    $('email-resend').hidden = !view.canResend;
+  }
+
   $('password-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     $('done').hidden = true;
@@ -45,6 +59,42 @@
     }
   });
 
+  $('email-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    $('email-done').hidden = true;
+    const check = Lib.validateEmailChange($('email-new').value, $('email-password').value);
+    if (!check.ok) { showEmailError(check.error); return; }
+    $('email-submit').disabled = true;
+    showEmailError('');
+    try {
+      const answer = await api('POST', '/api/account/email', { email: check.email, password: check.password });
+      $('email-form').reset();
+      showEmail(answer.email);
+      $('email-done').hidden = !answer.mail_sent;
+      if (!answer.mail_sent) showEmailError('Письмо не отправлено: попробуйте позже.');
+    } catch (e) {
+      showEmailError(e.message);
+    } finally {
+      $('email-submit').disabled = false;
+    }
+  });
+
+  $('email-resend').addEventListener('click', async () => {
+    $('email-done').hidden = true;
+    $('email-resend').disabled = true;
+    showEmailError('');
+    try {
+      const answer = await api('POST', '/api/account/email/resend', {});
+      showEmail(answer.email);
+      $('email-done').hidden = !answer.mail_sent;
+      if (!answer.mail_sent) showEmailError('Письмо не отправлено: попробуйте позже.');
+    } catch (e) {
+      showEmailError(e.message);
+    } finally {
+      $('email-resend').disabled = false;
+    }
+  });
+
   $('logout').addEventListener('click', async () => {
     try { await api('POST', '/api/logout'); } catch (e) { /* уже вышли или сервер не ответил */ }
     location.assign('/login');
@@ -56,5 +106,8 @@
     const admin = user.role === 'admin';
     $('password-form').hidden = admin;
     $('admin-note').hidden = !admin;
+    $('email-box').hidden = !data.mail_enabled;
+    $('email-off').hidden = !!data.mail_enabled;
+    if (data.mail_enabled) showEmail(data.email);
   }).catch((e) => { $('who').textContent = 'Не удалось загрузить: ' + e.message; });
 })();

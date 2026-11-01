@@ -15,7 +15,7 @@
     event.preventDefault();
     const username = $('username').value.trim();
     const password = $('password').value;
-    if (!username || !password) { showError('Введите имя и пароль'); return; }
+    if (!username || !password) { showError('Введите имя (или почту) и пароль'); return; }
     $('submit').disabled = true;
     showError('');
     try {
@@ -35,11 +35,17 @@
     }
   });
 
-  // Если регистрация закрыта, ссылки на неё не показываем
+  // Если регистрация закрыта, ссылки на неё не показываем; «Забыли пароль?» только там, где настроена почта
   fetch('/api/registration', { cache: 'no-store' })
     .then((res) => res.json())
-    .then((data) => { $('register-note').hidden = !data.open; })
+    .then((data) => {
+      $('register-note').hidden = !data.open;
+      $('forgot-note').hidden = !data.mail;
+    })
     .catch(() => { /* без ответа ссылка остаётся: страница регистрации сама скажет, закрыта ли она */ });
+
+  // После смены пароля по ссылке из письма сюда ведёт /login?reset=1
+  $('notice').hidden = new URLSearchParams(location.search).get('reset') !== '1';
 
   $('username').focus();
 })();
