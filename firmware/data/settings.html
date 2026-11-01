@@ -465,6 +465,14 @@
                             </label>
                         </div>
                     </div>
+                    <label class="check-label" style="margin-top: 15px;">
+                        <input type="checkbox" id="cloud_control_checkbox">
+                        Разрешить менять настройки платы из панели
+                    </label>
+                    <input type="hidden" id="cloud_control" name="cloud_control" value="0">
+                    <div class="form-hint" style="margin-top: 8px; margin-bottom: 15px;">
+                        Плата применяет запросы на изменение настроек, которые владелец отправляет со страницы «Настройки платы» на сервере панели, не чаще одного за отправку (раз в минуту). Из панели нельзя менять WiFi, адрес и токен панели, поправку тока и датчик уровня воды; полив из панели не длиннее 300 с. Каждое применённое изменение записывается в консоль. По умолчанию выключено; снять галочку можно здесь в любой момент.
+                    </div>
                     <button type="submit" class="btn-action btn-sync">Сохранить телеметрию</button>
                 </form>
             </div>

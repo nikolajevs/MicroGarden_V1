@@ -1,6 +1,7 @@
 #include <esp_task_wdt.h>
 #include <driver/gpio.h>
 #include <Arduino.h>
+#include <freertos/semphr.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <Wire.h>
@@ -20,6 +21,7 @@
 #include "Board.h"
 #include "Safety.h"
 #include "Telemetry.h"
+#include "CloudSettings.h"
 #include "DashCA.h"
 #include "SafetyTests.h"
 #include "Ina238.h"
@@ -65,9 +67,10 @@ static bool rgb_ready = false;
 // Раньше это были ~50 отдельных глобальных переменных, которые три задачи на двух ядрах
 // (loop, веб-сервер, задача Wi-Fi) читали и писали кто как, — отсюда была большая часть гонок.
 // Теперь правило одно:
-//   * Settings — то, что задал пользователь. Меняет только обработчик /save-settings:
-//     разбирает форму в свою копию и публикует её целиком (publishSettings()).
-//     Все остальные работают со своей копией (settingsSnapshot()).
+//   * Settings — то, что задал пользователь. Меняют два писателя: обработчик /save-settings (форма
+//     страницы настроек) и задача телеметрии (запрос из панели, если владелец его разрешил). Каждый
+//     берёт settingsWriteMutex, разбирает изменение в свою копию и публикует её целиком
+//     (publishSettings()). Все остальные работают со своей копией (settingsSnapshot()).
 //   * State — то, что происходит сейчас. Пишет только loop() в рабочую копию `state`
 //     и публикует её (publishState()); веб читает stateSnapshot().
 // Обе структуры — простые данные без String и указателей, поэтому копируются одним memcpy
@@ -131,6 +134,7 @@ struct Settings {
   char telemetry_url[TELEMETRY_URL_MAX + 1];
   char telemetry_token[TELEMETRY_TOKEN_MAX + 1];  // пусто = отправка выключена; наружу не отдаётся
   char device_label[DEVICE_LABEL_MAX + 1];
+  bool cloud_control;                // можно ли менять настройки платы из панели (список — CloudSettings.h); по умолчанию нет
 };
 
 struct State {
@@ -196,6 +200,9 @@ static State stateShared = {};
 static portMUX_TYPE stateMux = portMUX_INITIALIZER_UNLOCKED;
 static Settings settingsShared = {};
 static portMUX_TYPE settingsMux = portMUX_INITIALIZER_UNLOCKED;
+// Замок писателей настроек: на всё время «прочитать копию, изменить, записать в NVS, опубликовать». Создаётся
+// в setup() до запуска задач. Без него изменение из панели и сохранение формы затирали бы друг друга.
+static SemaphoreHandle_t settingsWriteMutex = nullptr;
 
 // --- Кольцевой буфер для показа Serial.print()-сообщений на веб-странице (/api/console) ---
 #define LOG_BUFFER_SIZE 4096
@@ -625,6 +632,8 @@ static const SettingDef SETTING_DEFS[] = {
   SET_STR  ("telemetry_url",       "telem_url",       telemetry_url,  TELEMETRY_URL_MIN, TELEMETRY_URL_MAX, DEFAULT_TELEMETRY_URL, SF_TRIM,    "telemetry"),
   SET_STR  ("telemetry_token",     "telem_token",     telemetry_token, TELEMETRY_TOKEN_MIN, TELEMETRY_TOKEN_MAX, DEFAULT_TELEMETRY_TOKEN, SF_SECRET | SF_TRIM, "telemetry"),
   SET_STR  ("device_label",        "device_label",    device_label,   1,   DEVICE_LABEL_MAX, DEFAULT_DEVICE_LABEL, SF_TRIM,            "telemetry"),
+  // Выключено, пока владелец не поставит галочку на самой плате; сама эта настройка из панели не меняется
+  SET_BOOL ("cloud_control",       "cloud_ctl",       cloud_control,                      false),
 };
 static const size_t SETTING_DEFS_COUNT = sizeof(SETTING_DEFS) / sizeof(SETTING_DEFS[0]);
 
@@ -920,12 +929,164 @@ static void addFlag(String &p, const char *key, bool v) {
   p += ",\""; p += key; p += v ? "\":true" : "\":false";
 }
 
+// --- Настройки из панели -------------------------------------------------------------------------------
+// Плата сообщает панели свои настройки в каждой отправке (раздел cfg), а панель в ответе может приложить
+// запрос на их изменение. Запрос применяется, только если владелец разрешил это на самой плате (cloud_control),
+// и только целиком: одно неподходящее значение отклоняет весь запрос. Список настроек и правила разбора —
+// CloudSettings.h, обмен описан в dashboard/README.md. Ниже всё читает и пишет только задача телеметрии.
+static char cloudId[CLOUD_ID_MAX + 1] = ""; // последний обработанный запрос панели (применённый или отклонённый)
+static char cloudResult[40] = "";           // "ok" или причина отказа: param:<имя>, range:<имя>, order:<пара>
+static uint32_t cloudBadMs = 0;             // когда в последний раз писали про повреждённый ответ панели
+
+static const SettingDef *findSettingDef(const char *param) {
+  for (size_t i = 0; i < SETTING_DEFS_COUNT; i++) {
+    if (strcmp(SETTING_DEFS[i].param, param) == 0) return &SETTING_DEFS[i];
+  }
+  return nullptr;
+}
+
+// Как проверять значение настройки; false — такой тип из панели менять нельзя
+static bool cloudKindOf(const SettingDef &d, CloudKind &kind) {
+  switch (d.type) {
+    case ST_FLOAT: kind = CloudKind::Float; return true;
+    case ST_INT:
+    case ST_U8: kind = CloudKind::Whole; return true;
+    case ST_BOOL: kind = CloudKind::Flag; return true;
+    case ST_U32:
+      kind = CloudKind::Date;
+      return strcmp(d.param, "start_time") == 0;
+    case ST_STRING: break;
+  }
+  return false;
+}
+
+// Проверяет запрос панели и кладёт значения в next. Если хоть одно значение не подходит, возвращает false с причиной
+// в reason, а next остаётся недостроенной копией, которую выбрасывают.
+static bool applyCloudPatch(const CloudPatch &patch, Settings &next, char *reason, size_t cap) {
+  for (size_t k = 0; k < patch.count; k++) {
+    const CloudField &f = patch.items[k];
+    CloudKind kind = CloudKind::Float;
+    const SettingDef *d = cloudParamAllowed(f.name) ? findSettingDef(f.name) : nullptr;
+    if (d == nullptr || !cloudKindOf(*d, kind)) {
+      snprintf(reason, cap, "param:%s", f.name);
+      return false;
+    }
+    // Границы таблицы лежат во float: сравниваем с ними значение, приведённое к float, иначе 0.1 из запроса
+    // оказалось бы меньше границы 0.1f
+    const double value = kind == CloudKind::Float ? (double)(float)f.value : f.value;
+    if (!cloudValueOk(kind, value, d->lo, cloudHiLimit(f.name, d->hi))) {
+      snprintf(reason, cap, "range:%s", f.name);
+      return false;
+    }
+    uint8_t *p = fieldAddr(next, *d);
+    switch (d->type) {
+      case ST_FLOAT: *(float *)p = (float)f.value; break;
+      case ST_INT: *(int *)p = (int)f.value; break;
+      case ST_U8: *(uint8_t *)p = (uint8_t)f.value; break;
+      case ST_BOOL: *(bool *)p = f.value != 0.0; break;
+      case ST_U32: *(uint32_t *)p = (uint32_t)f.value; break;
+      case ST_STRING: break;
+    }
+  }
+  // Перевёрнутые границы местная форма молча меняет местами; запрос из панели с такой ошибкой отклоняется
+  if (next.led_min_limit > next.led_max_limit) { snprintf(reason, cap, "order:led"); return false; }
+  if (next.fan1_min_limit > next.fan1_max_limit) { snprintf(reason, cap, "order:fan1"); return false; }
+  if (next.fan2_min_limit > next.fan2_max_limit) { snprintf(reason, cap, "order:fan2"); return false; }
+  return true;
+}
+
+// Что записать в журнал платы (оттуда строка попадает и в журнал на панели)
+static void logCloudResult(const CloudPatch &patch, bool ok, const char *reason) {
+  if (!ok) {
+    logPrintf("[Cloud] Запрос панели на изменение настроек отклонён (%s): %s. Ничего не изменено.\n", patch.id, reason);
+    return;
+  }
+  char list[96] = "";
+  size_t at = 0;
+  for (size_t k = 0; k < patch.count; k++) {
+    char item[40];
+    const int n = snprintf(item, sizeof(item), "%s%s=%.10g", k ? ", " : "", patch.items[k].name, patch.items[k].value);
+    if (n < 0 || at + (size_t)n + 8 >= sizeof(list)) { // в запасе место для ", …" (многоточие — три байта UTF-8)
+      strlcat(list, ", …", sizeof(list));
+      break;
+    }
+    strlcat(list, item, sizeof(list));
+    at += (size_t)n;
+  }
+  logPrintf("[Cloud] Настройки из панели применены (%s): %s\n", patch.id, list);
+}
+
+// Ответ сервера на отправку: если в нём есть запрос на изменение настроек, применить его
+static void handleCloudReply(const String &reply) {
+  static CloudPatch patch; // около 1 КБ: в статической памяти, а не на стеке задачи
+  const CloudReply kind = parseCloudReply(reply.c_str(), reply.length(), patch);
+  if (kind == CloudReply::None) return;
+  if (kind == CloudReply::Bad) {
+    const uint32_t now = millis() | 1; // 0 — «ещё не писали»
+    if (cloudBadMs == 0 || elapsedMs(now, cloudBadMs) >= TELEMETRY_REPORT_REPEAT_MS) {
+      cloudBadMs = now;
+      logPrintln("[Cloud] Не удалось разобрать запрос панели на изменение настроек. Ничего не изменено.");
+    }
+    return;
+  }
+  if (strcmp(patch.id, cloudId) == 0) return; // этот запрос уже обработан, панель просто ещё не получила подтверждение
+  if (settingsWriteMutex == nullptr || xSemaphoreTake(settingsWriteMutex, pdMS_TO_TICKS(2000)) != pdTRUE) return; // повтор через минуту
+  const Settings prev = settingsSnapshot();
+  Settings next = prev;
+  char reason[40] = "";
+  const bool allowed = prev.cloud_control; // владелец мог выключить разрешение уже после отправки
+  const bool ok = allowed && applyCloudPatch(patch, next, reason, sizeof(reason));
+  if (ok) {
+    saveChangedSettings(prev, next);
+    publishSettings(next);
+  }
+  xSemaphoreGive(settingsWriteMutex);
+  if (!allowed) return;
+  strlcpy(cloudId, patch.id, sizeof(cloudId));
+  strlcpy(cloudResult, ok ? "ok" : reason, sizeof(cloudResult));
+  if (ok && !preferences.putString("cloud_id", cloudId)) logPrintln("[Cloud] Не удалось записать номер запроса в NVS.");
+  logCloudResult(patch, ok, reason);
+}
+
+// Раздел cfg телеметрии: разрешены ли настройки из панели, какой запрос панели обработан последним и что сейчас
+// стоит на плате. Сервер по нему и подтверждает запрос, и показывает настоящие значения.
+static void appendCloudReport(String &p, const Settings &cfg) {
+  p += ",\"cfg\":{\"cloud\":";
+  p += cfg.cloud_control ? "true" : "false";
+  p += ",\"id\":\"";
+  p += cloudId;
+  p += "\",\"res\":\"";
+  p += cloudResult;
+  p += "\",\"v\":{";
+  bool first = true;
+  for (size_t i = 0; i < CLOUD_PARAM_COUNT + CLOUD_REPORT_ONLY_COUNT; i++) {
+    const char *name = i < CLOUD_PARAM_COUNT ? CLOUD_PARAMS[i] : CLOUD_REPORT_ONLY[i - CLOUD_PARAM_COUNT];
+    const SettingDef *d = findSettingDef(name);
+    if (d == nullptr) continue;
+    const uint8_t *v = fieldAddr(cfg, *d);
+    if (!first) p += ",";
+    first = false;
+    p += "\"";
+    p += name;
+    p += "\":";
+    switch (d->type) {
+      case ST_FLOAT: p += String(finiteFloat(*(const float *)v) ? *(const float *)v : 0.0f, 2); break;
+      case ST_INT: p += String(*(const int *)v); break;
+      case ST_U8: p += String((int)*(const uint8_t *)v); break;
+      case ST_BOOL: p += *(const bool *)v ? "true" : "false"; break;
+      case ST_U32: p += String((unsigned long)*(const uint32_t *)v); break;
+      case ST_STRING: p += "0"; break; // в списке строк нет
+    }
+  }
+  p += "}}";
+}
+
 // Тело запроса: показания и (если есть) новая порция журнала. window — копия кольцевого
 // буфера, chunk — выбранная часть (позиции считаются от windowStart).
 static String buildTelemetryPayload(const Settings &cfg, const State &st, const char *window,
                                     uint32_t windowStart, const LogChunk &chunk) {
   String p;
-  p.reserve(900 + chunk.len + chunk.len / 8);
+  p.reserve(1900 + chunk.len + chunk.len / 8);
   p += "{\"device\":\"";
   appendJsonText(p, cfg.device_label, strlen(cfg.device_label));
   p += "\",\"sample\":{\"led\":";
@@ -960,6 +1121,7 @@ static String buildTelemetryPayload(const Settings &cfg, const State &st, const 
   addInteger(p, "heap_free", (long)ESP.getFreeHeap());
   addInteger(p, "uptime_s", (long)(millis() / 1000));
   p += ",\"fw\":\"" FIRMWARE_ID "\"}";
+  appendCloudReport(p, cfg);
   if (chunk.len > 0) {
     p += ",\"log\":{\"boot\":\"";
     p += boot_id;
@@ -974,8 +1136,9 @@ static String buildTelemetryPayload(const Settings &cfg, const State &st, const 
 }
 
 // Код ответа сервера или отрицательный код ошибки HTTPClient. Сертификат сервера проверяется
-// по закреплённому корню (DashCA.h), для этого нужно время UTC.
-static int postTelemetry(const Settings &cfg, const String &payload) {
+// по закреплённому корню (DashCA.h), для этого нужно время UTC. Тело ответа (до CLOUD_REPLY_MAX байт)
+// кладётся в reply: в нём может быть запрос панели на изменение настроек.
+static int postTelemetry(const Settings &cfg, const String &payload, String &reply) {
   WiFiClientSecure client;
   client.setCACert(DASH_ROOT_CA);
   client.setHandshakeTimeout(15);
@@ -986,6 +1149,10 @@ static int postTelemetry(const Settings &cfg, const String &payload) {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + cfg.telemetry_token);
   const int code = http.POST(payload);
+  if (code == 200) {
+    const int size = http.getSize(); // -1, если ответ без длины: такой не читаем
+    if (size > 0 && size <= (int)CLOUD_REPLY_MAX) reply = http.getString();
+  }
   http.end();
   return code;
 }
@@ -1022,8 +1189,10 @@ void vTelemetryTask(void *pvParameters) {
       uint32_t windowStart = 0;
       const size_t n = logCopyWindow(logWindow, windowStart);
       const LogChunk chunk = chooseLogChunk(logWindow, n, windowStart, logSent, TELEMETRY_MAX_LOG_CHUNK);
-      code = postTelemetry(cfg, buildTelemetryPayload(cfg, st, logWindow, windowStart, chunk));
+      String reply;
+      code = postTelemetry(cfg, buildTelemetryPayload(cfg, st, logWindow, windowStart, chunk), reply);
       if (code == 200 && chunk.len > 0) sentTo = chunk.from + (uint32_t)chunk.len;
+      if (code == 200 && reply.length() > 0) handleCloudReply(reply);
     }
     if (code == 200) logSent = sentTo;
 
@@ -1592,6 +1761,19 @@ void setup() {
     }
   }
 
+  settingsWriteMutex = xSemaphoreCreateMutex();
+  if (settingsWriteMutex == nullptr) {
+    haltOnFatalError("Cannot create the settings lock; outputs remain off.");
+  }
+  // Номер последнего применённого запроса панели: после перезагрузки он не применится второй раз
+  {
+    const String savedCloudId = preferences.getString("cloud_id", "");
+    if (hexId(savedCloudId.c_str())) {
+      strlcpy(cloudId, savedCloudId.c_str(), sizeof(cloudId));
+      strlcpy(cloudResult, "ok", sizeof(cloudResult));
+    }
+  }
+
   Settings cfg;
   loadSettingsFromNVS(cfg);
   if (strlen(cfg.ap_pass) < 8) {
@@ -1795,8 +1977,12 @@ void setup() {
   server.on("/save-settings", HTTP_POST, [](AsyncWebServerRequest *request){
     // Работаем с копией: разбираем форму, проверяем, пишем в NVS и только потом публикуем
     // целиком — loop() и задача Wi-Fi никогда не видят наполовину применённые настройки.
-    // Обработчики AsyncWebServer выполняются по одному, так что два сохранения
-    // одновременно не случаются и изменения друг друга не затирают.
+    // Обработчики AsyncWebServer выполняются по одному, а от запроса из панели (задача телеметрии)
+    // это сохранение отделяет settingsWriteMutex: изменения друг друга не затирают.
+    if (settingsWriteMutex == nullptr || xSemaphoreTake(settingsWriteMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+      request->send(503, "text/plain", "Settings are being updated, retry");
+      return;
+    }
     Settings prev = settingsSnapshot();
     Settings next = prev;
     String rejected = applyFormToSettings(request, next);
@@ -1818,6 +2004,7 @@ void setup() {
 
     saveChangedSettings(prev, next);
     publishSettings(next);
+    xSemaphoreGive(settingsWriteMutex);
 
     // Новые данные роутера — будим фоновую задачу, чтобы она не ждала до двух минут
     // в своём сне и переподключилась сразу после сохранения.
