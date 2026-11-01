@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Платы</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Платы</h1>
+      <p class="sub">Платы, которым разрешено присылать данные на этот сервер</p>
+    </div>
+    <div class="top-right">
+      <a class="btn" href="/">← К графикам</a>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="add-title">
+    <h2 id="add-title">Добавить плату</h2>
+    <p class="legend-note lead">Каждая плата регистрируется здесь и получает свой токен. Плата, которой здесь нет, данные отправлять не может.</p>
+    <form id="new-form" class="board-form" autocomplete="off" novalidate>
+      <label class="field">
+        <span class="label">Название</span>
+        <input class="input" id="new-name" type="text" maxlength="40" required placeholder="Например, Теплица">
+      </label>
+      <label class="field">
+        <span class="label">Имя платы в системе</span>
+        <input class="input" id="new-device" type="text" maxlength="32" required spellcheck="false" autocapitalize="none" placeholder="microgarden-2">
+      </label>
+      <button type="submit" class="btn primary" id="new-submit">Добавить плату</button>
+    </form>
+    <p class="legend-note">Имя платы — то, что указано в её настройках (вкладка «WiFi», раздел «Телеметрия», поле «Имя платы»): латиница, цифры, _ . - , без повторов.</p>
+    <p id="page-error" class="form-error" role="alert" hidden></p>
+
+    <div id="created" class="created" role="status" hidden>
+      <p><b id="created-title"></b></p>
+      <ol class="steps">
+        <li>Откройте настройки платы: вкладка «WiFi», раздел «Телеметрия».</li>
+        <li>Адрес приёма: <code id="created-url" class="token-code inline"></code></li>
+        <li>Имя платы: <code id="created-device" class="token-code inline"></code></li>
+        <li>Токен приёма (вставьте целиком):
+          <code id="created-token" class="token-code"></code>
+        </li>
+        <li>Нажмите «Сохранить телеметрию». Через минуту плата появится ниже со статусом «Онлайн».</li>
+      </ol>
+      <div class="created-actions">
+        <button type="button" class="btn" id="copy">Копировать токен</button>
+        <button type="button" class="btn ghost" id="hide-created">Скрыть</button>
+        <span id="copy-note" class="legend-note"></span>
+      </div>
+      <p class="legend-note">Токен показан один раз: на сервере хранится только его отпечаток, прочитать токен потом нельзя. Потеряли — создайте новый токен платы, а старый отзовите.</p>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="list-title">
+    <div class="panel-head">
+      <h2 id="list-title">Зарегистрированные платы</h2>
+      <label class="check"><input type="checkbox" id="show-revoked"> Показывать отозванные токены</label>
+    </div>
+    <ul id="board-list" class="board-list"></ul>
+    <p id="board-empty" class="empty plain" hidden>Плат пока нет. Добавьте первую выше.</p>
+    <p class="legend-note">Сменить токен без перерыва в приёме: «Новый токен», введите его в настройках платы, затем отзовите старый. Отозванный токен перестаёт действовать сразу. Удалить плату можно, когда у неё нет действующих токенов; вместе с ней удаляются её показания и журнал.</p>
+  </section>
+
+  <section class="panel" id="shared-section" aria-labelledby="shared-title" hidden>
+    <h2 id="shared-title">Общий токен из .env</h2>
+    <ul id="shared-list" class="token-list"></ul>
+    <p class="legend-note">Этот токен записан в файле .env на сервере и подходит любой зарегистрированной плате. Надёжнее, когда у каждой платы свой токен: выдайте его кнопкой «Новый токен», введите в плату, а общий отзовите и уберите из .env.</p>
+  </section>
+
+  <footer class="foot">Токены хранятся на сервере в виде отпечатка (SHA-256), в базу попадает не сам токен.</footer>
+</div>
+<script src="/boards-lib.js"></script>
+<script src="/boards.js"></script>
+</body>
+</html>

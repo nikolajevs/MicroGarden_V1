@@ -208,3 +208,67 @@ h2 { font-size: 15px; font-weight: 700; }
 .alert-act:hover { border-color: var(--accent); }
 .alerts-empty { color: var(--ok); font-size: 13px; margin-bottom: 10px; }
 .alerts-note { color: var(--muted); font-size: 12px; }
+
+/* Кнопка-значок рядом с колокольчиком: ссылка на страницу токенов */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; text-decoration: none;
+  background: var(--panel); color: var(--text); transition: border-color .15s;
+}
+.icon-btn:hover { border-color: var(--accent); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Страница плат: регистрация, токены, статус связи */
+.board-form { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.lead { margin: 0 0 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.input {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 12px; min-width: 0; width: 100%;
+}
+.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover:not(:disabled) { border-color: var(--bad); }
+.btn.ghost { margin-top: 0; }
+button.btn:disabled { opacity: .5; cursor: default; }
+.form-error { color: var(--bad); font-weight: 600; margin-top: 10px; }
+.form-error[hidden], .created[hidden], #shared-section[hidden] { display: none; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.created { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--ok); border-radius: 12px; }
+.created p { margin-bottom: 8px; }
+.steps { margin: 0 0 10px 20px; display: grid; gap: 6px; }
+.token-code {
+  display: block; margin: 6px 0 0; padding: 8px 12px; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px;
+  font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; user-select: all;
+}
+.token-code.inline { display: inline-block; margin: 0 0 0 4px; padding: 2px 8px; }
+.created-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 8px; }
+.created-actions .legend-note { margin: 0; }
+.board-list { list-style: none; display: grid; gap: 12px; }
+.board-list:empty { display: none; }
+.board { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.board-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.board-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.board-title .name { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+.board-title .device { color: var(--muted); font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.board .meta, .token-row .meta { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.board-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.warn-text { color: var(--warn); font-size: 13px; }
+.token-list { list-style: none; display: grid; gap: 8px; }
+.token-list:empty { display: none; }
+.token-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.token-row.revoked { opacity: .65; }
+.token-main { min-width: 0; flex: 1 1 240px; display: grid; gap: 2px; }
+.token-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.token-head .name { font-weight: 600; overflow-wrap: anywhere; }
+.token-actions { display: flex; gap: 8px; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; font-weight: 700; }
+.badge.active, .badge.online { color: var(--ok); border-color: var(--ok); }
+.badge.in-use { color: var(--accent); border-color: var(--accent); }
+.badge.offline { color: var(--bad); border-color: var(--bad); }
+.badge.revoked, .badge.never { color: var(--muted); }
+@media (max-width: 640px) {
+  .board-form { grid-template-columns: 1fr; }
+  .board-form .btn { width: 100%; }
+}
