@@ -559,6 +559,7 @@
     const span = { '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000 }[state.range];
     const now = Math.floor(Date.now() / 1000);
     $('csv').href = '/api/export.csv?' + q({ device: state.device || '', from: now - span, to: now + 1 });
+    $('board-settings').href = '/settings?' + q({ device: state.device || '' });
   }
 
   async function refresh() {

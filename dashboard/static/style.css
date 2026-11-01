@@ -283,3 +283,37 @@ button.btn:disabled { opacity: .5; cursor: default; }
 .auth-form[hidden], .empty[hidden] { display: none; }
 .auth-form .btn { justify-self: start; }
 @media (max-width: 520px) { .auth-form .btn { width: 100%; } }
+
+/* Настройки платы */
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 14px; }
+.setting { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px 10px; border: 1px solid transparent; border-radius: 12px; }
+.setting.changed { border-color: var(--accent); }
+.setting.pending { border-color: var(--warn); }
+.setting.invalid { border-color: var(--bad); }
+.setting-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.setting-label .label { color: var(--text); font-size: 13px; text-transform: none; letter-spacing: 0; }
+.setting-label .unit, .setting-now, .setting .hint { color: var(--muted); font-size: 12px; }
+.setting input[type="number"], .setting input[type="time"], .setting input[type="date"], .setting select {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 10px; min-width: 0; width: 100%;
+}
+.setting input:focus-visible, .setting select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.setting input:disabled, .setting select:disabled { opacity: .6; }
+.setting-problem { color: var(--bad); font-size: 12.5px; font-weight: 600; }
+.setting-now:empty, .setting-problem:empty { display: none; }
+.readonly { font-weight: 700; padding: 8px 0; }
+.days { display: flex; flex-wrap: wrap; gap: 6px; }
+.day { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; cursor: pointer; }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 2px 0 14px; padding: 10px 0; position: sticky; bottom: 0; background: var(--bg); }
+.form-actions[hidden], #groups[hidden], #pending-panel[hidden], #history-panel[hidden] { display: none; }
+.form-actions .legend-note { margin: 0; }
+.legend-note.bad { color: var(--bad); font-weight: 600; }
+.change-list, .history { list-style: none; display: grid; gap: 6px; }
+.change-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.change-list .delta { font-weight: 700; overflow-wrap: anywhere; }
+.history-row { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.history-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.history-head .when, .history-row .meta { color: var(--muted); font-size: 12.5px; }
+.history-head .who { font-weight: 600; }
+.history-row .meta { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .form-actions .btn { flex: 1 1 auto; } }

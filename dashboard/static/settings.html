@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Настройки платы</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Настройки платы</h1>
+      <p class="sub" id="sub">Загрузка…</p>
+    </div>
+    <div class="top-right">
+      <select id="device" class="select" aria-label="Плата" hidden></select>
+      <a class="btn" href="/">← К графикам</a>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="link-title">
+    <div class="panel-head">
+      <h2 id="link-title">Связь с платой</h2>
+      <span id="link-pill" class="badge never" role="status">…</span>
+    </div>
+    <p id="link-text" class="legend-note lead"></p>
+    <p id="page-error" class="form-error" role="alert" hidden></p>
+  </section>
+
+  <section class="panel" id="pending-panel" aria-labelledby="pending-title" hidden>
+    <div class="panel-head">
+      <h2 id="pending-title">Ждёт плату</h2>
+      <button type="button" class="btn danger" id="cancel">Отменить запрос</button>
+    </div>
+    <ul id="pending-list" class="change-list"></ul>
+    <p id="pending-note" class="legend-note"></p>
+  </section>
+
+  <form id="settings-form" autocomplete="off" novalidate>
+    <div id="groups"></div>
+    <div class="form-actions" id="form-actions" hidden>
+      <button type="submit" class="btn primary" id="apply" disabled>Применить</button>
+      <button type="button" class="btn ghost" id="reset" disabled>Сбросить правки</button>
+      <span id="apply-note" class="legend-note" role="status"></span>
+    </div>
+  </form>
+
+  <section class="panel" id="history-panel" aria-labelledby="history-title" hidden>
+    <h2 id="history-title">Последние изменения</h2>
+    <ul id="history" class="history"></ul>
+    <p class="legend-note">Видно, кто и что менял, и как ответила плата. Применённые платой изменения попадают и в её журнал на главной странице («Сообщения платы»).</p>
+  </section>
+
+  <footer class="foot">Плата применяет только то, что разрешено на ней самой; сеть, адрес и токен панели, поправку тока и датчик уровня воды из панели менять нельзя.</footer>
+</div>
+<script src="/settings-lib.js"></script>
+<script src="/settings.js"></script>
+</body>
+</html>

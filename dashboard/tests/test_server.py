@@ -3,6 +3,7 @@
 import base64
 import http.client
 import json
+import re
 import sqlite3
 import sys
 import tempfile
@@ -1351,6 +1352,491 @@ class AccountHttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/status?device=%s-adm" % name, cookie=cookie)[0], 404)
         self.assertEqual(self.call("DELETE", "/api/boards/%s-adm" % name, cookie=cookie)[0], 404)
         self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % data["item"]["id"], cookie=cookie)[0], 404)
+
+
+# Настройки, как их сообщает плата с настройками по умолчанию (прошивка: таблица SETTING_DEFS)
+BOARD_VALUES = {
+    "operation_mode": 0, "temp_target": 25.0, "temp_target_night": 17.0, "temp_delta": 2.0,
+    "hum_target_night": 55.0, "hum_band_night": 10.0,
+    "drying_temp_target": 16.0, "drying_temp_delta": 0.5, "drying_hum_target": 55.0, "drying_hum_band": 5.0,
+    "led_on_hour": 6, "led_on_minute": 0, "led_off_hour": 18, "led_off_minute": 0,
+    "led_min_limit": 10, "led_max_limit": 100, "fan1_min_limit": 20, "fan1_max_limit": 100,
+    "fan2_min_limit": 20, "fan2_max_limit": 100, "heater_mode": 3, "rgb_brightness": 19, "rgb_night_mode": 0,
+    "watering_days": 0, "watering_hour": 8, "watering_minute": 0, "watering_duration": 30,
+    "start_time": 0, "water_sensor_enabled": False,
+}
+ADMIN = {"id": 1, "username": "garden", "role": "admin"}
+
+
+def board_report(cloud=True, last_id="", res="", **values):
+    """Раздел cfg отправки платы."""
+    return {"cloud": cloud, "id": last_id, "res": res, "v": dict(BOARD_VALUES, **values)}
+
+
+class CloudSettingsStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = server.Store(Path(self.tmp.name) / "c.sqlite3")
+        self.who = {"id": 7, "username": "ivan", "role": "user"}
+
+    def send(self, now, cfg, device="box"):
+        """Отправка платы с разделом cfg -> ответ сервера."""
+        return self.store.ingest(device, {"sample": {"temp": 22.0, "sht_ok": True}, "cfg": cfg}, now=now)
+
+    def test_the_board_report_is_stored_and_cleaned(self):
+        self.assertFalse(self.store.cfg_state("box", NOW)["supported"])
+        reply = self.send(NOW, board_report(temp_target=26.5, rgb_brightness=500))
+        self.assertNotIn("cfg", reply)
+        state = self.store.cfg_state("box", NOW + 5)
+        self.assertEqual((state["supported"], state["cloud"], state["reported_at"]), (True, True, NOW))
+        self.assertEqual(state["values"]["temp_target"], 26.5)
+        self.assertNotIn("rgb_brightness", state["values"])              # вне пределов: не показывается
+        self.assertIs(state["values"]["water_sensor_enabled"], False)
+        junk = {"cloud": True, "v": {"wifi_pass": "x", "unknown": 1, "temp_target": True, "led_on_hour": "7",
+                                      "temp_delta": float("nan"), "heater_mode": 2, "water_sensor_enabled": 1}}
+        self.send(NOW + 60, junk)
+        self.assertEqual(self.store.cfg_state("box", NOW + 61)["values"], {"heater_mode": 2})   # прочее отброшено
+        self.send(NOW + 120, {"cloud": True, "v": {"junk": 1}})
+        self.assertEqual(self.store.cfg_state("box", NOW + 121)["values"], {"heater_mode": 2})  # негодное не стирает прежнее
+
+    def test_old_firmware_and_a_closed_switch_refuse_requests(self):
+        with self.assertRaises(server.Conflict) as caught:
+            self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)
+        self.assertIn("прошивка", str(caught.exception))
+        self.send(NOW, board_report(cloud=False))
+        with self.assertRaises(server.Conflict) as caught:
+            self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)
+        self.assertIn("на самой плате", str(caught.exception))
+
+    def test_a_request_travels_with_the_next_sends_until_the_board_confirms_it(self):
+        self.send(NOW, board_report())
+        state = self.store.cfg_submit("box", {"temp_target": 24.5, "led_on_hour": 7}, self.who, NOW + 10)
+        self.assertEqual(state["pending"]["set"], {"led_on_hour": 7, "temp_target": 24.5})
+        self.assertEqual((state["pending"]["by"], state["pending"]["expires_at"]), ("ivan", NOW + 10 + server.CFG_TTL))
+        change_id = state["pending"]["id"]
+        self.assertRegex(change_id, r"^[0-9a-f]{8}$")
+        for minute in (1, 2):                                            # ответ потерялся: запрос приходит снова
+            reply = self.send(NOW + 60 * minute, board_report())
+            self.assertEqual(reply["cfg"], {"id": change_id, "set": {"led_on_hour": 7, "temp_target": 24.5}})
+        self.assertEqual(self.store.cfg_state("box", NOW + 130)["pending"]["id"], change_id)
+        reply = self.send(NOW + 180, board_report(last_id=change_id, res="ok", temp_target=24.5, led_on_hour=7))
+        self.assertNotIn("cfg", reply)
+        state = self.store.cfg_state("box", NOW + 181)
+        self.assertIsNone(state["pending"])
+        self.assertEqual([(h["status"], h["by"]) for h in state["history"]], [("applied", "ivan")])
+        self.assertEqual(state["history"][0]["done_at"], NOW + 180)
+        self.assertEqual(state["values"]["temp_target"], 24.5)
+        self.assertNotIn("cfg", self.send(NOW + 240, board_report(last_id=change_id, res="ok")))   # подтверждение не повторяется
+
+    def test_a_refusal_from_the_board_is_recorded_with_its_reason(self):
+        self.send(NOW, board_report())
+        change_id = self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)["pending"]["id"]
+        self.assertIn("cfg", self.send(NOW + 60, board_report()))
+        self.assertNotIn("cfg", self.send(NOW + 120, board_report(last_id=change_id, res="range:temp_target")))
+        state = self.store.cfg_state("box", NOW + 121)
+        self.assertEqual((state["history"][0]["status"], state["history"][0]["note"]), ("rejected", "range:temp_target"))
+        self.assertIsNone(state["pending"])
+
+    def test_switching_the_permission_off_rejects_the_waiting_request(self):
+        self.send(NOW, board_report())
+        self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)
+        self.assertNotIn("cfg", self.send(NOW + 60, board_report(cloud=False)))   # плата запросов не принимает: не отправляем
+        state = self.store.cfg_state("box", NOW + 61)
+        self.assertEqual((state["history"][0]["status"], state["history"][0]["note"]), ("rejected", "off"))
+        self.assertFalse(state["cloud"])
+
+    def test_a_request_that_nobody_took_expires(self):
+        self.send(NOW, board_report())
+        self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)
+        late = NOW + server.CFG_TTL + 1
+        self.assertNotIn("cfg", self.send(late, board_report()))                  # плата вернулась поздно: изменение устарело
+        state = self.store.cfg_state("box", late)
+        self.assertEqual((state["history"][0]["status"], state["pending"]), ("expired", None))
+        self.store.cfg_submit("box", {"temp_target": 23}, self.who, late + 1)   # новый запрос после просрочки возможен
+        self.assertIn("cfg", self.send(late + 60, board_report()))
+
+    def test_state_reading_also_closes_expired_requests(self):
+        self.send(NOW, board_report())
+        self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)
+        state = self.store.cfg_state("box", NOW + server.CFG_TTL + 5)             # плата молчит: страница видит просрочку
+        self.assertEqual((state["history"][0]["status"], state["pending"]), ("expired", None))
+
+    def test_values_that_already_stand_on_the_board_are_not_sent(self):
+        self.send(NOW, board_report())
+        with self.assertRaises(ValueError) as caught:
+            self.store.cfg_submit("box", {"temp_target": 25, "led_on_hour": 6}, self.who, NOW)
+        self.assertIn("нет изменений", str(caught.exception))
+        state = self.store.cfg_submit("box", {"temp_target": 25, "led_on_hour": 7}, self.who, NOW)
+        self.assertEqual(state["pending"]["set"], {"led_on_hour": 7})
+        state = self.store.cfg_submit("box", {"led_on_hour": 6}, self.who, NOW + 1)   # возврат к прежнему: запрос больше не нужен
+        self.assertIsNone(state["pending"])
+        self.assertEqual(state["history"][0]["status"], "cancelled")
+
+    def test_requests_waiting_for_the_board_are_merged(self):
+        self.send(NOW, board_report())
+        first = self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)["pending"]
+        other = {"id": 9, "username": "olga", "role": "user"}
+        second = self.store.cfg_submit("box", {"temp_target": 23, "heater_mode": 2}, other, NOW + 30)["pending"]
+        self.assertEqual(second["set"], {"heater_mode": 2, "temp_target": 23.0})
+        self.assertNotEqual(second["id"], first["id"])                           # новый номер: старое подтверждение не годится
+        self.assertEqual((second["by"], second["created_at"]), ("olga", NOW + 30))
+        self.assertEqual(len(self.store.cfg_state("box", NOW + 31)["history"]), 1)
+        self.assertEqual(self.send(NOW + 60, board_report())["cfg"]["id"], second["id"])
+
+    def test_a_late_confirmation_of_a_cancelled_request_is_still_recorded(self):
+        self.send(NOW, board_report())
+        change_id = self.store.cfg_submit("box", {"temp_target": 24}, self.who, NOW)["pending"]["id"]
+        self.store.cfg_cancel("box", NOW + 5)
+        self.assertEqual(self.store.cfg_state("box", NOW + 6)["history"][0]["status"], "cancelled")
+        self.send(NOW + 60, board_report(last_id=change_id, res="ok", temp_target=24))   # плата успела применить
+        self.assertEqual(self.store.cfg_state("box", NOW + 61)["history"][0]["status"], "applied")
+
+    def test_every_value_is_checked_against_the_table(self):
+        self.send(NOW, board_report())
+        bad = [{}, [], None, "x", {"unknown_setting": 1}, {"wifi_pass": "12345678"}, {"telemetry_token": "x" * 30},
+               {"cloud_control": True}, {"water_sensor_enabled": True}, {"power_cal_pct": 3}, {"wifi_power": 1},
+               {"temp_target": 41}, {"temp_target": -1}, {"temp_delta": 0.05}, {"hum_band_night": 26},
+               {"temp_target": "25"}, {"temp_target": True}, {"temp_target": None}, {"temp_target": float("nan")},
+               {"temp_target": float("inf")}, {"led_on_hour": 24}, {"led_on_hour": 6.5}, {"led_on_minute": 60},
+               {"heater_mode": 4}, {"rgb_night_mode": 3}, {"watering_days": 128}, {"watering_duration": 301},
+               {"watering_duration": 0}, {"start_time": 1793491201}, {"start_time": 1000}, {"start_time": 4102531200},
+               {"start_time": -86400}, {"operation_mode": 2}]
+        for patch in bad:
+            with self.assertRaises(ValueError, msg=repr(patch)):
+                self.store.cfg_submit("box", patch, self.who, NOW)
+        self.assertIsNone(self.store.cfg_state("box", NOW)["pending"])
+        good = {"temp_target": 0, "led_on_hour": 23, "watering_duration": 300, "watering_days": 127, "start_time": 1793491200,
+                "hum_band_night": 25, "temp_delta": 0.1, "operation_mode": 1}
+        self.assertEqual(self.store.cfg_submit("box", good, self.who, NOW)["pending"]["set"],
+                         {"hum_band_night": 25, "led_on_hour": 23, "operation_mode": 1, "start_time": 1793491200,
+                          "temp_delta": 0.1, "temp_target": 0, "watering_days": 127, "watering_duration": 300})
+        self.assertIsNone(self.store.cfg_submit("box", {"start_time": 0}, self.who, NOW + 1)["pending"]["set"].get("start_time"))   # 0 — цикл не начат
+
+    def test_a_flat_minimum_above_the_maximum_is_refused_before_it_is_sent(self):
+        self.send(NOW, board_report())
+        for patch in ({"led_min_limit": 101}, {"led_min_limit": 100, "led_max_limit": 50}, {"fan1_min_limit": 30, "fan1_max_limit": 20},
+                      {"fan2_max_limit": 10}):
+            with self.assertRaises(ValueError, msg=repr(patch)):
+                self.store.cfg_submit("box", patch, self.who, NOW)
+        state = self.store.cfg_submit("box", {"led_min_limit": 50, "led_max_limit": 60, "fan2_min_limit": 0, "fan2_max_limit": 5}, self.who, NOW)
+        self.assertEqual(state["pending"]["set"]["led_max_limit"], 60)
+
+    def test_reported_values_may_exceed_what_the_panel_can_set(self):
+        self.send(NOW, board_report(watering_duration=900, start_time=1793491234))   # поставлено на самой плате
+        values = self.store.cfg_state("box", NOW)["values"]
+        self.assertEqual((values["watering_duration"], values["start_time"]), (900, 1793491234))
+        with self.assertRaises(ValueError):
+            self.store.cfg_submit("box", {"watering_duration": 900}, self.who, NOW)
+
+    def test_history_is_limited_and_deleting_a_board_removes_everything(self):
+        self.send(NOW, board_report())
+        for step in range(server.CFG_HISTORY + 5):
+            self.store.cfg_submit("box", {"temp_target": 20 + (step % 2)}, self.who, NOW + step)
+            self.store.cfg_cancel("box", NOW + step)
+        state = self.store.cfg_state("box", NOW + 100)
+        self.assertEqual(len(state["history"]), server.CFG_HISTORY)
+        self.assertIsNone(state["pending"])
+        _, _, item = self.store.add_board("Ящик", "box")
+        self.store.revoke_token(item["id"])                                      # пока токен действует, плату не удалить
+        self.assertTrue(self.store.delete_board("box"))
+        state = self.store.cfg_state("box", NOW + 100)
+        self.assertEqual((state["supported"], state["history"]), (False, []))
+
+    def test_the_reply_can_be_read_by_the_strict_parser_of_the_board(self):
+        """Тот же разбор, что в CloudSettings.h: порядок id, set; имена [a-z0-9_]; числа без порядка; не больше 32."""
+        self.send(NOW, board_report())
+        full = {"operation_mode": 1, "temp_target": 24.55, "temp_target_night": 0, "temp_delta": 0.1, "hum_target_night": 100,
+                "hum_band_night": 25, "drying_temp_target": 39.9, "drying_temp_delta": 20, "drying_hum_target": 1,
+                "drying_hum_band": 0.1, "led_on_hour": 23, "led_on_minute": 59, "led_off_hour": 0, "led_off_minute": 1,
+                "led_min_limit": 1, "led_max_limit": 99, "fan1_min_limit": 1, "fan1_max_limit": 99, "fan2_min_limit": 1,
+                "fan2_max_limit": 99, "heater_mode": 0, "rgb_brightness": 100, "rgb_night_mode": 2, "watering_days": 127,
+                "watering_hour": 23, "watering_minute": 59, "watering_duration": 300, "start_time": 4102444800}
+        self.assertEqual(set(full), set(server.CFG_SPECS))
+        self.store.cfg_submit("box", full, self.who, NOW)
+        body = json.dumps(self.send(NOW + 60, board_report()), ensure_ascii=False, separators=(",", ":"))
+        self.assertLess(len(body.encode("utf-8")), 2048)                      # CLOUD_REPLY_MAX в прошивке
+        match = re.search(r'"cfg":\{"id":"([0-9a-f]{1,16})","set":\{([^{}]*)\}\}', body)
+        self.assertIsNotNone(match, body)
+        pairs = match.group(2).split(",")
+        self.assertEqual(len(pairs), 28)
+        for pair in pairs:
+            self.assertRegex(pair, r'^"[a-z0-9_]{1,23}":-?[0-9]{1,15}(\.[0-9]{1,14})?$')
+
+    def test_the_sets_of_names_in_the_schema_and_in_the_table_are_the_same(self):
+        shown = []
+        for group in server.CFG_SCHEMA:
+            for field in group["fields"]:
+                shown += field.get("params") or [field["param"]]
+        self.assertCountEqual(shown, list(server.CFG_SPECS) + list(server.CFG_READONLY))
+        self.assertEqual(len({g["id"] for g in server.CFG_SCHEMA}), len(server.CFG_SCHEMA))
+        for group in server.CFG_SCHEMA:
+            for field in group["fields"]:
+                if field["type"] in ("number", "select", "date", "days"):
+                    self.assertEqual((field["kind"], field["lo"], field["hi"]), server.CFG_SPECS[field["param"]])
+                if field["type"] == "select":
+                    lo, hi = server.CFG_SPECS[field["param"]][1:]
+                    self.assertEqual([o[0] for o in field["options"]], list(range(lo, hi + 1)))
+
+
+class FirmwareContractTests(unittest.TestCase):
+    """Список и пределы настроек из панели на сервере совпадают с прошивкой (firmware/CloudSettings.h и SETTING_DEFS)."""
+    FIRMWARE = Path(__file__).resolve().parents[2] / "firmware"
+
+    def setUp(self):
+        if not (self.FIRMWARE / "firmware.ino").exists():
+            self.skipTest("каталога firmware рядом нет")
+        self.ino = (self.FIRMWARE / "firmware.ino").read_text(encoding="utf-8")
+        self.cloud = (self.FIRMWARE / "CloudSettings.h").read_text(encoding="utf-8")
+        self.constants = {"HEATER_HARD_LIMIT_C": 40.0, "OP_MODE_GROWING": 0, "OP_MODE_DRYING": 1,
+                          "RGB_NIGHT_SAME": 0, "RGB_NIGHT_OFF": 2, "WIFI_POWER_WEAK": 0, "WIFI_POWER_STRONG": 2}
+
+    def number(self, text):
+        text = text.strip()
+        if text in self.constants:
+            return self.constants[text]
+        try:
+            return float(text.rstrip("f"))
+        except ValueError:
+            return text                       # имя константы, которой нет в списке: сравнивать с ним нечего
+
+    def table(self):
+        """SETTING_DEFS из firmware.ino -> {имя: (тип, минимум, максимум)}."""
+        rows = {}
+        for macro, param, lo, hi in re.findall(r'SET_(FLOAT|INT|U8)\s*\(\s*"(\w+)"\s*,\s*"\w+"\s*,\s*\w+\s*,\s*([^,]+),\s*([^,]+),', self.ino):
+            rows[param] = ("float" if macro == "FLOAT" else "int", self.number(lo), self.number(hi))
+        for param in re.findall(r'SET_BOOL\s*\(\s*"(\w+)"', self.ino):
+            rows[param] = ("flag", 0, 1)
+        for param in re.findall(r'SET_U32_NOFORM\s*\(\s*"(\w+)"', self.ino):
+            rows[param] = ("date", 0, 0)
+        return rows
+
+    def list_in_header(self, name):
+        block = re.search(r"%s\[\] = \{(.*?)\};" % name, self.cloud, re.S).group(1)
+        return re.findall(r'"(\w+)"', block)
+
+    def test_the_lists_of_names_are_the_same(self):
+        self.assertCountEqual(self.list_in_header("CLOUD_PARAMS"), list(server.CFG_SPECS))
+        self.assertCountEqual(self.list_in_header("CLOUD_REPORT_ONLY"), list(server.CFG_READONLY))
+
+    def test_ranges_follow_the_table_of_the_board(self):
+        board = self.table()
+        cap = float(re.search(r"CLOUD_WATERING_MAX_SEC = (\d+)", self.cloud).group(1))
+        for param, (kind, lo, hi) in server.CFG_SPECS.items():
+            self.assertIn(param, board, param)
+            if kind == "date":
+                self.assertEqual(board[param][0], "date", param)
+                continue
+            local = board[param]
+            self.assertEqual(local[0], kind, param)
+            self.assertEqual(lo, local[1], param)
+            expected_hi = min(local[2], cap) if param == "watering_duration" else local[2]
+            self.assertEqual(hi, expected_hi, param)
+        self.assertEqual(server.CFG_LOCAL_HI["watering_duration"], board["watering_duration"][2])
+        for param in server.CFG_READONLY:
+            self.assertEqual(board[param][0], "flag", param)
+
+    def test_the_switch_and_the_secrets_are_not_in_the_list(self):
+        names = self.list_in_header("CLOUD_PARAMS")
+        for forbidden in ("cloud_control", "wifi_ssid", "wifi_pass", "wifi_power", "ap_ssid", "ap_pass", "telemetry_url",
+                          "telemetry_token", "device_label", "power_cal_pct", "water_sensor_enabled"):
+            self.assertNotIn(forbidden, names)
+        self.assertRegex(self.ino, r'SET_BOOL \("cloud_control",\s*"cloud_ctl",\s*cloud_control,\s*false\)')   # по умолчанию выключено
+
+
+class CloudSettingsHttpTests(unittest.TestCase):
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+    PW = "correct horse battery"
+    counter = 0
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = make_config(Path(cls.tmp.name) / "h.sqlite3")
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.reg_limiter = server.FailureLimiter(limit=1000, window=3600)
+        self.httpd.ingest_gate = server.RateGate(0)
+        self.httpd.cfg_gate = server.RateGate(0)
+        self.store.set_registration(True)
+
+    def request(self, method, path, body=None, headers=None, cookie=None, admin=False):
+        headers = dict(headers or {})
+        if cookie:
+            headers["Cookie"] = server.SESSION_COOKIE + "=" + cookie
+        if admin:
+            headers["Authorization"] = "Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode()
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read()
+        finally:
+            conn.close()
+
+    def call(self, method, path, payload=None, cookie=None, admin=False, extra=None):
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        status, headers, raw = self.request(method, path, body, dict(self.ACTION, **(extra or {})), cookie, admin)
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        return status, data, headers
+
+    def person(self):
+        type(self).counter += 1
+        name = "cfg%d" % type(self).counter
+        status, data, headers = self.call("POST", "/api/register", {"username": name, "password": self.PW})
+        self.assertEqual(status, 201, data)
+        return headers["Set-Cookie"].split(";")[0].split("=", 1)[1], name
+
+    def board(self, cookie, name):
+        """Плата человека -> (имя платы, токен)."""
+        device = name + "-box"
+        status, data, _ = self.call("POST", "/api/boards", {"name": "Ящик", "device": device}, cookie=cookie)
+        self.assertEqual(status, 201, data)
+        return device, data["token"]
+
+    def send(self, device, token, cfg):
+        body = {"device": device, "sample": {"temp": 22.0, "sht_ok": True}, "cfg": cfg}
+        status, _, raw = self.request("POST", "/api/ingest", json.dumps(body).encode(),
+                                      {"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        return status, json.loads(raw)
+
+    def test_everything_is_closed_without_a_login(self):
+        self.assertEqual(self.request("GET", "/api/settings")[0], 401)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": "x", "set": {"temp_target": 20}})[0], 401)
+        self.assertEqual(self.call("POST", "/api/settings/cancel", {"device": "x"})[0], 401)
+        self.assertEqual(self.request("GET", "/settings")[0], 302)
+        for path in ("/settings-lib.js", "/settings.js"):
+            self.assertEqual(self.request("GET", path)[0], 200, path)
+        cookie, _ = self.person()
+        self.assertEqual(self.request("GET", "/settings", cookie=cookie)[0], 200)
+
+    def test_the_person_changes_the_settings_of_their_board_end_to_end(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        self.assertEqual(self.request("GET", "/api/settings?device=" + device, cookie=cookie)[0], 404)   # плата ещё молчала
+        self.send(device, token, board_report())
+        status, data, _ = self.call("GET", "/api/settings?device=" + device, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        self.assertEqual((data["device"], data["name"], data["supported"], data["cloud"], data["online"]),
+                         (device, "Ящик", True, True, True))
+        self.assertEqual(data["values"]["temp_target"], 25.0)
+        self.assertEqual(data["ttl"], server.CFG_TTL)
+        self.assertEqual([g["id"] for g in data["schema"]][:2], ["mode", "climate"])
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 23.5, "heater_mode": 2}}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        self.assertEqual(data["pending"]["set"], {"heater_mode": 2, "temp_target": 23.5})
+        self.assertEqual(data["pending"]["by"], name)
+        status, reply = self.send(device, token, board_report())
+        self.assertEqual(reply["cfg"], {"id": data["pending"]["id"], "set": {"heater_mode": 2, "temp_target": 23.5}})
+        status, reply = self.send(device, token, board_report(last_id=data["pending"]["id"], res="ok", temp_target=23.5, heater_mode=2))
+        self.assertNotIn("cfg", reply)
+        _, data, _ = self.call("GET", "/api/settings?device=" + device, cookie=cookie)
+        self.assertEqual((data["pending"], data["history"][0]["status"], data["values"]["heater_mode"]), (None, "applied", 2))
+
+    def test_a_stranger_sees_and_changes_nothing_but_the_admin_can(self):
+        owner, name = self.person()
+        device, token = self.board(owner, name)
+        self.send(device, token, board_report())
+        stranger, _ = self.person()
+        self.assertEqual(self.request("GET", "/api/settings?device=" + device, cookie=stranger)[0], 404)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, cookie=stranger)[0], 404)
+        self.assertEqual(self.call("POST", "/api/settings/cancel", {"device": device}, cookie=stranger)[0], 404)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": "no-such-box", "set": {"temp_target": 20}}, cookie=owner)[0], 404)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": 5, "set": {"temp_target": 20}}, cookie=owner)[0], 404)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": "../x", "set": {"temp_target": 20}}, cookie=owner)[0], 404)
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, admin=True)
+        self.assertEqual((status, data["pending"]["by"]), (200, "garden"))
+        _, data, _ = self.call("GET", "/api/settings?device=" + device, cookie=owner)
+        self.assertEqual(data["history"][0]["by"], "garden")                  # владелец видит, кто менял его плату
+
+    def test_requests_from_other_sites_and_without_the_page_header_are_refused(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        self.send(device, token, board_report())
+        body = json.dumps({"device": device, "set": {"temp_target": 20}}).encode()
+        self.assertEqual(self.request("POST", "/api/settings", body, {"Content-Type": "application/json"}, cookie)[0], 403)
+        self.assertEqual(self.request("POST", "/api/settings", body, dict(self.ACTION, **{"Sec-Fetch-Site": "cross-site"}), cookie)[0], 403)
+        self.assertEqual(self.request("POST", "/api/settings", body, {"X-Dash-Action": "1", "Content-Type": "text/plain"}, cookie)[0], 400)
+        self.assertEqual(self.request("POST", "/api/settings", b"{oops", self.ACTION, cookie)[0], 400)
+        self.assertEqual(self.request("GET", "/api/settings/cancel", cookie=cookie)[0], 405)
+        huge = json.dumps({"device": device, "set": {"temp_target": 20}, "pad": "x" * 3000}).encode()
+        self.assertEqual(self.request("POST", "/api/settings", huge, self.ACTION, cookie)[0], 400)
+        self.assertIsNone(self.store.cfg_state(device)["pending"])
+
+    def test_refusals_explain_themselves(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, cookie=cookie)
+        self.assertEqual(status, 409)                                         # плата ещё не сообщала настройки
+        self.assertIn("прошивка", data["error"])
+        self.send(device, token, board_report(cloud=False))
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, cookie=cookie)
+        self.assertEqual(status, 409)
+        self.assertIn("на самой плате", data["error"])
+        self.send(device, token, board_report())
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 99}}, cookie=cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("Дневная целевая температура", data["error"])
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"wifi_pass": "secret-pass"}}, cookie=cookie)
+        self.assertEqual(status, 400)
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 25}}, cookie=cookie)
+        self.assertEqual((status, "нет изменений" in data["error"]), (400, True))
+        status, data, _ = self.call("POST", "/api/settings", {"device": device, "set": {"led_min_limit": 90, "led_max_limit": 80}}, cookie=cookie)
+        self.assertEqual((status, "минимум" in data["error"]), (400, True))
+
+    def test_requests_come_no_more_often_than_every_two_seconds(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        self.send(device, token, board_report())
+        self.httpd.cfg_gate = server.RateGate(2)
+        self.assertEqual(self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, cookie=cookie)[0], 200)
+        status, _, headers = self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 21}}, cookie=cookie)
+        self.assertEqual((status, headers["Retry-After"]), (429, "2"))
+
+    def test_cancel_removes_the_waiting_request(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        self.send(device, token, board_report())
+        self.call("POST", "/api/settings", {"device": device, "set": {"temp_target": 20}}, cookie=cookie)
+        status, data, _ = self.call("POST", "/api/settings/cancel", {"device": device}, cookie=cookie)
+        self.assertEqual((status, data["pending"], data["history"][0]["status"]), (200, None, "cancelled"))
+        self.assertNotIn("cfg", self.send(device, token, board_report())[1])
+
+    def test_ingest_without_a_settings_section_is_unchanged(self):
+        cookie, name = self.person()
+        device, token = self.board(cookie, name)
+        body = json.dumps({"device": device, "sample": {"temp": 22.0, "sht_ok": True}}).encode()
+        status, _, raw = self.request("POST", "/api/ingest", body, {"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        self.assertEqual((status, set(json.loads(raw))), (200, {"ok", "log_next", "sample", "log_lines"}))
+        status, _, raw = self.request("POST", "/api/ingest", json.dumps({"device": device, "cfg": "junk"}).encode(),
+                                      {"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        self.assertEqual(status, 200)                                         # старая или испорченная плата приём не ломает
+
+    def test_a_request_for_one_board_never_reaches_another(self):
+        a, name_a = self.person()
+        b, name_b = self.person()
+        dev_a, tok_a = self.board(a, name_a)
+        dev_b, tok_b = self.board(b, name_b)
+        self.send(dev_a, tok_a, board_report(temp_target=21))
+        self.send(dev_b, tok_b, board_report(temp_target=29))
+        self.call("POST", "/api/settings", {"device": dev_a, "set": {"heater_mode": 1}}, cookie=a)
+        self.assertNotIn("cfg", self.send(dev_b, tok_b, board_report(temp_target=29))[1])   # запрос чужой платы ей не уходит
+        self.assertEqual(self.call("GET", "/api/settings?device=" + dev_b, cookie=b)[1]["values"]["temp_target"], 29.0)
+        self.assertEqual(self.call("GET", "/api/settings", cookie=b)[1]["device"], dev_b)    # без device — первая своя плата
 
 
 class ConfigTests(unittest.TestCase):

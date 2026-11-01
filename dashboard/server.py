@@ -86,6 +86,170 @@ EXTRA_NUM_FIELDS = {
 EXTRA_BOOL_FIELDS = ("clock_trusted", "clock_usable", "water_present", "water_sensor", "water_skipped",
                      "sd_ok", "power_ok")
 
+# Настройки платы из панели. Плата в каждой отправке сообщает свои настройки (раздел cfg), а в ответе на отправку
+# получает запрос на их изменение, если владелец разрешил это на самой плате. Список ниже — то, что можно менять
+# издалека: прошивка ведёт тот же список (CloudSettings.h, CLOUD_PARAMS), тест сверяет имена и пределы с таблицей
+# SETTING_DEFS в firmware.ino. Сеть, адрес и токен панели, поправка тока и датчик уровня воды сюда не входят:
+# ошибка в них оставила бы плату без связи, с неверными замерами или без защиты насоса.
+CFG_TTL = 600                  # запрос ждёт плату не дольше десяти минут: устаревшее изменение применять нельзя
+CFG_HISTORY = 30               # сколько последних запросов по каждой плате хранится
+CFG_ID_RE = re.compile(r"[0-9a-f]{1,16}")
+CFG_RES_RE = re.compile(r"[A-Za-z0-9_:.-]{0,40}")
+UTC_2024, UTC_2100 = 1704067200, 4102444800   # дата начала цикла: полночь между этими датами или 0
+CFG_SPECS = {                  # настройка -> (вид, минимум, максимум); вид: int, float или date (полночь, unixtime)
+    "operation_mode": ("int", 0, 1),
+    "temp_target": ("float", 0, 40), "temp_target_night": ("float", 0, 40), "temp_delta": ("float", 0.1, 20),
+    "hum_target_night": ("float", 0, 100), "hum_band_night": ("float", 0.1, 25),
+    "drying_temp_target": ("float", 0, 40), "drying_temp_delta": ("float", 0.1, 20),
+    "drying_hum_target": ("float", 0, 100), "drying_hum_band": ("float", 0.1, 25),
+    "led_on_hour": ("int", 0, 23), "led_on_minute": ("int", 0, 59),
+    "led_off_hour": ("int", 0, 23), "led_off_minute": ("int", 0, 59),
+    "led_min_limit": ("int", 0, 100), "led_max_limit": ("int", 0, 100),
+    "fan1_min_limit": ("int", 0, 100), "fan1_max_limit": ("int", 0, 100),
+    "fan2_min_limit": ("int", 0, 100), "fan2_max_limit": ("int", 0, 100),
+    "heater_mode": ("int", 0, 3),
+    "rgb_brightness": ("int", 0, 100), "rgb_night_mode": ("int", 0, 2),
+    "watering_days": ("int", 0, 127), "watering_hour": ("int", 0, 23), "watering_minute": ("int", 0, 59),
+    "watering_duration": ("int", 1, 300),   # на самой плате до 3600 с; из панели не больше пяти минут
+    "start_time": ("date", 0, UTC_2100),
+}
+CFG_LOCAL_HI = {"watering_duration": 3600}  # то, что плата может показывать, хотя из панели столько не поставить
+CFG_READONLY = ("water_sensor_enabled",)    # плата сообщает, менять нельзя: отключение датчика снимает защиту насоса
+CFG_PAIRS = (("led_min_limit", "led_max_limit", "Мощность лампы"), ("fan1_min_limit", "fan1_max_limit", "Вентилятор 1"),
+             ("fan2_min_limit", "fan2_max_limit", "Вентилятор 2"))   # (минимум, максимум, подпись): минимум не больше максимума
+# Как страница показывает настройки: группы и подписи (пределы берутся из CFG_SPECS)
+CFG_GROUPS = [
+    {"id": "mode", "title": "Режим работы", "fields": [
+        {"type": "select", "param": "operation_mode", "label": "Режим", "options": [[0, "Выращивание"], [1, "Сушка"]],
+         "hint": "В режиме сушки свет и полив выключены."}]},
+    {"id": "climate", "title": "Климат при выращивании", "fields": [
+        {"type": "number", "param": "temp_target", "label": "Дневная целевая температура", "unit": "°C", "step": 0.1},
+        {"type": "number", "param": "temp_target_night", "label": "Ночная целевая температура", "unit": "°C", "step": 0.1},
+        {"type": "number", "param": "temp_delta", "label": "Гистерезис (дельта ±)", "unit": "°C", "step": 0.1},
+        {"type": "number", "param": "hum_target_night", "label": "Ночью: влажность, выше которой вентиляторы разгоняются",
+         "unit": "% RH", "step": 1},
+        {"type": "number", "param": "hum_band_night", "label": "Ночью: диапазон разгона вентиляторов", "unit": "% RH", "step": 0.1}]},
+    {"id": "drying", "title": "Климат сушки", "fields": [
+        {"type": "number", "param": "drying_temp_target", "label": "Целевая температура", "unit": "°C", "step": 0.1},
+        {"type": "number", "param": "drying_temp_delta", "label": "Гистерезис нагрева", "unit": "°C", "step": 0.1},
+        {"type": "number", "param": "drying_hum_target", "label": "Целевая влажность", "unit": "% RH", "step": 1},
+        {"type": "number", "param": "drying_hum_band", "label": "Диапазон разгона вентиляторов", "unit": "% RH", "step": 0.1}]},
+    {"id": "light", "title": "Освещение", "fields": [
+        {"type": "time", "params": ["led_on_hour", "led_on_minute"], "label": "Свет включается"},
+        {"type": "time", "params": ["led_off_hour", "led_off_minute"], "label": "Свет выключается"},
+        {"type": "number", "param": "led_min_limit", "label": "Минимальная мощность лампы", "unit": "%", "step": 1},
+        {"type": "number", "param": "led_max_limit", "label": "Максимальная мощность лампы", "unit": "%", "step": 1}]},
+    {"id": "fans", "title": "Вентиляция", "fields": [
+        {"type": "number", "param": "fan1_min_limit", "label": "Вентилятор 1: минимум", "unit": "%", "step": 1},
+        {"type": "number", "param": "fan1_max_limit", "label": "Вентилятор 1: максимум", "unit": "%", "step": 1},
+        {"type": "number", "param": "fan2_min_limit", "label": "Вентилятор 2: минимум", "unit": "%", "step": 1},
+        {"type": "number", "param": "fan2_max_limit", "label": "Вентилятор 2: максимум", "unit": "%", "step": 1}]},
+    {"id": "heater", "title": "Обогрев", "fields": [
+        {"type": "select", "param": "heater_mode", "label": "Режим обогревателя",
+         "options": [[0, "Только днём"], [1, "Только ночью"], [2, "Всегда"], [3, "Никогда"]]}]},
+    {"id": "watering", "title": "Автополив", "fields": [
+        {"type": "days", "param": "watering_days", "label": "Дни полива"},
+        {"type": "time", "params": ["watering_hour", "watering_minute"], "label": "Время полива"},
+        {"type": "number", "param": "watering_duration", "label": "Длительность полива", "unit": "с", "step": 1,
+         "hint": "Из панели — не больше 300 с: на самой плате можно до 3600 с. Насос не должен качать часами из-за опечатки."},
+        {"type": "flag", "param": "water_sensor_enabled", "label": "Датчик уровня воды",
+         "hint": "Включается и выключается только на самой плате: без него насос не знает, что бак пуст."}]},
+    {"id": "indicator", "title": "RGB-индикатор", "fields": [
+        {"type": "number", "param": "rgb_brightness", "label": "Яркость", "unit": "%", "step": 1},
+        {"type": "select", "param": "rgb_night_mode", "label": "Ночью",
+         "options": [[0, "Как днём"], [1, "Только неисправности"], [2, "Выключен"]]}]},
+    {"id": "cycle", "title": "Цикл выращивания", "fields": [
+        {"type": "date", "param": "start_time", "label": "Дата начала", "hint": "Пустая дата — цикл не начат."}]},
+]
+
+
+def _cfg_schema():
+    """Группы с пределами для страницы настроек и подписи настроек для сообщений об ошибках."""
+    labels, groups = {}, []
+    for group in CFG_GROUPS:
+        fields = []
+        for field in group["fields"]:
+            item = dict(field)
+            params = item.get("params") or [item["param"]]
+            for param in params:
+                labels[param] = item["label"]
+            if "param" in item and item["param"] in CFG_SPECS:
+                kind, lo, hi = CFG_SPECS[item["param"]]
+                item.update({"kind": kind, "lo": lo, "hi": hi})
+            fields.append(item)
+        groups.append({"id": group["id"], "title": group["title"], "fields": fields})
+    return groups, labels
+
+
+CFG_SCHEMA, CFG_LABELS = _cfg_schema()
+
+
+def _num_text(value):
+    return ("%g" % value) if isinstance(value, float) else str(value)
+
+
+def clean_cfg_value(param, value, reported=False):
+    """Значение настройки: число в пределах таблицы (reported: то, что плата сообщает о себе, пределы местные)."""
+    spec = CFG_SPECS.get(param)
+    if spec is None:
+        raise ValueError("%s: такую настройку нельзя менять из панели" % param)
+    kind, lo, hi = spec
+    label = CFG_LABELS.get(param, param)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError("«%s»: нужно число" % label)
+    if kind == "float":
+        value = round(float(value), 2)
+    else:
+        if value != int(value):
+            raise ValueError("«%s»: нужно целое число" % label)
+        value = int(value)
+    if reported:
+        hi = CFG_LOCAL_HI.get(param, hi)
+    if kind == "date" and not reported:
+        if value != 0 and (value % 86400 or not UTC_2024 <= value <= UTC_2100):
+            raise ValueError("«%s»: нужна дата с 2024 года" % label)
+    elif not lo <= value <= hi:
+        raise ValueError("«%s»: от %s до %s" % (label, _num_text(lo), _num_text(hi)))
+    return value
+
+
+def clean_cfg_set(raw):
+    """Запрос на изменение: {настройка: значение}. Любое неподходящее значение отклоняет весь запрос."""
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError("set: нужен объект {настройка: значение}")
+    if len(raw) > len(CFG_SPECS):
+        raise ValueError("set: слишком много настроек")
+    return {param: clean_cfg_value(param, value) for param, value in raw.items()}
+
+
+def check_cfg_order(values):
+    """Минимум не больше максимума. Плата отклонила бы запрос с перевёрнутыми границами, поэтому не отправляем его."""
+    for low, high, title in CFG_PAIRS:
+        if low in values and high in values and values[low] > values[high]:
+            raise ValueError("%s: минимум не может быть больше максимума" % title)
+
+
+def clean_cfg_report(raw):
+    """Раздел cfg телеметрии -> (разрешено ли менять из панели, номер обработанного запроса, итог, настройки)."""
+    last_id = raw.get("id")
+    last_id = last_id if isinstance(last_id, str) and CFG_ID_RE.fullmatch(last_id) else ""
+    res = raw.get("res")
+    res = res if isinstance(res, str) and CFG_RES_RE.fullmatch(res) else ""
+    values = {}
+    shown = raw.get("v")
+    if isinstance(shown, dict):
+        for param, value in shown.items():
+            if param in CFG_READONLY:
+                if isinstance(value, bool):
+                    values[param] = value
+                continue
+            try:
+                values[param] = clean_cfg_value(param, value, reported=True)
+            except ValueError:
+                pass  # значение вне пределов не показываем: оно только введёт в заблуждение
+    return raw.get("cloud") is True, last_id, res, values
+
+
 RANGES = {"1h": 3600, "6h": 6 * 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "1y": 365 * 86400}
 BUCKETS = (60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400)
 MAX_SPAN = 400 * 86400
@@ -96,6 +260,7 @@ PAGES = {
     "/": "index.html", "/index.html": "index.html",
     "/boards": "boards.html", "/boards.html": "boards.html",
     "/account": "account.html", "/account.html": "account.html",
+    "/settings": "settings.html", "/settings.html": "settings.html",
 }
 ADMIN_PAGES = {"/admin": "admin.html", "/admin.html": "admin.html"}
 # Страницы входа и регистрации открыты всем
@@ -108,6 +273,7 @@ ASSETS = {
     "/boards-lib.js": ("boards-lib.js", JS), "/boards.js": ("boards.js", JS),
     "/auth-lib.js": ("auth-lib.js", JS), "/login.js": ("login.js", JS), "/register.js": ("register.js", JS),
     "/account.js": ("account.js", JS), "/admin.js": ("admin.js", JS),
+    "/settings-lib.js": ("settings-lib.js", JS), "/settings.js": ("settings.js", JS),
 }
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
@@ -122,7 +288,7 @@ ERROR_RE = re.compile(
     r"не принял|не остановил|не запустил|вне рабочего диапазона|вне диапазона|hard limit|failed|"
     r"cannot|некорректн|не найден|не совпало", re.I)
 WARN_RE = re.compile(
-    r"sd-карта не обнаружена|пропущен|из будущего|sda удерживается|нет связи|с опозданием|nvs write",
+    r"sd-карта не обнаружена|пропущен|из будущего|sda удерживается|нет связи|с опозданием|nvs write|отклонён",
     re.I)
 
 
@@ -260,6 +426,21 @@ CREATE TABLE IF NOT EXISTS tokens(
   last_used_at INTEGER, last_ip TEXT,
   revoked_at INTEGER,
   source TEXT NOT NULL DEFAULT 'ui'); -- 'ui' (страница токенов) или 'env' (DASH_INGEST_TOKEN)
+CREATE TABLE IF NOT EXISTS device_cfg(
+  device TEXT PRIMARY KEY,
+  reported TEXT NOT NULL DEFAULT '{}', -- настройки платы так, как она сама их сообщила
+  reported_at INTEGER NOT NULL,
+  cloud INTEGER NOT NULL DEFAULT 0,    -- разрешила ли плата менять настройки из панели
+  last_id TEXT NOT NULL DEFAULT '',    -- последний запрос панели, который плата обработала...
+  last_res TEXT NOT NULL DEFAULT '');  -- ...и итог: ok или причина отказа
+CREATE TABLE IF NOT EXISTS cfg_changes(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device TEXT NOT NULL, user_id INTEGER, username TEXT,   -- кто просил; имя хранится на случай удаления человека
+  change_id TEXT NOT NULL,             -- номер запроса: плата возвращает его как подтверждение
+  patch TEXT NOT NULL,                 -- JSON {настройка: значение}
+  status TEXT NOT NULL,                -- pending | applied | rejected | expired | cancelled
+  created_at INTEGER NOT NULL, done_at INTEGER, note TEXT);
+CREATE INDEX IF NOT EXISTS cfg_changes_device ON cfg_changes(device, id);
 """
 TOKEN_COLUMNS = "id, name, device, prefix, created_at, last_used_at, last_ip, revoked_at, source"
 SAMPLE_COLS = ("temp", "hum", "led", "fan1", "fan2", "power_w", "bus_v", "current_a", "energy_kwh",
@@ -405,6 +586,7 @@ class Store:
         cols = extra = None
         if isinstance(sample, dict):
             cols, extra = clean_sample(sample)
+        reply_cfg = None
         with self._write_lock, closing(self._connect()) as cx, cx:
             row = cx.execute("SELECT boot, log_next FROM devices WHERE device=?", (device,)).fetchone()
             known = row is not None
@@ -433,7 +615,12 @@ class Store:
                     " ON CONFLICT(device) DO UPDATE SET last_seen=excluded.last_seen, boot=excluded.boot,"
                     " log_next=excluded.log_next",
                     (device, now, now, boot, log_next))
-        return {"ok": True, "log_next": log_next, "sample": cols is not None, "log_lines": lines}
+            if isinstance(body.get("cfg"), dict):
+                reply_cfg = self._cfg_ingest(cx, device, now, body["cfg"])
+        result = {"ok": True, "log_next": log_next, "sample": cols is not None, "log_lines": lines}
+        if reply_cfg:
+            result["cfg"] = reply_cfg  # запрос на изменение настроек, который плата применит, если ей это разрешено
+        return result
 
     def _ingest_log(self, cx, device, now, log, known, boot, log_next):
         text = log.get("text")
@@ -469,6 +656,113 @@ class Store:
                            (device, now, classify(line), line))
                 added += 1
         return (new_boot or boot), start + len(data), added
+
+    # --- настройки платы из панели ----------------------------------------------------------
+    @staticmethod
+    def _cfg_expire(cx, device, now):
+        """Запрос, который плата не взяла за CFG_TTL секунд, больше не действует: устаревшее изменение не должно
+        сработать, когда плата вернётся на связь."""
+        cx.execute("UPDATE cfg_changes SET status='expired', done_at=? WHERE device=? AND status='pending' AND created_at<=?",
+                   (now, device, now - CFG_TTL))
+
+    def _cfg_ingest(self, cx, device, now, raw):
+        """Раздел cfg отправки платы: запоминает её настройки, отмечает обработанный запрос и отдаёт очередной,
+        если он есть и плата принимает запросы из панели. -> {"id", "set"} или None."""
+        cloud, last_id, res, values = clean_cfg_report(raw)
+        previous = cx.execute("SELECT reported FROM device_cfg WHERE device=?", (device,)).fetchone()
+        if not values and previous:
+            values = json.loads(previous[0])   # все присланные значения негодны: прежние лучше пустых
+        cx.execute("INSERT INTO device_cfg(device, reported, reported_at, cloud, last_id, last_res) VALUES (?, ?, ?, ?, ?, ?)"
+                   " ON CONFLICT(device) DO UPDATE SET reported=excluded.reported, reported_at=excluded.reported_at,"
+                   " cloud=excluded.cloud, last_id=excluded.last_id, last_res=excluded.last_res",
+                   (device, json.dumps(values, separators=(",", ":")), now, int(cloud), last_id, res))
+        self._cfg_expire(cx, device, now)
+        if last_id:
+            # Плата обработала запрос. Подтверждение принимается и для отменённого, и для просроченного: если плата его
+            # всё же применила, история должна это показать.
+            hit = cx.execute("SELECT id FROM cfg_changes WHERE device=? AND change_id=? AND"
+                             " status IN ('pending', 'cancelled', 'expired') ORDER BY id DESC LIMIT 1",
+                             (device, last_id)).fetchone()
+            if hit:
+                cx.execute("UPDATE cfg_changes SET status=?, done_at=?, note=? WHERE id=?",
+                           ("applied" if res == "ok" else "rejected", now, "" if res == "ok" else res, hit[0]))
+        pending = cx.execute("SELECT id, change_id, patch FROM cfg_changes WHERE device=? AND status='pending'"
+                             " ORDER BY id DESC LIMIT 1", (device,)).fetchone()
+        if pending is None:
+            return None
+        if not cloud:  # плата не принимает запросы из панели: ждать нечего
+            cx.execute("UPDATE cfg_changes SET status='rejected', done_at=?, note='off' WHERE id=?", (now, pending[0]))
+            return None
+        return {"id": pending[1], "set": json.loads(pending[2])}
+
+    def cfg_state(self, device, now=None):
+        """Что плата сообщила о своих настройках и что с запросами на их изменение (новые сверху)."""
+        now = int(time.time() if now is None else now)
+        with self._write_lock, closing(self._connect()) as cx, cx:   # просроченные запросы закрываются и при чтении
+            self._cfg_expire(cx, device, now)
+            row = cx.execute("SELECT reported, reported_at, cloud FROM device_cfg WHERE device=?", (device,)).fetchone()
+            rows = cx.execute("SELECT change_id, username, patch, status, created_at, done_at, note FROM cfg_changes"
+                              " WHERE device=? ORDER BY id DESC LIMIT ?", (device, CFG_HISTORY)).fetchall()
+        history = [{"id": cid, "by": who, "set": json.loads(patch), "status": status, "created_at": created,
+                    "done_at": done, "note": note or ""} for cid, who, patch, status, created, done, note in rows]
+        pending = next((dict(item, expires_at=item["created_at"] + CFG_TTL) for item in history
+                        if item["status"] == "pending"), None)
+        return {"supported": row is not None, "cloud": bool(row[2]) if row else False,
+                "reported_at": row[1] if row else None, "values": json.loads(row[0]) if row else {},
+                "pending": pending, "history": history}
+
+    def cfg_submit(self, device, raw_set, who, now=None):
+        """Ставит в очередь изменение настроек платы; плата заберёт его с очередной отправкой. Запрос, который ещё
+        ждёт плату, дополняется. Что уже так стоит на плате, не отправляется. -> состояние, как у cfg_state."""
+        now = int(time.time() if now is None else now)
+        wanted = clean_cfg_set(raw_set)
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            self._cfg_expire(cx, device, now)
+            row = cx.execute("SELECT reported, cloud FROM device_cfg WHERE device=?", (device,)).fetchone()
+            if row is None:
+                raise Conflict("плата ещё не сообщала свои настройки: нужна прошивка, которая умеет менять их из панели")
+            if not row[1]:
+                raise Conflict("менять настройки из панели не разрешено на самой плате: включите это в её настройках "
+                               "(вкладка «WiFi», раздел «Телеметрия»)")
+            reported = json.loads(row[0])
+            pending = cx.execute("SELECT id, patch FROM cfg_changes WHERE device=? AND status='pending'"
+                                 " ORDER BY id DESC LIMIT 1", (device,)).fetchone()
+            merged = json.loads(pending[1]) if pending else {}
+            merged.update(wanted)
+            merged = {name: value for name, value in merged.items() if reported.get(name) != value}
+            if not merged:
+                if pending is None:
+                    raise ValueError("нет изменений: эти значения уже стоят на плате")
+                # Запрос вернул всё как было: отправлять нечего, ждущий запрос больше не нужен
+                cx.execute("UPDATE cfg_changes SET status='cancelled', done_at=? WHERE id=?", (now, pending[0]))
+            else:
+                check_cfg_order({**reported, **merged})
+                patch = json.dumps(merged, separators=(",", ":"), sort_keys=True)
+                change_id = secrets.token_hex(4)
+                if pending:
+                    cx.execute("UPDATE cfg_changes SET change_id=?, patch=?, created_at=?, user_id=?, username=? WHERE id=?",
+                               (change_id, patch, now, who["id"], who["username"], pending[0]))
+                else:
+                    cx.execute("INSERT INTO cfg_changes(device, user_id, username, change_id, patch, status, created_at)"
+                               " VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+                               (device, who["id"], who["username"], change_id, patch, now))
+                cx.execute("DELETE FROM cfg_changes WHERE device=? AND id NOT IN"
+                           " (SELECT id FROM cfg_changes WHERE device=? ORDER BY id DESC LIMIT ?)",
+                           (device, device, CFG_HISTORY))
+        return self.cfg_state(device, now)
+
+    def cfg_cancel(self, device, now=None):
+        """Снимает запрос, который ещё ждёт плату (если она его уже забрала, отмена ничего не изменит)."""
+        now = int(time.time() if now is None else now)
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            cx.execute("UPDATE cfg_changes SET status='cancelled', done_at=? WHERE device=? AND status='pending'",
+                       (now, device))
+        return self.cfg_state(device, now)
+
+    def board_name(self, device):
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT name FROM boards WHERE device=?", (device,)).fetchone()
+        return row[0] if row else None
 
     def prune(self, retention_days, log_retention_days, now=None):
         now = int(time.time() if now is None else now)
@@ -570,7 +864,7 @@ class Store:
 
     @staticmethod
     def _delete_board_rows(cx, device):
-        for table in ("samples", "logs", "devices", "tokens", "boards"):
+        for table in ("samples", "logs", "devices", "tokens", "device_cfg", "cfg_changes", "boards"):
             cx.execute("DELETE FROM %s WHERE device=?" % table, (device,))
 
     def list_boards(self, online_sec, principal=None, now=None):
@@ -1177,6 +1471,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._admin_api(path, who)
             if path in ("/api/boards", "/api/tokens") or path.startswith(("/api/boards/", "/api/tokens/")):
                 return self._boards_api(path, who)
+            if path in ("/api/settings", "/api/settings/cancel"):
+                return self._settings_api(path, query, who)
             if not reading:
                 return self._error(405, "метод не поддерживается", {"Allow": "GET, HEAD"})
             if path == "/api/devices":
@@ -1464,6 +1760,41 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         return self._error(404, "не найдено")
 
+    # --- настройки платы из панели --------------------------------------------------------
+    def _settings_api(self, path, query, who):
+        store, cfg = self.server.store, self.server.cfg
+        if path == "/api/settings" and self.command in ("GET", "HEAD"):
+            device = (query.get("device") or [""])[0]
+            if device and not DEVICE_RE.fullmatch(device):
+                raise ValueError("device: недопустимое имя")
+            # Как у остальных данных плат: человек видит только свои, чужая плата для него то же, что отсутствующая
+            visible = {d["device"]: d for d in store.devices(who)}
+            device = device or next(iter(visible), "")
+            if device not in visible:
+                return self._error(404, "плата ещё не присылала данные")
+            state = store.cfg_state(device)
+            state.update({"device": device, "name": store.board_name(device) or device, "now": int(time.time()),
+                          "online": visible[device]["age"] <= cfg.online_sec, "last_seen": visible[device]["last_seen"],
+                          "ttl": CFG_TTL, "schema": CFG_SCHEMA})
+            return self._json(200, state)
+        if not self._action("POST", "GET, HEAD, POST" if path == "/api/settings" else "POST"):
+            return None
+        body = self._read_json()
+        device = body.get("device")
+        if not isinstance(device, str) or not DEVICE_RE.fullmatch(device) or not store.can_manage(who, device):
+            return self._error(404, "такой платы нет")
+        if not self.server.cfg_gate.allow((who["id"], device)):
+            return self._error(429, "слишком часто: подождите пару секунд", {"Retry-After": "2"})
+        ip = self._client_ip()
+        if path == "/api/settings/cancel":
+            state = store.cfg_cancel(device)
+            LOG.info("настройки платы %s: запрос снят, %s, с %s", device, who["username"], ip)
+            return self._json(200, dict(state, ok=True))
+        state = store.cfg_submit(device, body.get("set"), who)
+        LOG.info("настройки платы %s: %s просит изменить %s, с %s", device, who["username"],
+                 json.dumps(state["pending"]["set"] if state["pending"] else {}, ensure_ascii=False), ip)
+        return self._json(200, dict(state, ok=True))
+
     # --- данные плат ----------------------------------------------------------------------
     def _device_api(self, path, query, who):
         store, cfg = self.server.store, self.server.cfg
@@ -1518,6 +1849,7 @@ class DashServer(ThreadingHTTPServer):
         self.name_limiter = FailureLimiter(limit=20, window=600)         # неверные пароли одному имени
         self.reg_limiter = FailureLimiter(limit=REGISTRATIONS_PER_HOUR, window=3600)
         self.ingest_gate = RateGate(INGEST_MIN_GAP)
+        self.cfg_gate = RateGate(2)                                      # запросы на смену настроек: не чаще раза в 2 с на человека и плату
         store.configure(cfg)
         store.ensure_admin(cfg.view_user, cfg.view_password)
         # Токен из .env попадает в список токенов, чтобы у платы, которая уже его использует, ничего не сломалось
