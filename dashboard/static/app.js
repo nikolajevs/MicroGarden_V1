@@ -406,7 +406,9 @@
     const st = state.status;
     const pill = $('pill');
     const cards = $('cards');
-    $('start-hint').hidden = !!st; // у человека без данных подсказка, как подключить плату
+    // Пока от платы нет ни одного замера, вместо дашборда (показания, графики, журнал) стоит подсказка, как подключить плату
+    $('start-hint').hidden = !!st;
+    $('dash').hidden = !st;
     if (!st) {
       pill.className = 'pill pill-wait';
       pill.textContent = 'Плата ещё не присылала данные';

@@ -190,6 +190,7 @@ h2 { font-size: 15px; font-weight: 700; }
   display: inline-flex; align-items: center; justify-content: center; pointer-events: none;
   border-radius: 11px; border: 2px solid var(--bg); background: var(--bad); color: #fff; font-size: 12px; font-weight: 800;
 }
+.bell-count[hidden] { display: none; }
 .bell-count.warn { background: #f59e0b; color: #111827; }
 .bell.ring svg { animation: bell-ring .9s ease-in-out; }
 @keyframes bell-ring {
@@ -367,7 +368,7 @@ button.btn:disabled { opacity: .5; cursor: default; }
 
 /* Вход, регистрация, аккаунт и страница администратора */
 .icon-btn[hidden] { display: none; }
-.start-hint { margin: 0 0 14px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13.5px; }
+.start-hint { margin: 8px 0 14px; padding: 28px 22px; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); font-size: 15px; line-height: 1.6; text-align: center; }
 .start-hint a, .auth-card a, .legend-note a { color: var(--accent); }
 .auth-wrap { max-width: 460px; }
 .auth-card { margin-top: 8px; }
