@@ -23,6 +23,7 @@
     const res = await fetch(url, options);
     let payload = null;
     try { payload = await res.json(); } catch (e) { /* ответ не JSON */ }
+    if (res.status === 401) location.assign('/login?next=' + encodeURIComponent('/boards')); // сессия закончилась
     if (!res.ok) throw new Error((payload && payload.error) || 'ответ сервера ' + res.status);
     return payload;
   }
@@ -85,7 +86,8 @@
     title.append(text('span', 'name', board.name), text('span', 'device', board.device));
     head.append(title, text('span', 'badge ' + status.status, status.text));
     li.append(head);
-    li.append(text('div', 'meta', 'Зарегистрирована ' + when(board.created_at) + (board.fw ? ' · прошивка ' + board.fw : '')));
+    li.append(text('div', 'meta', 'Зарегистрирована ' + when(board.created_at) + (board.fw ? ' · прошивка ' + board.fw : '')
+      + (board.owner ? ' · владелец ' + board.owner : '')));  // владельца знает и показывает только администратору сервер
 
     const tokens = document.createElement('ul');
     tokens.className = 'token-list';

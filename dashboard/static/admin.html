@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>MicroGarden · Люди</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f19'/%3E%3Cpath d='M16 25V13m0 0c0-4 3-7 8-7 0 5-3 7-8 7zm0 4c0-3-2-5-6-5 0 4 2 5 6 5z' fill='none' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Люди</h1>
+      <p class="sub">Регистрация и учётные записи (только для администратора)</p>
+    </div>
+    <div class="top-right">
+      <a class="btn" href="/boards">Платы</a>
+      <a class="btn" href="/">← К графикам</a>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="reg-title">
+    <h2 id="reg-title">Регистрация</h2>
+    <p id="reg-state" class="lead">Загрузка…</p>
+    <button type="button" class="btn" id="reg-toggle" disabled>…</button>
+    <p class="legend-note">Регистрация открыта для всех, у кого есть адрес сайта. Если появились лишние записи, закройте её одной кнопкой, а ненужные записи заблокируйте или удалите ниже. У каждого человека не больше нескольких плат, а плата не может присылать данные чаще, чем раз в несколько секунд.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="users-title">
+    <div class="panel-head">
+      <h2 id="users-title">Люди</h2>
+      <span id="counts" class="legend-note"></span>
+    </div>
+    <ul id="user-list" class="board-list"></ul>
+    <p id="page-error" class="form-error" role="alert" hidden></p>
+    <div id="reset-box" class="created" role="status" hidden>
+      <p><b id="reset-title"></b></p>
+      <code id="reset-password" class="token-code"></code>
+      <div class="created-actions">
+        <button type="button" class="btn" id="reset-copy">Копировать</button>
+        <button type="button" class="btn ghost" id="reset-hide">Скрыть</button>
+        <span id="reset-note" class="legend-note"></span>
+      </div>
+      <p class="legend-note">Пароль показан один раз. Передайте его человеку любым удобным способом: после входа он сможет сменить его на странице «Аккаунт». Все прежние входы этого человека закрыты.</p>
+    </div>
+    <p class="legend-note">Блокировка закрывает вход, обрывает сессии и останавливает приём данных от его плат. Удаление стирает запись вместе с его платами, показаниями и журналом без возможности восстановления.</p>
+  </section>
+</div>
+<script src="/auth-lib.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>

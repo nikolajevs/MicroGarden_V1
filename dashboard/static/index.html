@@ -23,6 +23,12 @@
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2v1.5"></path><path d="M5.2 17.2c1.1-.9 1.5-1.9 1.5-3.4v-3a5.3 5.3 0 0 1 10.6 0v3c0 1.5.4 2.5 1.5 3.4z"></path><path d="M10.3 19.9a1.9 1.9 0 0 0 3.4 0"></path></svg>
         <span id="bell-count" class="bell-count" hidden>0</span>
       </button>
+      <a id="people" href="/admin" class="icon-btn" aria-label="Люди" title="Люди и регистрация" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      </a>
+      <a id="account" href="/account" class="icon-btn" aria-label="Аккаунт" title="Аккаунт">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      </a>
       <a href="/boards" class="icon-btn" aria-label="Платы" title="Платы: добавить плату, токены">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"></path></svg>
       </a>
@@ -34,6 +40,8 @@
       <p class="alerts-note">Текущие неисправности платы, связь с ней и свежие ошибки журнала. История сообщений — в разделе «Сообщения платы» ниже.</p>
     </div>
   </header>
+
+  <p id="start-hint" class="start-hint" hidden>Здесь появятся показания вашей платы. <a href="/boards">Добавьте плату</a>, введите выданные адрес, имя и токен в её настройках (вкладка «WiFi», раздел «Телеметрия»), и через минуту она появится на графиках.</p>
 
   <section class="toolbar" aria-label="Период и выгрузка">
     <div class="seg" id="range-group" role="group" aria-label="Период графиков">

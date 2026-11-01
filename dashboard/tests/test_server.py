@@ -3,6 +3,7 @@
 import base64
 import http.client
 import json
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from tools import seed_demo  # noqa: E402,F401  (проверяем, что заливщик демо-данных импортируется)
 
+server.SCRYPT_N = 2 ** 10   # тесты считают пароли быстрее; рабочую стоимость проверяет PasswordTests.test_production_cost
 TOKEN = "t" * 32
 PASSWORD = "p" * 16
 NOW = 1_800_000_000
@@ -236,6 +238,9 @@ class HttpTests(unittest.TestCase):
 
     def setUp(self):
         self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.ingest_gate = server.RateGate(0)    # частоту приёма проверяет отдельный тест
 
     def request(self, method, path, body=None, headers=None, user="garden", password=PASSWORD, auth=True):
         headers = dict(headers or {})
@@ -319,14 +324,18 @@ class HttpTests(unittest.TestCase):
             conn.close()
 
     def test_viewer_needs_password(self):
+        # без входа страница ведёт на форму входа, а запросы данных получают 401 без окна с паролем
         status, headers, _ = self.request("GET", "/", auth=False)
+        self.assertEqual((status, headers["Location"]), (302, "/login?next=%2F"))
+        status, headers, _ = self.request("GET", "/api/status", auth=False)
         self.assertEqual(status, 401)
-        self.assertIn("Basic", headers["WWW-Authenticate"])
+        self.assertNotIn("WWW-Authenticate", headers)
+        # неверный пароль администратора в заголовке (так ходят скрипты) отклоняется
         self.assertEqual(self.request("GET", "/", password="wrong-password")[0], 401)
         self.assertEqual(self.request("GET", "/", user="admin")[0], 401)
-        self.assertEqual(self.request("GET", "/api/status", auth=False)[0], 401)
         # токен платы не открывает страницу
-        self.assertEqual(self.request("GET", "/", headers={"Authorization": "Bearer " + TOKEN}, auth=False)[0], 401)
+        self.assertEqual(self.request("GET", "/", headers={"Authorization": "Bearer " + TOKEN}, auth=False)[0], 302)
+        self.assertEqual(self.request("GET", "/api/status", headers={"Authorization": "Bearer " + TOKEN}, auth=False)[0], 401)
 
     def test_page_assets_and_security_headers(self):
         status, headers, body = self.request("GET", "/")
@@ -406,9 +415,7 @@ class BoardStoreTests(unittest.TestCase):
         self.store.add_board("первая", "a-1")
         with self.assertRaises(server.Conflict):
             self.store.add_board("вторая", "a-1")
-        old = server.MAX_BOARDS
-        self.addCleanup(setattr, server, "MAX_BOARDS", old)
-        server.MAX_BOARDS = 2
+        self.store.max_boards = 2
         self.store.add_board("вторая", "a-2")
         with self.assertRaises(server.Conflict):
             self.store.add_board("третья", "a-3")
@@ -591,6 +598,9 @@ class BoardHttpTests(unittest.TestCase):
 
     def setUp(self):
         self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.ingest_gate = server.RateGate(0)    # частоту приёма проверяет отдельный тест
 
     def request(self, method, path, body=None, headers=None, auth=True):
         headers = dict(headers or {})
@@ -625,7 +635,9 @@ class BoardHttpTests(unittest.TestCase):
                              ("POST", "/api/tokens/1/revoke"), ("DELETE", "/api/tokens/1")):
             body = b"{}" if method == "POST" else None
             self.assertEqual(self.request(method, path, body, self.ACTION, auth=False)[0], 401, (method, path))
-        self.assertEqual(self.request("GET", "/boards", auth=False)[0], 401)
+        # страница без входа ведёт на форму входа, а не на окно с паролем
+        status, headers, _ = self.request("GET", "/boards", auth=False)
+        self.assertEqual((status, headers["Location"]), (302, "/login?next=%2Fboards"))
         # токен приёма не открывает менеджер плат
         self.assertEqual(self.request("GET", "/api/boards", headers={"Authorization": "Bearer " + TOKEN}, auth=False)[0], 401)
 
@@ -733,9 +745,9 @@ class BoardHttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/boards/a-1")[0], 405)             # плату удаляют только запросом DELETE
 
     def test_limits_give_409(self):
-        old = server.MAX_BOARDS
-        server.MAX_BOARDS = 0
-        self.addCleanup(setattr, server, "MAX_BOARDS", old)
+        old = self.store.max_boards
+        self.store.max_boards = 0
+        self.addCleanup(setattr, self.store, "max_boards", old)
         self.assertEqual(self.register("Лишняя", "limit-m")[0], 409)
 
     def test_keep_alive_survives_registering_a_board(self):
@@ -766,7 +778,592 @@ class BoardHttpTests(unittest.TestCase):
         self.assertIn('href="/boards"', self.request("GET", "/")[2].decode("utf-8"))   # со страницы графиков есть ссылка
 
 
+class PasswordTests(unittest.TestCase):
+    def test_hash_is_salted_scrypt_and_verifies(self):
+        first, second = server.hash_password("correct horse battery"), server.hash_password("correct horse battery")
+        self.assertTrue(first.startswith("scrypt$%d$8$1$" % server.SCRYPT_N))
+        self.assertNotEqual(first, second)                                 # у каждого хеша своя соль
+        self.assertNotIn("correct", first)
+        self.assertTrue(server.verify_password("correct horse battery", first))
+        self.assertFalse(server.verify_password("correct horse batterY", first))
+        for broken in ("", "scrypt", "md5$1$2$3$aa$bb", "scrypt$x$8$1$aa$bb", "scrypt$16384$8$1$zz$bb", first + "$extra", "env"):
+            self.assertFalse(server.verify_password("correct horse battery", broken), broken)
+
+    def test_production_cost(self):
+        # В тестах N занижено ради скорости; в самой программе параметры scrypt должны остаться рабочими
+        source = Path(server.__file__).read_text(encoding="utf-8")
+        self.assertIn("SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1", source)
+
+    def test_username_rules(self):
+        for good in ("ivan", "Ivan_2", "a.b-c", "abc", "x" * 32):
+            self.assertEqual(server.clean_username(good), good)
+        for bad in ("", "ab", "x" * 33, "с кириллицей", "bad name", "a\nb", "ivan\n", "<b>", None, 5):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                server.clean_username(bad)
+        for reserved in ("admin", "Admin", "ROOT", "system"):
+            with self.assertRaises(ValueError, msg=reserved):
+                server.clean_username(reserved)
+
+    def test_password_rules(self):
+        self.assertEqual(server.clean_password("x" * 10), "x" * 10)
+        self.assertEqual(server.clean_password("x" * 128), "x" * 128)
+        for bad in ("x" * 9, "x" * 129, " " * 12, "", None, 123456789012):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                server.clean_password(bad)
+        with self.assertRaises(ValueError):
+            server.clean_password("Ivan-Petrov-1", "ivan-petrov-1")       # пароль равен имени, регистр не важен
+        self.assertEqual(server.clean_password(" пароль с пробелами ", "ivan"), " пароль с пробелами ")
+
+
+class AccountStoreTests(unittest.TestCase):
+    PW = "correct horse battery"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "a.sqlite3"
+        self.store = server.Store(self.path)
+        self.admin_id = self.store.ensure_admin("garden", "admin-password-123", now=NOW)
+
+    def person(self, name, **kw):
+        return self.store.register_user(name, self.PW, "1.2.3.4", now=NOW, **kw)
+
+    def test_registration_and_login_ignore_name_case(self):
+        ivan = self.person("Ivan")
+        self.assertEqual((ivan["username"], ivan["role"]), ("Ivan", "user"))
+        with self.assertRaises(server.Conflict):
+            self.person("ivan")
+        self.assertEqual(self.store.login_user("IVAN", self.PW, now=NOW + 5)["username"], "Ivan")
+        self.assertIsNone(self.store.login_user("ivan", self.PW + "x"))
+        self.assertIsNone(self.store.login_user("nobody", self.PW))
+        row = [u for u in self.store.list_users() if u["username"] == "Ivan"][0]
+        self.assertEqual((row["last_login_at"], row["reg_ip"], row["disabled"], row["boards"]), (NOW + 5, "1.2.3.4", False, 0))
+
+    def test_password_is_never_stored_in_the_clear(self):
+        self.person("ivan")
+        for path in Path(self.tmp.name).iterdir():
+            self.assertNotIn(self.PW.encode(), path.read_bytes(), path.name)
+        self.assertNotIn("pass_hash", json.dumps(self.store.list_users()))
+
+    def test_user_limit(self):
+        self.store.max_users = 3                    # вместе с администратором
+        self.person("one")
+        self.person("two")
+        with self.assertRaises(server.Conflict):
+            self.person("three")
+
+    def test_admin_is_bootstrapped_from_env(self):
+        self.assertEqual(self.store.admin_principal(), {"id": self.admin_id, "username": "garden", "role": "admin"})
+        self.assertEqual(self.store.login_user("Garden", "admin-password-123")["role"], "admin")
+        self.assertIsNone(self.store.login_user("garden", "wrong-password-123"))
+        self.assertEqual(self.store.ensure_admin("garden", "admin-password-123"), self.admin_id)   # перезапуск ничего не дублирует
+        self.assertEqual(len([u for u in self.store.list_users() if u["role"] == "admin"]), 1)
+        with self.assertRaises(server.Conflict):
+            self.person("garden")                   # имя администратора занято
+        with self.assertRaises(server.Conflict):
+            self.store.change_password(self.admin_id, "admin-password-123", "another-password-1")
+        with self.assertRaises(server.Conflict):
+            self.store.reset_password(self.admin_id)
+        with self.assertRaises(server.Conflict):
+            self.store.set_user_disabled(self.admin_id, True)
+        with self.assertRaises(server.Conflict):
+            self.store.delete_user(self.admin_id)
+
+    def test_changing_the_admin_name_blocks_the_old_admin_and_refuses_a_taken_name(self):
+        self.person("ivan")
+        with self.assertRaises(SystemExit):
+            self.store.ensure_admin("ivan", "admin-password-123")           # имя занято обычным человеком
+        new_id = self.store.ensure_admin("owner", "admin-password-123")
+        old = [u for u in self.store.list_users() if u["username"] == "garden"][0]
+        self.assertEqual((old["role"], old["disabled"]), ("user", True))
+        self.assertIsNone(self.store.login_user("garden", "admin-password-123"))
+        self.assertEqual(self.store.login_user("owner", "admin-password-123")["id"], new_id)
+
+    def test_boards_without_an_owner_go_to_the_admin_on_upgrade(self):
+        old_path = Path(self.tmp.name) / "old.sqlite3"
+        with closing(sqlite3.connect(old_path)) as cx, cx:                    # база версии до учётных записей
+            cx.execute("CREATE TABLE boards(device TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL)")
+            cx.execute("INSERT INTO boards VALUES('old-m', 'Старая', ?)", (NOW,))
+        upgraded = server.Store(old_path)
+        admin_id = upgraded.ensure_admin("garden", "admin-password-123")
+        self.assertTrue(upgraded.can_manage({"id": admin_id, "role": "admin"}, "old-m"))
+        owner = upgraded.list_boards(180, now=NOW)["boards"][0]["owner"]
+        self.assertEqual(owner, "garden")
+
+    def test_sessions_expire_slide_and_end(self):
+        ivan = self.person("ivan")
+        token = self.store.create_session(ivan["id"], "1.2.3.4", now=NOW)
+        self.assertNotIn(token, "".join(p.read_bytes().decode("latin-1") for p in Path(self.tmp.name).iterdir()))
+        self.assertEqual(self.store.session_user(token, now=NOW + 10), ivan)
+        self.assertIsNone(self.store.session_user(token + "x", now=NOW + 10))
+        self.assertIsNone(self.store.session_user("", now=NOW + 10))
+        # срок продлевается, пока человек пользуется панелью (не чаще раза в час)
+        self.assertIsNotNone(self.store.session_user(token, now=NOW + 25 * 86400))
+        self.assertIsNotNone(self.store.session_user(token, now=NOW + 50 * 86400))
+        self.assertIsNone(self.store.session_user(token, now=NOW + 50 * 86400 + self.store.session_days * 86400 + 1))
+        again = self.store.create_session(ivan["id"], now=NOW)
+        self.store.end_session(again)
+        self.assertIsNone(self.store.session_user(again, now=NOW + 1))
+        old = self.store.create_session(ivan["id"], now=NOW)
+        self.store.purge_sessions(now=NOW + self.store.session_days * 86400 + 5)
+        self.assertIsNone(self.store.session_user(old, now=NOW + 1))
+
+    def test_blocking_ends_sessions_and_stops_the_boards(self):
+        ivan = self.person("ivan")
+        token, _, _ = self.store.add_board("Теплица", "iv-1", ivan["id"], now=NOW)
+        session = self.store.create_session(ivan["id"], now=NOW)
+        self.assertIsNotNone(self.store.authenticate(token, now=NOW))
+        self.assertEqual(self.store.set_user_disabled(ivan["id"], True)["disabled"], True)
+        self.assertIsNone(self.store.session_user(session, now=NOW + 1))
+        self.assertIsNone(self.store.login_user("ivan", self.PW))
+        self.assertIsNone(self.store.authenticate(token, now=NOW + 1))      # платы заблокированного данные не присылают
+        self.assertEqual(self.store.set_user_disabled(ivan["id"], False)["disabled"], False)
+        self.assertIsNotNone(self.store.login_user("ivan", self.PW))
+        self.assertIsNotNone(self.store.authenticate(token, now=NOW + 120))
+        self.assertIsNone(self.store.set_user_disabled(9999, True))
+
+    def test_change_and_reset_password(self):
+        ivan = self.person("ivan")
+        keep = self.store.create_session(ivan["id"], now=NOW)
+        other = self.store.create_session(ivan["id"], now=NOW)
+        with self.assertRaises(server.WrongPassword):
+            self.store.change_password(ivan["id"], "wrong-password-1", "brand new password")
+        with self.assertRaises(ValueError):
+            self.store.change_password(ivan["id"], self.PW, "short")
+        self.store.change_password(ivan["id"], self.PW, "brand new password", keep_token=keep)
+        self.assertIsNone(self.store.login_user("ivan", self.PW))
+        self.assertIsNotNone(self.store.login_user("ivan", "brand new password"))
+        self.assertIsNotNone(self.store.session_user(keep, now=NOW + 1))      # текущая сессия остаётся
+        self.assertIsNone(self.store.session_user(other, now=NOW + 1))        # остальные закрыты
+        temp = self.store.reset_password(ivan["id"])
+        self.assertGreaterEqual(len(temp), server.PASSWORD_MIN)
+        self.assertIsNone(self.store.login_user("ivan", "brand new password"))
+        self.assertIsNotNone(self.store.login_user("ivan", temp))
+        self.assertIsNone(self.store.session_user(keep, now=NOW + 2))
+        self.assertIsNone(self.store.reset_password(9999))
+
+    def test_people_see_only_their_own_boards_data_and_tokens(self):
+        ann, bob = self.person("ann"), self.person("bob")
+        a_token, _, a_item = self.store.add_board("Анны", "ann-1", ann["id"], now=NOW)
+        _, _, b_item = self.store.add_board("Боба", "bob-1", bob["id"], now=NOW)
+        self.store.sync_env_token(TOKEN, now=NOW)
+        for device in ("ann-1", "bob-1"):
+            self.store.ingest(device, {"sample": {"temp": 21.0, "sht_ok": True}}, now=NOW)
+        as_ann = self.store.list_boards(180, ann, now=NOW)
+        self.assertEqual([b["device"] for b in as_ann["boards"]], ["ann-1"])
+        self.assertEqual(as_ann["shared_tokens"], [])
+        self.assertNotIn("bob-1", json.dumps(as_ann))
+        self.assertEqual([d["device"] for d in self.store.devices(ann, now=NOW)], ["ann-1"])
+        as_admin = self.store.list_boards(180, self.store.admin_principal(), now=NOW)
+        self.assertEqual({b["device"]: b["owner"] for b in as_admin["boards"]}, {"ann-1": "ann", "bob-1": "bob"})
+        self.assertEqual(len(as_admin["shared_tokens"]), 1)
+        self.assertEqual({d["device"] for d in self.store.devices(self.store.admin_principal(), now=NOW)}, {"ann-1", "bob-1"})
+        self.assertTrue(self.store.can_manage(ann, "ann-1"))
+        self.assertFalse(self.store.can_manage(ann, "bob-1"))
+        self.assertFalse(self.store.can_manage(ann, "no-such"))
+        self.assertTrue(self.store.can_manage(self.store.admin_principal(), "bob-1"))
+        self.assertTrue(self.store.can_manage_token(ann, a_item["id"]))
+        self.assertFalse(self.store.can_manage_token(ann, b_item["id"]))
+        shared_id = as_admin["shared_tokens"][0]["id"]
+        self.assertFalse(self.store.can_manage_token(ann, shared_id))          # общий токен только администратору
+        self.assertTrue(self.store.can_manage_token(self.store.admin_principal(), shared_id))
+        self.assertIsNone(self.store.can_manage_token(ann, 9999))
+        self.assertIsNotNone(self.store.authenticate(a_token, now=NOW))
+
+    def test_board_limit_per_person_does_not_apply_to_the_admin(self):
+        self.store.max_boards_per_user = 1
+        ann = self.person("ann")
+        self.store.add_board("Первая", "ann-1", ann["id"], limit_owner=True)
+        with self.assertRaises(server.Conflict):
+            self.store.add_board("Вторая", "ann-2", ann["id"], limit_owner=True)
+        self.store.add_board("Админская", "adm-1", self.admin_id)
+        self.store.add_board("Ещё админская", "adm-2", self.admin_id)
+
+    def test_deleting_a_person_removes_the_boards_data_and_sessions(self):
+        ann, bob = self.person("ann"), self.person("bob")
+        self.store.add_board("Анны", "ann-1", ann["id"], now=NOW)
+        bob_token, _, _ = self.store.add_board("Боба", "bob-1", bob["id"], now=NOW)
+        for device in ("ann-1", "bob-1"):
+            self.store.ingest(device, {"sample": {"temp": 20.0, "sht_ok": True},
+                                       "log": {"boot": "b", "from": 0, "text": "ОШИБКА: что-то\n"}}, now=NOW)
+        session = self.store.create_session(ann["id"], now=NOW)
+        self.assertTrue(self.store.delete_user(ann["id"]))
+        self.assertFalse(self.store.delete_user(ann["id"]))
+        self.assertIsNone(self.store.session_user(session, now=NOW + 1))
+        self.assertFalse(self.store.board_exists("ann-1"))
+        self.assertIsNone(self.store.status("ann-1", 180, now=NOW))
+        self.assertEqual(self.store.logs("ann-1", "all"), [])
+        self.assertEqual([u["username"] for u in self.store.list_users()], ["garden", "bob"])
+        self.assertIsNotNone(self.store.status("bob-1", 180, now=NOW))        # чужие данные не тронуты
+        self.assertIsNotNone(self.store.authenticate(bob_token, now=NOW))
+
+    def test_registration_switch(self):
+        self.assertTrue(self.store.registration_open())
+        self.store.set_registration(False)
+        self.assertFalse(self.store.registration_open())
+        self.store.set_registration(True)
+        self.assertTrue(self.store.registration_open())
+        closed = server.Store(Path(self.tmp.name) / "closed.sqlite3")
+        closed.configure(server.Config({"DASH_VIEW_PASSWORD": "p" * 16, "DASH_REGISTRATION": "closed"}))
+        self.assertFalse(closed.registration_open())                          # начальное значение из .env
+        closed.set_registration(True)
+        self.assertTrue(closed.registration_open())                           # выбор администратора главнее
+
+
+class AccountHttpTests(unittest.TestCase):
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+    PW = "correct horse battery"
+    counter = 0
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = make_config(Path(cls.tmp.name) / "p.sqlite3")
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.ingest_gate = server.RateGate(0)
+        self.store.set_registration(True)
+        self.store.max_users, self.store.max_boards_per_user = server.MAX_USERS, server.MAX_BOARDS_PER_USER
+
+    def unique(self, prefix="user"):
+        type(self).counter += 1
+        return "%s%d" % (prefix, type(self).counter)
+
+    def request(self, method, path, body=None, headers=None, cookie=None, admin=False):
+        headers = dict(headers or {})
+        if cookie:
+            headers["Cookie"] = server.SESSION_COOKIE + "=" + cookie
+        if admin:
+            headers["Authorization"] = "Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode()
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read()
+        finally:
+            conn.close()
+
+    def call(self, method, path, payload=None, cookie=None, admin=False, extra=None):
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        headers = dict(self.ACTION, **(extra or {}))
+        status, resp_headers, raw = self.request(method, path, body, headers, cookie, admin)
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        return status, data, resp_headers
+
+    @staticmethod
+    def cookie_of(headers):
+        value = headers["Set-Cookie"].split(";")[0]
+        return value.split("=", 1)[1]
+
+    def register(self, name=None, password=None):
+        name = name or self.unique()
+        status, data, headers = self.call("POST", "/api/register", {"username": name, "password": password or self.PW})
+        return status, data, (self.cookie_of(headers) if status == 201 else None), name
+
+    def person(self):
+        status, data, cookie, name = self.register()
+        self.assertEqual(status, 201, data)
+        return cookie, name
+
+    def ingest(self, device, token):
+        headers = {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+        return self.request("POST", "/api/ingest", json.dumps({"device": device, "sample": {"temp": 22.0, "sht_ok": True}}).encode(), headers)[0]
+
+    def test_login_and_register_pages_and_assets_are_public_and_the_rest_is_not(self):
+        for path in ("/login", "/register", "/style.css", "/auth-lib.js", "/login.js", "/register.js", "/boards.js", "/app.js"):
+            self.assertEqual(self.request("GET", path)[0], 200, path)
+        for path in ("/login", "/register"):
+            html = self.request("GET", path)[2].decode("utf-8")
+            self.assertNotIn("<script>", html)
+            self.assertNotIn(" style=", html)
+        for path in ("/", "/boards", "/account", "/admin"):
+            self.assertEqual(self.request("GET", path)[0], 302, path)
+        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": True})
+        self.assertEqual(self.request("GET", "/api/me")[0], 401)
+        self.assertEqual(self.request("GET", "/api/devices")[0], 401)
+        # устаревший вход в браузере не закрывает страницу входа
+        stale = {"Authorization": "Basic " + base64.b64encode(b"garden:old-password-xx").decode()}
+        self.assertEqual(self.request("GET", "/login", headers=stale)[0], 200)
+        self.assertEqual(self.request("GET", "/api/me", headers=stale)[0], 401)
+
+    def test_registering_signs_the_person_in_with_a_safe_cookie(self):
+        status, data, headers = self.call("POST", "/api/register", {"username": "Ivan.P", "password": self.PW})
+        self.assertEqual(status, 201, data)
+        self.assertEqual(data["user"]["username"], "Ivan.P")
+        self.assertNotIn("pass", json.dumps(data))
+        cookie = headers["Set-Cookie"]
+        for part in ("HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=%d" % (server.SESSION_DAYS * 86400)):
+            self.assertIn(part, cookie)
+        self.assertNotIn("Secure", cookie)                                 # по голому http браузер Secure-cookie не вернёт
+        token = self.cookie_of(headers)
+        self.assertEqual(json.loads(self.request("GET", "/api/me", cookie=token)[2])["user"]["username"], "Ivan.P")
+        self.assertEqual(self.request("GET", "/", cookie=token)[0], 200)
+        self.assertEqual(self.request("GET", "/login", cookie=token)[0], 302)    # уже вошёл: на главную
+        # за прокси по HTTPS cookie получает Secure
+        _, _, headers = self.call("POST", "/api/login", {"username": "ivan.p", "password": self.PW}, extra={"X-Forwarded-Proto": "https"})
+        self.assertIn("; Secure", headers["Set-Cookie"])
+
+    def test_registration_input_is_checked(self):
+        body = json.dumps({"username": "csrf-user", "password": self.PW}).encode()
+        self.assertEqual(self.request("POST", "/api/register", body, {"Content-Type": "application/json"})[0], 403)   # нет заголовка страницы
+        self.assertEqual(self.request("POST", "/api/register", body, dict(self.ACTION, **{"Sec-Fetch-Site": "cross-site"}))[0], 403)
+        self.assertEqual(self.call("POST", "/api/register", {"username": "ab", "password": self.PW})[0], 400)
+        self.assertEqual(self.call("POST", "/api/register", {"username": "с-кириллицей", "password": self.PW})[0], 400)
+        self.assertEqual(self.call("POST", "/api/register", {"username": "admin", "password": self.PW})[0], 400)
+        self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "password": "short"})[0], 400)
+        self.assertEqual(self.call("POST", "/api/register", {"password": self.PW})[0], 400)
+        self.assertEqual(self.request("POST", "/api/register", b"{oops", self.ACTION)[0], 400)
+        self.assertEqual(self.call("POST", "/api/register", {"username": "garden", "password": self.PW})[0], 409)   # имя администратора занято
+        name = self.unique()
+        self.assertEqual(self.call("POST", "/api/register", {"username": name, "password": self.PW})[0], 201)
+        status, data, _ = self.call("POST", "/api/register", {"username": name.upper(), "password": self.PW})
+        self.assertEqual((status, "занято" in data["error"]), (409, True))
+
+    def test_open_registration_has_limits_and_a_switch(self):
+        self.httpd.reg_limiter = server.FailureLimiter(limit=3, window=3600)
+        for _ in range(3):
+            self.assertIn(self.call("POST", "/api/register", {"username": self.unique(), "password": "x"})[0], (400, 201))
+        status, _, headers = self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})
+        self.assertEqual((status, headers["Retry-After"]), (429, "3600"))
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        # администратор закрывает регистрацию одним нажатием
+        self.assertEqual(self.call("POST", "/api/admin/registration", {"open": False}, admin=True)[0], 200)
+        self.assertEqual(json.loads(self.request("GET", "/api/registration")[2]), {"open": False})
+        self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})[0], 403)
+        self.assertEqual(self.call("POST", "/api/admin/registration", {"open": True}, admin=True)[0], 200)
+        self.assertEqual(self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})[0], 201)
+        self.assertEqual(self.call("POST", "/api/admin/registration", {"open": "yes"}, admin=True)[0], 400)
+        # предел числа людей
+        self.store.max_users = len(self.store.list_users())
+        status, data, _ = self.call("POST", "/api/register", {"username": self.unique(), "password": self.PW})
+        self.assertEqual(status, 409)
+
+    def test_login_logout_and_generic_failures(self):
+        cookie, name = self.person()
+        status, data, headers = self.call("POST", "/api/login", {"username": name, "password": self.PW})
+        self.assertEqual(status, 200)
+        second = self.cookie_of(headers)
+        wrong = self.call("POST", "/api/login", {"username": name, "password": self.PW + "x"})
+        unknown = self.call("POST", "/api/login", {"username": "no-such-user", "password": self.PW})
+        self.assertEqual((wrong[0], unknown[0]), (401, 401))
+        self.assertEqual(wrong[1], unknown[1])                              # по ответу нельзя узнать, есть ли такое имя
+        self.assertEqual(self.call("POST", "/api/login", {"username": name})[0], 400)
+        self.assertEqual(self.request("POST", "/api/login", json.dumps({"username": name, "password": self.PW}).encode(),
+                                      {"Content-Type": "application/json"})[0], 403)
+        status, _, headers = self.call("POST", "/api/logout", cookie=second)
+        self.assertEqual(status, 200)
+        self.assertIn("Max-Age=0", headers["Set-Cookie"])
+        self.assertEqual(self.request("GET", "/api/me", cookie=second)[0], 401)       # эта сессия закрыта
+        self.assertEqual(self.request("GET", "/api/me", cookie=cookie)[0], 200)       # другая жива
+        self.assertEqual(self.request("POST", "/api/logout", b"{}", {"Content-Type": "application/json"}, cookie)[0], 403)
+
+    def test_wrong_passwords_lock_the_address_and_the_name(self):
+        _, name = self.person()
+        for _ in range(10):
+            self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": "wrong-password-1"})[0], 401)
+        status, _, headers = self.call("POST", "/api/login", {"username": name, "password": self.PW})   # верный пароль после блокировки
+        self.assertEqual((status, headers["Retry-After"]), (429, "600"))
+        # на другом адресе не отключают имя навсегда, но подбор одного имени ограничен отдельно
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=2, window=600)
+        self.call("POST", "/api/login", {"username": name, "password": "wrong-password-1"})
+        self.call("POST", "/api/login", {"username": name, "password": "wrong-password-2"})
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 429)
+        # успешный вход не обнуляет счётчик: свой вход между подборами обойти лимит не позволяет
+        self.httpd.limiter = server.FailureLimiter(limit=3, window=600)
+        self.httpd.name_limiter = server.FailureLimiter()
+        mine = self.person()[1]
+        for index in range(3):
+            self.call("POST", "/api/login", {"username": name, "password": "wrong-password-%d" % index})
+            self.call("POST", "/api/login", {"username": mine, "password": self.PW})
+        self.assertEqual(self.call("POST", "/api/login", {"username": mine, "password": self.PW})[0], 429)
+
+    def test_people_cannot_use_http_basic_but_the_admin_can(self):
+        _, name = self.person()
+        person_basic = {"Authorization": "Basic " + base64.b64encode(("%s:%s" % (name, self.PW)).encode()).decode()}
+        self.assertEqual(self.request("GET", "/api/me", headers=person_basic)[0], 401)
+        self.assertEqual(json.loads(self.request("GET", "/api/me", admin=True)[2])["user"]["role"], "admin")
+        status, data, headers = self.call("POST", "/api/login", {"username": "garden", "password": PASSWORD})
+        self.assertEqual((status, data["user"]["role"]), (200, "admin"))        # администратор входит той же формой
+
+    def test_people_work_only_with_their_own_boards(self):
+        ann_cookie, ann = self.person()
+        bob_cookie, bob = self.person()
+        status, data, _ = self.call("POST", "/api/boards", {"name": "Теплица Анны", "device": ann + "-1"}, cookie=ann_cookie)
+        self.assertEqual(status, 201, data)
+        ann_token, ann_item = data["token"], data["item"]
+        _, data, _ = self.call("POST", "/api/boards", {"name": "Шкаф Боба", "device": bob + "-1"}, cookie=bob_cookie)
+        bob_token, bob_item = data["token"], data["item"]
+        self.assertEqual(self.ingest(ann + "-1", ann_token), 200)
+        self.assertEqual(self.ingest(bob + "-1", bob_token), 200)
+        # списки: у каждого своя плата, общих токенов человек не видит
+        listing = json.loads(self.request("GET", "/api/boards", cookie=ann_cookie)[2])
+        self.assertEqual([b["device"] for b in listing["boards"]], [ann + "-1"])
+        self.assertEqual((listing["shared_tokens"], listing["max_boards"]), ([], server.MAX_BOARDS_PER_USER))
+        self.assertNotIn(bob, json.dumps(listing))
+        self.assertEqual([d["device"] for d in json.loads(self.request("GET", "/api/devices", cookie=ann_cookie)[2])["devices"]], [ann + "-1"])
+        # данные чужой платы недоступны всеми способами и выглядят как «нет данных»
+        for path in ("/api/status", "/api/series?range=24h", "/api/logs", "/api/export.csv?range=24h"):
+            sep = "&" if "?" in path else "?"
+            self.assertEqual(self.request("GET", path + sep + "device=" + bob + "-1", cookie=ann_cookie)[0], 404, path)
+            self.assertEqual(self.request("GET", path + sep + "device=" + ann + "-1", cookie=ann_cookie)[0], 200, path)
+        self.assertEqual(json.loads(self.request("GET", "/api/status", cookie=ann_cookie)[2])["device"], ann + "-1")   # без device — своя плата
+        # чужую плату нельзя ни изменить, ни удалить, ни выпустить для неё токен, ни отозвать чужой токен
+        self.assertEqual(self.call("POST", "/api/boards/%s-1/tokens" % bob, {}, cookie=ann_cookie)[0], 404)
+        self.assertEqual(self.call("POST", "/api/boards/%s-1/rename" % bob, {"name": "мой"}, cookie=ann_cookie)[0], 404)
+        self.assertEqual(self.call("DELETE", "/api/boards/%s-1" % bob, cookie=ann_cookie)[0], 404)
+        self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % bob_item["id"], cookie=ann_cookie)[0], 404)
+        self.assertEqual(self.call("DELETE", "/api/tokens/%d" % bob_item["id"], cookie=ann_cookie)[0], 404)
+        self.assertEqual(self.ingest(bob + "-1", bob_token), 200)               # токен Боба цел
+        # общий токен из .env человек тоже не трогает
+        shared = json.loads(self.request("GET", "/api/boards", admin=True)[2])["shared_tokens"][0]
+        self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % shared["id"], cookie=ann_cookie)[0], 404)
+        # а свою плату человек ведёт сам: замена токена, переименование, отзыв, удаление
+        self.assertEqual(self.call("POST", "/api/boards/%s-1/rename" % ann, {"name": "Новое имя"}, cookie=ann_cookie)[0], 200)
+        status, data, _ = self.call("POST", "/api/boards/%s-1/tokens" % ann, {"name": "Запасной"}, cookie=ann_cookie)
+        self.assertEqual(status, 201)
+        self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % ann_item["id"], cookie=ann_cookie)[0], 200)
+        self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % data["item"]["id"], cookie=ann_cookie)[0], 200)
+        self.assertEqual(self.call("DELETE", "/api/boards/%s-1" % ann, cookie=ann_cookie)[0], 200)
+        # администратор видит всё и всех, с владельцами
+        everything = json.loads(self.request("GET", "/api/boards", admin=True)[2])
+        owners = {b["device"]: b["owner"] for b in everything["boards"]}
+        self.assertEqual(owners.get(bob + "-1"), bob)
+        self.assertNotIn(ann + "-1", owners)
+        self.assertIn(bob + "-1", [d["device"] for d in json.loads(self.request("GET", "/api/devices", admin=True)[2])["devices"]])
+
+    def test_a_person_has_a_limited_number_of_boards(self):
+        cookie, name = self.person()
+        self.store.max_boards_per_user = 2
+        for index in range(2):
+            self.assertEqual(self.call("POST", "/api/boards", {"name": "Плата", "device": "%s-%d" % (name, index)}, cookie=cookie)[0], 201)
+        status, data, _ = self.call("POST", "/api/boards", {"name": "Лишняя", "device": name + "-9"}, cookie=cookie)
+        self.assertEqual((status, "предел" in data["error"]), (409, True))
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Админская", "device": name + "-adm"}, admin=True)[0], 201)
+
+    def test_names_of_boards_are_global_so_nobody_can_take_over_someone_elses_name(self):
+        ann_cookie, _ = self.person()
+        bob_cookie, _ = self.person()
+        name = self.unique("shared-name")
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Анны", "device": name}, cookie=ann_cookie)[0], 201)
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Боба", "device": name}, cookie=bob_cookie)[0], 409)
+
+    def test_the_ingest_rate_is_limited_per_board(self):
+        cookie, name = self.person()
+        _, data, _ = self.call("POST", "/api/boards", {"name": "Плата", "device": name + "-r"}, cookie=cookie)
+        _, other, _ = self.call("POST", "/api/boards", {"name": "Вторая", "device": name + "-s"}, cookie=cookie)
+        self.httpd.ingest_gate = server.RateGate(5)
+        self.assertEqual(self.ingest(name + "-r", data["token"]), 200)
+        status, headers, _ = self.request("POST", "/api/ingest", json.dumps({"device": name + "-r"}).encode(),
+                                          {"Content-Type": "application/json", "Authorization": "Bearer " + data["token"]})
+        self.assertEqual((status, headers["Retry-After"]), (429, "5"))
+        self.assertEqual(self.ingest(name + "-s", other["token"]), 200)       # другая плата не задета
+
+    def test_admin_page_and_api_are_for_the_admin_only(self):
+        cookie, name = self.person()
+        status, headers, _ = self.request("GET", "/admin", cookie=cookie)
+        self.assertEqual((status, headers["Location"]), (302, "/"))
+        self.assertEqual(self.request("GET", "/api/admin/users", cookie=cookie)[0], 403)
+        self.assertEqual(self.call("POST", "/api/admin/registration", {"open": False}, cookie=cookie)[0], 403)
+        self.assertEqual(self.call("POST", "/api/admin/users/1/disable", cookie=cookie)[0], 403)
+        self.assertEqual(self.request("GET", "/admin", admin=True)[0], 200)
+        data = json.loads(self.request("GET", "/api/admin/users", admin=True)[2])
+        row = [u for u in data["users"] if u["username"] == name][0]
+        self.assertEqual((row["role"], row["disabled"], row["boards"]), ("user", False, 0))
+        self.assertNotIn("pass", json.dumps(data))
+        self.assertTrue(data["registration_open"])
+
+    def test_admin_can_block_reset_and_delete_a_person(self):
+        cookie, name = self.person()
+        _, data, _ = self.call("POST", "/api/boards", {"name": "Плата", "device": name + "-b"}, cookie=cookie)
+        user_id = [u for u in self.store.list_users() if u["username"] == name][0]["id"]
+        self.assertEqual(self.ingest(name + "-b", data["token"]), 200)
+        # блокировка: вход закрыт, сессия закрыта, плата данные присылать перестаёт
+        status, answer, _ = self.call("POST", "/api/admin/users/%d/disable" % user_id, admin=True)
+        self.assertEqual((status, answer["user"]["disabled"]), (200, True))
+        self.assertEqual(self.request("GET", "/api/me", cookie=cookie)[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 401)
+        self.assertEqual(self.ingest(name + "-b", data["token"]), 401)
+        self.assertEqual(self.call("POST", "/api/admin/users/%d/enable" % user_id, admin=True)[0], 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 200)
+        # новый пароль вместо забытого
+        status, answer, _ = self.call("POST", "/api/admin/users/%d/reset-password" % user_id, admin=True)
+        temp = answer["password"]
+        self.assertEqual(status, 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": temp})[0], 200)
+        # удаление вместе с платами
+        self.assertEqual(self.call("DELETE", "/api/admin/users/%d" % user_id, admin=True)[0], 200)
+        self.assertEqual(self.call("DELETE", "/api/admin/users/%d" % user_id, admin=True)[0], 404)
+        self.assertFalse(self.store.board_exists(name + "-b"))
+        self.assertEqual(self.ingest(name + "-b", data["token"]), 401)
+        # администратора трогать нельзя
+        admin_id = self.store.admin_id
+        for action, method in (("disable", "POST"), ("reset-password", "POST"), ("", "DELETE")):
+            path = "/api/admin/users/%d%s" % (admin_id, "/" + action if action else "")
+            self.assertEqual(self.call(method, path, admin=True)[0], 409, path)
+        self.assertEqual(self.call("POST", "/api/admin/users/99999/disable", admin=True)[0], 404)
+        self.assertEqual(self.call("POST", "/api/admin/users/abc/disable", admin=True)[0], 404)
+
+    def test_a_person_changes_the_own_password(self):
+        cookie, name = self.person()
+        other = self.cookie_of(self.call("POST", "/api/login", {"username": name, "password": self.PW})[2])
+        self.assertEqual(self.call("POST", "/api/account/password", {"old": "wrong-password-1", "new": "brand new password"}, cookie=cookie)[0], 400)
+        self.assertEqual(self.call("POST", "/api/account/password", {"old": self.PW, "new": "short"}, cookie=cookie)[0], 400)
+        self.assertEqual(self.request("POST", "/api/account/password", b"{}", {"Content-Type": "application/json"}, cookie)[0], 403)
+        self.assertEqual(self.call("POST", "/api/account/password", {"old": self.PW, "new": "brand new password"}, cookie=cookie)[0], 200)
+        self.assertEqual(self.request("GET", "/api/me", cookie=cookie)[0], 200)
+        self.assertEqual(self.request("GET", "/api/me", cookie=other)[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": "brand new password"})[0], 200)
+        # у администратора пароль в .env
+        self.assertEqual(self.call("POST", "/api/account/password", {"old": PASSWORD, "new": "another password 1"}, admin=True)[0], 409)
+
+    def test_the_login_redirect_keeps_the_page_and_encodes_it(self):
+        status, headers, _ = self.request("GET", "/boards?a=1&b=http://evil.example")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers["Location"], "/login?next=%2Fboards%3Fa%3D1%26b%3Dhttp%3A%2F%2Fevil.example")
+
+    def test_broken_cookies_mean_nobody_is_signed_in(self):
+        for value in ("", "x", "x" * 500, "a=b;c", "../../etc/passwd"):
+            self.assertEqual(self.request("GET", "/api/me", headers={"Cookie": server.SESSION_COOKIE + "=" + value})[0], 401, value)
+        self.assertEqual(self.request("GET", "/api/me", headers={"Cookie": "garbage"})[0], 401)
+
+    def test_a_person_cannot_use_the_admin_boards_or_board_names_of_the_admin(self):
+        cookie, name = self.person()
+        _, data, _ = self.call("POST", "/api/boards", {"name": "Админская", "device": name + "-adm"}, admin=True)
+        self.assertEqual(self.request("GET", "/api/status?device=%s-adm" % name, cookie=cookie)[0], 404)
+        self.assertEqual(self.call("DELETE", "/api/boards/%s-adm" % name, cookie=cookie)[0], 404)
+        self.assertEqual(self.call("POST", "/api/tokens/%d/revoke" % data["item"]["id"], cookie=cookie)[0], 404)
+
+
 class ConfigTests(unittest.TestCase):
+    def test_accounts_settings_are_validated(self):
+        base = {"DASH_VIEW_PASSWORD": PASSWORD}
+        server.Config(dict(base, DASH_REGISTRATION="closed", DASH_VIEW_USER="owner")).validate()
+        for bad in ({"DASH_REGISTRATION": "maybe"}, {"DASH_VIEW_USER": "ab"}, {"DASH_VIEW_USER": "с кириллицей"}):
+            with self.assertRaises(SystemExit, msg=str(bad)):
+                server.Config(dict(base, **bad)).validate()
+        cfg = server.Config(dict(base, DASH_MAX_USERS="5", DASH_MAX_BOARDS_PER_USER="1", DASH_MAX_BOARDS="7", DASH_SESSION_DAYS="2"))
+        self.assertEqual((cfg.registration, cfg.max_users, cfg.max_boards_per_user, cfg.max_boards, cfg.session_days),
+                         ("open", 5, 1, 7, 2))
+
     def test_ingest_token_is_optional_but_never_weak(self):
         server.Config({"DASH_VIEW_PASSWORD": PASSWORD}).validate()            # токены создаются на странице /boards
         with self.assertRaises(SystemExit):

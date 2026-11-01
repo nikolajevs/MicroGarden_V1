@@ -272,3 +272,14 @@ button.btn:disabled { opacity: .5; cursor: default; }
   .board-form { grid-template-columns: 1fr; }
   .board-form .btn { width: 100%; }
 }
+
+/* Вход, регистрация, аккаунт и страница администратора */
+.icon-btn[hidden] { display: none; }
+.start-hint { margin: 0 0 14px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13.5px; }
+.start-hint a, .auth-card a, .legend-note a { color: var(--accent); }
+.auth-wrap { max-width: 460px; }
+.auth-card { margin-top: 8px; }
+.auth-form { display: grid; gap: 12px; margin: 10px 0 12px; }
+.auth-form[hidden], .empty[hidden] { display: none; }
+.auth-form .btn { justify-self: start; }
+@media (max-width: 520px) { .auth-form .btn { width: 100%; } }

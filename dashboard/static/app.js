@@ -354,9 +354,25 @@
   // ----- запросы ------------------------------------------------------------------------
   async function getJson(url) {
     const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+    if (res.status === 401) {
+      // Сессия закончилась (или человека заблокировали): ведём на страницу входа и возвращаем сюда после входа
+      location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+      throw new Error('нужен вход');
+    }
     if (res.status === 404) return null;
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
+  }
+
+  // Кто вошёл: имя в подсказке кнопки аккаунта, а администратору ещё кнопка «Люди»
+  async function loadMe() {
+    try {
+      const me = await getJson('/api/me');
+      if (!me) return;
+      $('account').title = 'Аккаунт: ' + me.user.username;
+      $('account').setAttribute('aria-label', 'Аккаунт: ' + me.user.username);
+      $('people').hidden = me.user.role !== 'admin';
+    } catch (err) { /* без имени кнопки остаются с обычными подписями */ }
   }
   const q = (params) => new URLSearchParams(params).toString();
 
@@ -389,6 +405,7 @@
     const st = state.status;
     const pill = $('pill');
     const cards = $('cards');
+    $('start-hint').hidden = !!st; // у человека без данных подсказка, как подключить плату
     if (!st) {
       pill.className = 'pill pill-wait';
       pill.textContent = 'Плата ещё не присылала данные';
@@ -614,6 +631,7 @@
     });
     document.addEventListener('keydown', (evt) => { if (evt.key === 'Escape') setBellPanel(false); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    loadMe();
     refresh();
     setInterval(refresh, POLL_MS);
     setInterval(() => { if (state.status) renderStatus(); }, 5000);
