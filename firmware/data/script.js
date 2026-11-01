@@ -101,29 +101,17 @@ function renderStatus(data) {
         drawSvgChart();
     }
 
-    // В сушке нет ни дня с ночью, ни цикла выращивания — раньше шапка всё равно
-    // показывала "День · День цикла: N", и понять по главной, что идёт сушка, было нельзя
-    const drying = data.operation_mode === 1;
+    // Значок цикла: что показать, решает Format.cycleView (значок фазы, «День 160», сушка, нет времени).
+    // В сушке нет ни дня с ночью, ни цикла выращивания, и по значку видно, что идёт именно сушка
+    const cycle = Format.cycleView(data);
     const cycleEl = document.getElementById('cycle-str');
-    const phaseEl = document.getElementById('cycle-phase');
-    const cycleDayEl = document.getElementById('cycle-day');
-    if (drying) {
-        phaseEl.textContent = '🍂 Сушка';
-        cycleEl.className = "status-badge cycle-badge drying-badge";
-    } else if (data.clock_usable === false) {
-        // Без времени плата не знает, день сейчас или ночь: свет выключен, климат по ночным настройкам
-        phaseEl.textContent = '🕓 Нет времени';
-        cycleEl.className = "status-badge cycle-badge night-badge";
-    } else if (data.is_day) {
-        phaseEl.textContent = '☀️ День';
-        cycleEl.className = "status-badge cycle-badge day-badge";
-    } else {
-        phaseEl.textContent = '🌙 Ночь';
-        cycleEl.className = "status-badge cycle-badge night-badge";
-    }
-    document.getElementById('cycle-divider').hidden = drying;
-    cycleDayEl.hidden = drying;
-    cycleDayEl.textContent = data.grow_day > 0 ? `День цикла: ${data.grow_day}` : 'Цикл не начат';
+    cycleEl.className = 'status-badge cycle-badge ' + cycle.kind + '-badge';
+    cycleEl.title = cycle.hint;
+    const cycleIconEl = document.getElementById('cycle-icon');
+    cycleIconEl.textContent = cycle.icon;
+    cycleIconEl.setAttribute('aria-label', cycle.label);
+    document.getElementById('cycle-text').textContent = cycle.text;
+    const drying = data.operation_mode === 1;
 
     // В сушке свет и полив выключены всегда, поэтому лампу и насос с главной убираем
     document.querySelectorAll('[data-growing-only]').forEach(el => { el.hidden = drying; });

@@ -1,5 +1,5 @@
-// Мелкие чистые функции для главной страницы: время работы и адрес платы в сети роутера. Без DOM,
-// их проверяет tests/format.test.cjs.
+// Мелкие чистые функции для главной страницы: время работы, адрес платы в сети роутера и значок цикла.
+// Без DOM, их проверяет tests/format.test.cjs.
 (function () {
     'use strict';
 
@@ -25,7 +25,27 @@
         return typeof ip === 'string' && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) ? ip : null;
     }
 
-    const api = { formatWorkTime, routerAddress };
+    // Значок цикла в шапке: значок фазы, текст, цвет (kind) и подсказки. День или ночь передаёт сам значок
+    // (☀️ или 🌙), поэтому слово «День» в тексте всегда значит день цикла: «День 160». Так значок короткий
+    // и помещается в одну строку шапки на телефоне.
+    function cycleView(data) {
+        if (data.operation_mode === 1) {
+            return { icon: '🍂', label: 'Сушка', text: 'Сушка', kind: 'drying', hint: 'Режим сушки: дня цикла нет' };
+        }
+        // Без времени плата не знает, день сейчас или ночь, а день цикла не считается
+        if (data.clock_usable === false) {
+            return { icon: '🕓', label: 'Нет времени', text: 'Нет времени', kind: 'night',
+                     hint: 'Время не выставлено: день и ночь неизвестны' };
+        }
+        const started = data.grow_day > 0;
+        const text = started ? 'День ' + data.grow_day : 'Цикл не начат';
+        const cycle = started ? 'день цикла ' + data.grow_day : 'цикл не начат';
+        return data.is_day
+            ? { icon: '☀️', label: 'Сейчас день', text, kind: 'day', hint: 'Сейчас день, ' + cycle }
+            : { icon: '🌙', label: 'Сейчас ночь', text, kind: 'night', hint: 'Сейчас ночь, ' + cycle };
+    }
+
+    const api = { formatWorkTime, routerAddress, cycleView };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     if (typeof window !== 'undefined') window.Format = api;
 })();
