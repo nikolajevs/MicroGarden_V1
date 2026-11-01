@@ -77,6 +77,11 @@ function packWaterSensor() {
     document.getElementById('water_sensor_enabled').value = document.getElementById('water_sensor_checkbox').checked ? '1' : '0';
 }
 
+// Галочка «менять настройки из панели» уходит в плату скрытым полем 0/1, как датчик воды
+function packCloudControl() {
+    document.getElementById('cloud_control').value = document.getElementById('cloud_control_checkbox').checked ? '1' : '0';
+}
+
 // "6" / "0" -> "06:00", для подстановки в <input type="time">
 function formatTime(hour, minute) {
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
@@ -387,6 +392,8 @@ async function loadCurrentSettings() {
         if (typeof data.wifi_power === 'number') document.getElementById('wifi_power').value = data.wifi_power;
         document.getElementById('telemetry_url').value = data.telemetry_url;
         document.getElementById('device_label').value = data.device_label;
+        // Старая прошивка поля не присылает: тогда галочка снята
+        document.getElementById('cloud_control_checkbox').checked = data.cloud_control === true;
         setSecretPlaceholder('wifi_pass', data.wifi_pass_set);
         setSecretPlaceholder('telemetry_token', data.telemetry_token_set);
         setSecretPlaceholder('ap_pass', data.ap_pass_set);
@@ -541,6 +548,7 @@ window.onload = () => {
     document.getElementById('watering-form').addEventListener('submit', packWaterSensor);
     document.getElementById('watering-form').addEventListener('submit', packWateringTime);
     document.getElementById('light-form').addEventListener('submit', packLedTimes);
+    document.getElementById('telemetry-form').addEventListener('submit', packCloudControl);
     initOperationModeSelector();
     initTabs();
     setInterval(updateConsole, 3000);

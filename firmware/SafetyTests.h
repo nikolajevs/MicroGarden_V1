@@ -3,6 +3,7 @@
 #include "Board.h"
 #include "LiteControl.h"
 #include "Telemetry.h"
+#include "CloudSettings.h"
 #include "Ina238Tests.h"
 
 // Compile-time regressions: every firmware build checks these, with no runtime cost.
@@ -379,4 +380,122 @@ static_assert(wifiPowerQuarterDbm(WIFI_POWER_WEAK) < wifiPowerQuarterDbm(WIFI_PO
 static_assert(wifiPowerQuarterDbm(-1) == wifiPowerQuarterDbm(WIFI_POWER_STRONG) &&
               wifiPowerQuarterDbm(3) == wifiPowerQuarterDbm(WIFI_POWER_STRONG),
               "an unknown WiFi power level must fall back to the strongest one");
+
+// --- Настройки из панели: что разрешено менять и как разбирается ответ сервера ---------------------
+constexpr size_t cloudTestAppend(char *dst, size_t at, const char *text) {
+  while (*text != '\0') dst[at++] = *text++;
+  dst[at] = '\0';
+  return at;
+}
+
+// Ответ сервера с запросом на `fields` настроек: f00, f01, ...
+constexpr size_t cloudTestReply(char *dst, int fields) {
+  size_t at = cloudTestAppend(dst, 0, "{\"cfg\":{\"id\":\"a1\",\"set\":{");
+  for (int k = 0; k < fields; ++k) {
+    const char name[] = {'"', 'f', char('0' + k / 10), char('0' + k % 10), '"', ':', '1', '\0'};
+    if (k > 0) at = cloudTestAppend(dst, at, ",");
+    at = cloudTestAppend(dst, at, name);
+  }
+  return cloudTestAppend(dst, at, "}}}");
+}
+
+constexpr CloudReply cloudTestParse(const char *text, CloudPatch &p) {
+  return parseCloudReply(text, cstrLen(text), p);
+}
+
+constexpr bool cloudReplyRegression() {
+  CloudPatch p{};
+  // Ответ, как его пишет json.dumps: пробелы после двоеточий и запятых, другие поля вокруг cfg
+  if (cloudTestParse("{\"ok\": true, \"log_next\": 12, \"cfg\": {\"id\": \"1a2b3c4d\", \"set\": {\"temp_target\": 24.5, "
+                     "\"led_on_hour\": 7, \"temp_delta\": 0.25, \"up\": true, \"down\": false, \"neg\": -1.5}}, \"sample\": true}", p) !=
+          CloudReply::Patch ||
+      p.count != 6 || !sameText(p.id, "1a2b3c4d") || !sameText(p.items[0].name, "temp_target") ||
+      p.items[0].value != 24.5 || p.items[1].value != 7.0 || p.items[2].value != 0.25 ||
+      p.items[3].value != 1.0 || p.items[4].value != 0.0 || p.items[5].value != -1.5) return false;
+  // Без пробелов; десятичная запись даёт то же число, что записано в исходнике, а дата — точное целое
+  if (cloudTestParse("{\"cfg\":{\"id\":\"f\",\"set\":{\"a\":24.1,\"b\":0.1,\"start_time\":1793491200}}}", p) != CloudReply::Patch ||
+      p.count != 3 || p.items[0].value != 24.1 || p.items[1].value != 0.1 || p.items[2].value != 1793491200.0) return false;
+  // Нет раздела cfg или он пустой (null): менять нечего
+  if (cloudTestParse("{\"ok\":true,\"log_next\":1}", p) != CloudReply::None || p.count != 0) return false;
+  if (cloudTestParse("{\"ok\":true,\"cfg\":null}", p) != CloudReply::None) return false;
+  // Всё остальное не применяется вовсе
+  const char *const bad[] = {
+    "{\"cfg\":{\"set\":{\"a\":1}}}",                      // нет id
+    "{\"cfg\":{\"id\":\"ABCD\",\"set\":{\"a\":1}}}",      // id только из строчных шестнадцатеричных цифр
+    "{\"cfg\":{\"id\":\"\",\"set\":{\"a\":1}}}",
+    "{\"cfg\":{\"id\":\"0123456789abcdef0\",\"set\":{\"a\":1}}}", // длиннее 16
+    "{\"cfg\":{\"set\":{\"a\":1},\"id\":\"a1\"}}",        // порядок полей
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{}}}",               // пустой запрос
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1,\"a\":2}}}", // повтор
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"Temp\":1}}}",     // имя только из строчных букв, цифр и _
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a-b\":1}}}",
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":\"1\"}}}",    // значение-строка
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1e3}}}",      // порядок не поддерживается
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1.}}}",
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":.5}}}",
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":--1}}}",
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1234567890123456}}}", // больше 15 цифр
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1,}}}",       // запятая в конце
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1}",          // оборвано: cfg не закрыт
+    "{\"cfg\":{\"id\":\"a1\",\"set\":{\"a\":1",
+    "{\"cfg\":{\"id\":\"a\\\"1\",\"set\":{\"a\":1}}}",    // экранирование не поддерживается
+    "{\"cfg\":5}",
+  };
+  for (const char *text : bad) {
+    if (cloudTestParse(text, p) != CloudReply::Bad) return false;
+  }
+  // Предел числа настроек в запросе: 32 можно, 33 нельзя
+  char buffer[1024] = {};
+  cloudTestReply(buffer, 32);
+  if (cloudTestParse(buffer, p) != CloudReply::Patch || p.count != 32) return false;
+  cloudTestReply(buffer, 33);
+  return cloudTestParse(buffer, p) == CloudReply::Bad;
+}
+static_assert(cloudReplyRegression(), "the cloud reply must be parsed strictly: a malformed request changes nothing");
+
+constexpr bool cloudListRegression() {
+  for (size_t i = 0; i < CLOUD_PARAM_COUNT; ++i) {
+    if (!cloudNameValid(CLOUD_PARAMS[i])) return false;
+    for (size_t k = i + 1; k < CLOUD_PARAM_COUNT; ++k) {
+      if (sameText(CLOUD_PARAMS[i], CLOUD_PARAMS[k])) return false;
+    }
+    for (size_t k = 0; k < CLOUD_REPORT_ONLY_COUNT; ++k) {
+      if (sameText(CLOUD_PARAMS[i], CLOUD_REPORT_ONLY[k])) return false;
+    }
+  }
+  return true;
+}
+static_assert(cloudListRegression(), "cloud setting names must be valid, unique and not report-only");
+static_assert(cloudParamAllowed("temp_target") && cloudParamAllowed("operation_mode") && cloudParamAllowed("watering_duration") &&
+              cloudParamAllowed("start_time") && cloudParamAllowed("heater_mode") && cloudParamAllowed("rgb_night_mode"),
+              "the working settings can be changed from the panel");
+// Сеть, панель, поправка тока и датчик воды, а также сам выключатель облачных настроек меняются только на плате
+static_assert(!cloudParamAllowed("wifi_ssid") && !cloudParamAllowed("wifi_pass") && !cloudParamAllowed("wifi_power") &&
+              !cloudParamAllowed("ap_ssid") && !cloudParamAllowed("ap_pass") && !cloudParamAllowed("telemetry_url") &&
+              !cloudParamAllowed("telemetry_token") && !cloudParamAllowed("device_label") &&
+              !cloudParamAllowed("cloud_control") && !cloudParamAllowed("power_cal_pct") &&
+              !cloudParamAllowed("water_sensor_enabled") && !cloudParamAllowed("") && !cloudParamAllowed("temp_targe") &&
+              !cloudParamAllowed("temp_target2"),
+              "network, panel, calibration, water sensor and the cloud switch must stay local-only");
+static_assert(cloudHiLimit("watering_duration", 3600) == 300 && cloudHiLimit("watering_duration", 100) == 100 &&
+              cloudHiLimit("temp_target", 40) == 40 && cloudHiLimit("fan1_max_limit", 100) == 100,
+              "watering from the panel is capped at 300 s, other limits stay as on the board");
+static_assert(cloudValueOk(CloudKind::Float, 24.5, 0, 40) && cloudValueOk(CloudKind::Float, 0, 0, 40) &&
+              cloudValueOk(CloudKind::Float, 40, 0, 40) && !cloudValueOk(CloudKind::Float, 40.01, 0, 40) &&
+              !cloudValueOk(CloudKind::Float, -0.1, 0, 40) && !cloudValueOk(CloudKind::Float, __builtin_nan(""), 0, 40),
+              "float settings stay inside the table range and NaN is refused");
+static_assert(cloudValueOk(CloudKind::Whole, 6, 0, 23) && cloudValueOk(CloudKind::Whole, 23, 0, 23) &&
+              !cloudValueOk(CloudKind::Whole, 6.5, 0, 23) && !cloudValueOk(CloudKind::Whole, 24, 0, 23) &&
+              !cloudValueOk(CloudKind::Whole, -1, 0, 23),
+              "whole settings must be integers inside the range");
+static_assert(cloudValueOk(CloudKind::Flag, 0, 0, 1) && cloudValueOk(CloudKind::Flag, 1, 0, 1) &&
+              !cloudValueOk(CloudKind::Flag, 2, 0, 1) && !cloudValueOk(CloudKind::Flag, 0.5, 0, 1),
+              "flags are exactly 0 or 1");
+static_assert(cloudValueOk(CloudKind::Date, 0, 0, 0) && cloudValueOk(CloudKind::Date, 1793491200.0, 0, 0) &&
+              cloudValueOk(CloudKind::Date, 1704067200.0, 0, 0) && cloudValueOk(CloudKind::Date, 4102444800.0, 0, 0) &&
+              !cloudValueOk(CloudKind::Date, 1793491201.0, 0, 0) &&   // не полночь
+              !cloudValueOk(CloudKind::Date, 1703980800.0, 0, 0) &&   // раньше 2024 года
+              !cloudValueOk(CloudKind::Date, 4102531200.0, 0, 0) &&   // позже 2100 года
+              !cloudValueOk(CloudKind::Date, 86400.0, 0, 0),
+              "the cycle start is 0 or a midnight between 2024 and 2100");
 

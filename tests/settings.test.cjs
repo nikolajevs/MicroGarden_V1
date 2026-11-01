@@ -449,3 +449,53 @@ test('сила сигнала: старая прошивка без поля wif
   assert.equal(p.fields.get('wifi_ssid').value, 'Box"\\Lab', 'остальные настройки загрузились');
   assert.equal(p.fields.get('wifi_power').value, '2');
 });
+
+const fromRepo = (...parts) => fs.readFileSync(path.join(__dirname, '..', ...parts), 'utf8');
+
+test('настройки из панели: галочка на странице платы уходит скрытым полем и по умолчанию выключена', () => {
+  const html = fromRepo('firmware/data/settings.html');
+  const script = fromRepo('firmware/data/settings.js');
+  const sketch = fromRepo('firmware/firmware.ino');
+  const form = html.match(/<form[^>]*id="telemetry-form"[\s\S]*?<\/form>/)[0];
+  assert.match(form, /<input type="checkbox" id="cloud_control_checkbox">/);
+  assert.match(form, /<input type="hidden" id="cloud_control" name="cloud_control" value="0">/);
+  assert.match(script, /getElementById\('telemetry-form'\)\.addEventListener\('submit', packCloudControl\)/);
+  assert.match(script, /function packCloudControl\(\) \{[\s\S]*?checked \? '1' : '0'/);
+  assert.match(script, /cloud_control_checkbox'\)\.checked = data\.cloud_control === true/, 'старая прошивка поля не присылает: галочка снята');
+  assert.match(sketch, /SET_BOOL \("cloud_control",\s*"cloud_ctl",\s*cloud_control,\s*false\)/, 'плата по умолчанию запросов из панели не принимает');
+});
+
+test('настройки из панели: разрешённые настройки есть в таблице платы, сети, токена, датчика воды и выключателя среди них нет', () => {
+  const header = fromRepo('firmware/CloudSettings.h');
+  const sketch = fromRepo('firmware/firmware.ino');
+  const names = [...header.match(/CLOUD_PARAMS\[\] = \{([\s\S]*?)\};/)[1].matchAll(/"(\w+)"/g)].map(m => m[1]);
+  assert.equal(names.length, 28);
+  assert.equal(new Set(names).size, names.length, 'без повторов');
+  for (const name of names) {
+    assert.match(sketch, new RegExp('SET_(FLOAT|INT|U8|U32_NOFORM)\\s*\\("' + name + '"'), name + ' есть в SETTING_DEFS и не строка');
+  }
+  for (const forbidden of ['cloud_control', 'wifi_ssid', 'wifi_pass', 'wifi_power', 'ap_ssid', 'ap_pass', 'telemetry_url',
+    'telemetry_token', 'device_label', 'power_cal_pct', 'water_sensor_enabled']) {
+    assert.ok(!names.includes(forbidden), forbidden + ' из панели не меняется');
+  }
+});
+
+test('настройки из панели: оба писателя настроек берут один замок и всегда его отпускают', () => {
+  const sketch = fromRepo('firmware/firmware.ino');
+  const takes = sketch.match(/xSemaphoreTake\(settingsWriteMutex/g) || [];
+  const gives = sketch.match(/xSemaphoreGive\(settingsWriteMutex\)/g) || [];
+  assert.equal(takes.length, 2, 'форма /save-settings и запрос из панели');
+  assert.equal(gives.length, 2);
+  const save = sketch.slice(sketch.indexOf('server.on("/save-settings"'), sketch.indexOf('server.on("/set-time"'));
+  assert.ok(save.indexOf('xSemaphoreTake') < save.indexOf('settingsSnapshot()') && save.indexOf('publishSettings(next)') < save.indexOf('xSemaphoreGive'),
+    'замок охватывает «прочитать копию, изменить, записать, опубликовать»');
+  assert.match(sketch, /settingsWriteMutex = xSemaphoreCreateMutex\(\);\s*if \(settingsWriteMutex == nullptr\) \{\s*haltOnFatalError/, 'без замка плата не стартует');
+});
+
+test('настройки из панели: плата читает ответ только в пределах CLOUD_REPLY_MAX и применяет запрос после проверки владельцем разрешения', () => {
+  const sketch = fromRepo('firmware/firmware.ino');
+  assert.match(sketch, /size > 0 && size <= \(int\)CLOUD_REPLY_MAX\) reply = http\.getString\(\)/);
+  assert.match(sketch, /const bool allowed = prev\.cloud_control;/);
+  assert.match(sketch, /const bool ok = allowed && applyCloudPatch\(patch, next, reason, sizeof\(reason\)\);/);
+  assert.match(sketch, /if \(ok\) \{\s*saveChangedSettings\(prev, next\);\s*publishSettings\(next\);/, 'в NVS и в работу попадает только принятый запрос');
+});
