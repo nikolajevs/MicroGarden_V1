@@ -1578,6 +1578,21 @@ class CloudSettingsStoreTests(unittest.TestCase):
                     lo, hi = server.CFG_SPECS[field["param"]][1:]
                     self.assertEqual([o[0] for o in field["options"]], list(range(lo, hi + 1)))
 
+    def test_groups_that_do_not_work_in_a_mode_say_so(self):
+        """В сушке свет и полив выключены, поэтому страница прячет их настройки (и климат выращивания, и цикл)."""
+        self.assertEqual((server.GROWING, server.DRYING), (0, 1))
+        modes = {group["id"]: group.get("modes") for group in server.CFG_SCHEMA}
+        self.assertEqual(modes, {"mode": None, "climate": [0], "drying": [1], "light": [0], "fans": None, "heater": None,
+                                 "watering": [0], "indicator": None, "cycle": [0]})
+        spec_mode = server.CFG_SPECS["operation_mode"]
+        for group in server.CFG_SCHEMA:
+            for mode in group.get("modes", []):
+                self.assertTrue(spec_mode[1] <= mode <= spec_mode[2], group["id"])
+        # у группы без режима ключа нет, у группы с режимом он на месте
+
+        self.assertNotIn("modes", next(g for g in server.CFG_SCHEMA if g["id"] == "fans"))
+        self.assertEqual(next(g for g in server.CFG_SCHEMA if g["id"] == "light")["modes"], [0])
+
 
 class FirmwareContractTests(unittest.TestCase):
     """Список и пределы настроек из панели на сервере совпадают с прошивкой (firmware/CloudSettings.h и SETTING_DEFS)."""
@@ -1635,6 +1650,21 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertEqual(server.CFG_LOCAL_HI["watering_duration"], board["watering_duration"][2])
         for param in server.CFG_READONLY:
             self.assertEqual(board[param][0], "flag", param)
+
+    def test_groups_hidden_by_mode_match_the_page_of_the_board(self):
+        """Что страница платы прячет в сушке (data-modes и data-mode-only), то панель не показывает."""
+        html = (self.FIRMWARE / "data" / "settings.html").read_text(encoding="utf-8")
+        tabs = dict(re.findall(r'data-tab="tab-(\w+)" data-modes="([a-z,]+)"', html))
+        names = {"growing": [server.GROWING], "drying": [server.DRYING], "growing,drying": None}
+        modes = {group["id"]: group.get("modes") for group in server.CFG_SCHEMA}
+        for group in ("light", "watering", "fans", "heater"):                       # вкладки платы совпадают с группами панели
+            self.assertEqual(modes[group], names[tabs[group]], group)
+        self.assertRegex(html, r'data-mode-only="growing">\s*<div class="form-section">\s*<h3>Температура и влажность')
+        self.assertRegex(html, r'data-mode-only="drying">\s*<h3>Климат сушки')
+        self.assertRegex(html, r'data-mode-only="growing">\s*<h3>Гровинг')           # дата начала цикла
+        self.assertEqual((modes["climate"], modes["drying"], modes["cycle"]), ([server.GROWING], [server.DRYING], [server.GROWING]))
+        self.assertIsNone(modes["indicator"])                                      # индикатор работает в обоих режимах
+        self.assertIsNone(modes["mode"])
 
     def test_the_switch_and_the_secrets_are_not_in_the_list(self):
         names = self.list_in_header("CLOUD_PARAMS")

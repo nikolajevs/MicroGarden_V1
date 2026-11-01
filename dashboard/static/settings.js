@@ -15,6 +15,7 @@
     data: null,           // последний ответ /api/settings
     builtFor: null,       // для какой платы построена форма
     controls: [],         // поля формы
+    sections: [],         // группы формы: { group, section, controls }
     edits: {},            // настройка -> значение, которое человек поставил в форме
     watching: '',         // номер запроса, итог которого ждём, чтобы сказать, чем он кончился
   };
@@ -138,11 +139,14 @@
     const groups = $('groups');
     groups.textContent = '';
     state.controls = [];
+    state.sections = [];
     state.edits = {};
     for (const group of state.data.schema) {
       const section = document.createElement('section');
       section.className = 'panel';
       section.append(text('h2', '', group.title));
+      const entry = { group, section, controls: [] };
+      state.sections.push(entry);
       const grid = document.createElement('div');
       grid.className = 'settings-grid';
       for (const field of group.fields) {
@@ -167,6 +171,7 @@
           el.addEventListener('change', handler);
         }
         state.controls.push(control);
+        entry.controls.push(control);
         grid.append(wrap);
       }
       section.append(grid);
@@ -179,6 +184,30 @@
   function baseValues() {
     const data = state.data;
     return Object.assign({}, data.values, data.pending ? data.pending.set : {});
+  }
+
+  // Режим, по которому показываются группы: что человек выбрал в форме, иначе то, что на плате (и ждёт её)
+  function currentMode() {
+    return 'operation_mode' in state.edits ? state.edits.operation_mode : baseValues().operation_mode;
+  }
+
+  // Прячет группы, которые в этом режиме не работают (в сушке нет света и полива), и пишет, что спрятано. Правки
+  // спрятанных полей остаются в памяти, но не отправляются: что не видно, то не меняется.
+  function applyMode() {
+    const mode = currentMode();
+    for (const entry of state.sections) {
+      const visible = Lib.groupVisible(entry.group, mode);
+      entry.section.hidden = !visible;
+      for (const control of entry.controls) control.hidden = !visible;
+    }
+    const note = Lib.hiddenNote(state.data.schema, mode);
+    $('hidden-note').textContent = note;
+    $('hidden-note').hidden = !note;
+  }
+
+  // Что уйдёт по кнопке «Применить»: правки видимых полей, отличающиеся от значений на плате
+  function visibleChanges() {
+    return Lib.changesOf(Lib.visibleEdits(state.data.schema, state.edits, currentMode()), baseValues());
   }
 
   function onEdit(control) {
@@ -197,6 +226,7 @@
       control.touched = control.params.some((p) => p in state.edits);
     }
     refreshControl(control, base);
+    applyMode();
     refreshActions();
   }
 
@@ -221,12 +251,12 @@
       for (const el of control.inputs) el.disabled = !editable;
       refreshControl(control, base);
     }
+    applyMode();
   }
 
   function refreshActions() {
-    const patch = Lib.changesOf(state.edits, baseValues());
-    const count = Object.keys(patch).length;
-    const bad = state.controls.find((c) => c.invalid);
+    const count = Object.keys(visibleChanges()).length;
+    const bad = state.controls.find((c) => c.invalid && !c.hidden);
     $('apply').disabled = count === 0 || !!bad || state.busy;
     $('apply').textContent = count ? 'Применить (' + count + ')' : 'Применить';
     $('reset').disabled = !(count || bad) || state.busy;
@@ -338,9 +368,9 @@
   async function apply(evt) {
     evt.preventDefault();
     const base = baseValues();
-    const patch = Lib.changesOf(state.edits, base);
+    const patch = visibleChanges();
     if (!Object.keys(patch).length) return;
-    const bad = state.controls.find((c) => c.invalid);
+    const bad = state.controls.find((c) => c.invalid && !c.hidden);
     const note = $('apply-note');
     note.classList.remove('bad');
     if (bad) { note.textContent = bad.invalid; note.classList.add('bad'); return; }

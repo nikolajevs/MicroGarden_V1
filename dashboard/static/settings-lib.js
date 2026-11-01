@@ -196,8 +196,46 @@
       text: known + ' Плата забирает изменения при очередной отправке данных, то есть в течение минуты.' };
   }
 
+  // Режим работы платы: 1 — сушка, всё остальное — выращивание (так считает и страница самой платы)
+  const modeOf = (value) => (Number(value) === 1 ? 1 : 0);
+
+  // Показывается ли группа в этом режиме. У группы без «modes» режим безразличен. Режим неизвестен (плата его
+  // не сообщила): показываем всё, ничего не прячем.
+  function groupVisible(group, mode) {
+    if (!group.modes || typeof mode !== 'number' || !isFinite(mode)) return true;
+    return group.modes.includes(modeOf(mode));
+  }
+
+  // Какие настройки сейчас видны на странице
+  function visibleParams(schema, mode) {
+    const out = new Set();
+    for (const group of schema) {
+      if (!groupVisible(group, mode)) continue;
+      for (const field of group.fields) paramsOf(field).forEach((p) => out.add(p));
+    }
+    return out;
+  }
+
+  // Правки только видимых полей: что человек не видит, то не отправляется (в сушке нет света и полива)
+  function visibleEdits(schema, edits, mode) {
+    const visible = visibleParams(schema, mode);
+    const out = {};
+    for (const param of Object.keys(edits)) if (visible.has(param)) out[param] = edits[param];
+    return out;
+  }
+
+  // Строка под формой: какие группы спрятаны в этом режиме и как их увидеть
+  function hiddenNote(schema, mode) {
+    const hidden = schema.filter((group) => !groupVisible(group, mode)).map((group) => group.title);
+    if (!hidden.length) return '';
+    const drying = modeOf(mode) === 1;
+    return 'В режиме ' + (drying ? 'сушки' : 'выращивания') + ' не работают и не показаны: ' + hidden.join(', ') +
+      '. Чтобы увидеть, выберите режим «' + (drying ? 'Выращивание' : 'Сушка') + '».';
+  }
+
   const api = { DAYS, ageText, remainingText, timeText, parseTime, dateText, parseDate, daysText, allFields, paramsOf,
-                labelOf, formatValue, changesOf, checkNumber, checkOrder, describeChanges, rejectionText, requestStatus, linkState };
+                labelOf, formatValue, changesOf, checkNumber, checkOrder, describeChanges, rejectionText, requestStatus, linkState,
+                modeOf, groupVisible, visibleParams, visibleEdits, hiddenNote };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.SettingsLib = api;
 })();
