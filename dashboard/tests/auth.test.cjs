@@ -364,7 +364,10 @@ test('главная без данных: остаются шапка и под�
   for (const id of ['start-hint', 'pill', 'bell', 'account', 'device', 'alerts-panel']) {
     assert.ok(at(id) > 0 && at(id) < start, '#' + id + ' остаётся вне дашборда');
   }
-  assert.match(html, /<footer class="foot">[^<]*<\/footer>\s*<\/div>\s*<\/div>/, 'подвал тоже внутри дашборда');
+  // Дашборд заканчивается журналом платы, а подвал со ссылками стоит после него и виден всегда. Подписи «Плата присылает
+  // показания и журнал по HTTPS раз в минуту» внизу больше нет: владелец её убрал.
+  assert.match(html, /<\/section>\s*<\/div>\s*<footer class="site-foot">[\s\S]*?<\/footer>\s*<\/div>\s*<script/, 'подвал со ссылками вне дашборда');
+  assert.ok(!html.includes('по HTTPS раз в минуту') && !html.includes('<footer class="foot">'), 'короткой подписи над подвалом нет');
   assert.match(html, /<p id="start-hint" class="start-hint" hidden>Здесь появятся показания вашей платы\. <a href="\/boards">Добавьте плату<\/a>, введите выданные адрес, имя и токен в её настройках \(вкладка «WiFi», раздел «Телеметрия»\), и через минуту она появится на графиках\.<\/p>/);
   assert.match(app, /\$\('start-hint'\)\.hidden = !!st;\s*\$\('dash'\)\.hidden = !st;/, 'подсказка и дашборд переключаются вместе');
   // Дашборд открывается раньше, чем на нём рисуются графики: у скрытого блока нулевая ширина
@@ -374,7 +377,8 @@ test('главная без данных: остаются шапка и под�
 test('шапка: заголовок «MicroGarden» без V1, а подписи «Телеметрия плат(ы)» под ним нет ни на одной странице', () => {
   const index = read('static', 'index.html');
   assert.match(index, /<h1>MicroGarden<\/h1>/);
-  assert.ok(!/V1/.test(index.split('<body>')[1]), 'в разметке главной страницы нет «V1»');
+  // (в адресе репозитория в подвале «MicroGarden_V1» есть, это имя проекта на GitHub, а не надпись в шапке)
+  assert.ok(!/V1/.test(index.split('<body>')[1].replace(/https:\/\/github\.com\/[^"]+/g, '')), 'в разметке главной страницы нет «V1»');
   for (const file of fs.readdirSync(path.join(__dirname, '..', 'static'))) {
     const text = read('static', file);
     assert.ok(!/Телеметрия плат/.test(text), file + ': подпись «Телеметрия плат(ы)» убрана');
@@ -392,4 +396,64 @@ test('число оповещений на колокольчике прячет
   assert.match(css, /\.bell-count \{[^}]*display: inline-flex/, 'у значка задан display, поэтому атрибут hidden сам его не скроет');
   assert.match(css, /\.bell-count\[hidden\] \{ display: none; \}/, 'без этого правила при нуле оповещений на колокольчике висел красный «0»');
   assert.match(read('static', 'app.js'), /badge\.hidden = count === 0;/);
+});
+
+test('удаление записи: нужно набрать своё имя, пароль спрашивается только у записи, у которой он есть', () => {
+  assert.deepEqual(Lib.validateDeletion('ivan', 'ivan', 'pw', true), { ok: true, confirm: 'ivan', password: 'pw' });
+  assert.deepEqual(Lib.validateDeletion('  Ivan ', 'ivan', 'pw', true), { ok: true, confirm: 'Ivan', password: 'pw' }, 'регистр и пробелы по краям не важны: сервер сравнивает так же');
+  for (const typed of ['', '   ', 'petr', 'iva', 'ivan2', undefined, null]) {
+    const check = Lib.validateDeletion(typed, 'ivan', 'pw', true);
+    assert.equal(check.ok, false, String(typed));
+    assert.match(check.error, /ivan/, 'в подсказке названо имя, которое нужно ввести');
+  }
+  assert.equal(Lib.validateDeletion('ivan', 'ivan', '', true).ok, false, 'без пароля запись с паролем не удалить');
+  assert.equal(Lib.validateDeletion('ivan', 'ivan', undefined, true).error, 'Введите пароль');
+  assert.deepEqual(Lib.validateDeletion('ivan', 'ivan', '', false), { ok: true, confirm: 'ivan' }, 'у записи из Google пароля нет: его не просят и не отправляют');
+  assert.deepEqual(Lib.validateDeletion('ivan', 'ivan', 'ignored', false), { ok: true, confirm: 'ivan' });
+  // имя записи ещё не пришло (страница только открылась или ответ не дошёл): пустое поле не должно совпасть с пустым именем
+  for (const unknown of [undefined, null, '']) assert.equal(Lib.validateDeletion('', unknown, '', false).ok, false);
+  assert.equal(Lib.validateDeletion('', null, 'pw', true).ok, false);
+});
+
+test('что стёрто, словами: склонение и напоминание, что платы и токены остались', () => {
+  assert.equal(Lib.eraseSummary({ ok: true, boards: 2, samples: 12, logs: 40 }), '12 замеров, 40 строк журнала (плат: 2). Платы и токены остались.');
+  assert.equal(Lib.eraseSummary({ boards: 1, samples: 1, logs: 1 }), '1 замер, 1 строка журнала (плат: 1). Платы и токены остались.');
+  assert.equal(Lib.eraseSummary({ boards: 1, samples: 22, logs: 3 }), '22 замера, 3 строки журнала (плат: 1). Платы и токены остались.');
+  assert.equal(Lib.eraseSummary({ boards: 1, samples: 11, logs: 14 }), '11 замеров, 14 строк журнала (плат: 1). Платы и токены остались.');
+  assert.equal(Lib.eraseSummary({}), '0 замеров, 0 строк журнала (плат: 0). Платы и токены остались.', 'ответ без чисел не ломает страницу');
+  assert.equal(Lib.eraseSummary(null), '0 замеров, 0 строк журнала (плат: 0). Платы и токены остались.');
+});
+
+test('аккаунт: стирание данных и удаление записи идут на сервер только после подтверждения на странице', () => {
+  const script = read('static', 'account.js');
+  const html = read('static', 'account.html');
+  assert.match(script, /api\('POST', '\/api\/account\/data\/delete', \{ confirm: true \}\)/);
+  assert.match(script, /api\('POST', '\/api\/account\/delete', hasPassword \? \{ confirm: check\.confirm, password: check\.password \} : \{ confirm: check\.confirm \}\)/,
+    'пароль уходит только записи, у которой он есть');
+  assert.match(script, /Lib\.validateDeletion\(\$\('delete-confirm'\)\.value, user && user\.username, \$\('delete-password'\)\.value, hasPassword\)/);
+  assert.match(script, /location\.assign\('\/login\?deleted=1'\)/, 'после удаления человека ведут на вход с пометкой');
+  assert.match(read('static', 'login.js'), /params\.get\('deleted'\) === '1'/);
+  // стирание данных: сначала кнопка «Стереть…» показывает вопрос на странице, и только «Стереть» в нём отправляет запрос
+  const ask = script.indexOf("$('data-ask').addEventListener('click'");
+  const yes = script.indexOf("$('data-yes').addEventListener('click'");
+  const post = script.indexOf("'/api/account/data/delete'");
+  assert.ok(ask > 0 && yes > ask && post > yes, 'запрос уходит только из обработчика кнопки подтверждения');
+  assert.match(script, /\$\('data-confirm'\)\.hidden = false;\s*\$\('data-no'\)\.focus\(\);/, 'фокус на «Отмене»: случайный Enter ничего не сотрёт');
+  assert.ok(!/window\.confirm|[^\w.'$-]confirm\(/.test(script), 'подтверждение не окном браузера: его легко принять не глядя');
+  // имя подставляется текстом, а не разметкой; администратору удаление записи не предлагается; без пароля поле пароля прячется
+  assert.match(script, /\$\('delete-name'\)\.textContent = user\.username;/);
+  assert.match(script, /\$\('delete-box'\)\.hidden = admin;/);
+  assert.match(script, /\$\('delete-admin'\)\.hidden = !admin;/);
+  assert.match(script, /\$\('delete-password-field'\)\.hidden = !hasPassword;/);
+  assert.match(script, /\$\('delete-need-login'\)\.hidden = hasPassword;/);
+  // в разметке: раздел с якорем #delete (на него ведёт подвал), форма удаления спрятана, пока человек не нажал «Удалить аккаунт…»
+  assert.equal(html.split('id="delete"').length - 1, 1, 'якорь #delete для ссылки из подвала');
+  assert.match(html, /<form id="delete-form" class="auth-form" novalidate hidden>/);
+  assert.match(html, /<div class="confirm-bar" id="data-confirm" role="alert" hidden>/);
+  assert.match(html, /<button type="submit" class="btn danger" id="delete-submit">Удалить навсегда<\/button>/);
+  assert.match(html, /href="\/auth\/google\?next=%2Faccount%23delete"/, 'после нового входа через Google человек возвращается к форме удаления');
+  assert.match(html, /больше 15 минут назад/, 'срок свежего входа в подсказке совпадает с сервером');
+  assert.match(read('server.py'), /DELETE_FRESH_SEC = 900\b/);
+  // запрос стирания и удаления не прячет пароль или токен в хранилище (общая проверка выше) и не пишет их в консоль
+  assert.ok(!/console\.(log|info|debug)/.test(script));
 });

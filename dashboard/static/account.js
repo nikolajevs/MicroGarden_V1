@@ -107,6 +107,66 @@
     }
   });
 
+  // ----- удаление данных и записи ----------------------------------------------------------
+  function showDataMessage(error, done) {
+    $('data-error').textContent = error || '';
+    $('data-error').hidden = !error;
+    $('data-done').textContent = done || '';
+    $('data-done').hidden = !done;
+  }
+
+  function showDeleteError(text) {
+    $('delete-error').textContent = text || '';
+    $('delete-error').hidden = !text;
+  }
+
+  // Подтверждение стирания данных стоит на самой странице (не окном браузера); фокус на «Отмене»: случайный Enter ничего не сотрёт
+  $('data-ask').addEventListener('click', () => {
+    showDataMessage('', '');
+    $('data-confirm').hidden = false;
+    $('data-no').focus();
+  });
+  $('data-no').addEventListener('click', () => { $('data-confirm').hidden = true; });
+  $('data-yes').addEventListener('click', async () => {
+    $('data-yes').disabled = true;
+    try {
+      const answer = await api('POST', '/api/account/data/delete', { confirm: true });
+      showDataMessage('', 'Стёрто: ' + Lib.eraseSummary(answer));
+    } catch (e) {
+      showDataMessage(e.message, '');
+    } finally {
+      $('data-confirm').hidden = true;
+      $('data-yes').disabled = false;
+    }
+  });
+
+  $('delete-ask').addEventListener('click', () => {
+    showDeleteError('');
+    $('delete-form').hidden = false;
+    $('delete-ask').hidden = true;
+    $('delete-confirm').focus();
+  });
+  $('delete-cancel').addEventListener('click', () => {
+    $('delete-form').reset();
+    $('delete-form').hidden = true;
+    $('delete-ask').hidden = false;
+    showDeleteError('');
+  });
+  $('delete-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const check = Lib.validateDeletion($('delete-confirm').value, user && user.username, $('delete-password').value, hasPassword);
+    if (!check.ok) { showDeleteError(check.error); return; }
+    $('delete-submit').disabled = true;
+    showDeleteError('');
+    try {
+      await api('POST', '/api/account/delete', hasPassword ? { confirm: check.confirm, password: check.password } : { confirm: check.confirm });
+      location.assign('/login?deleted=1');
+    } catch (e) {
+      showDeleteError(e.message);
+      $('delete-submit').disabled = false;
+    }
+  });
+
   $('logout').addEventListener('click', async () => {
     try { await api('POST', '/api/logout'); } catch (e) { /* уже вышли или сервер не ответил */ }
     location.assign('/login');
@@ -120,6 +180,12 @@
     $('admin-note').hidden = !admin;
     $('google-state').hidden = !data.google;
     showPasswordMode(data.has_password !== false);
+    // Администратор задан в .env и сам себя удалить не может; запись из Google подтверждает удаление свежим входом, а не паролем
+    $('delete-box').hidden = admin;
+    $('delete-admin').hidden = !admin;
+    $('delete-name').textContent = user.username;
+    $('delete-password-field').hidden = !hasPassword;
+    $('delete-need-login').hidden = hasPassword;
     $('email-box').hidden = !data.mail_enabled;
     $('email-off').hidden = !!data.mail_enabled;
     if (data.mail_enabled) showEmail(data.email);

@@ -3323,6 +3323,509 @@ class ConfigureScriptTests(unittest.TestCase):
         code, output = self.run_script("configure-mail.sh", b"\n\n\xd0\n")                                 # байт вместо порта: вопрос повторяется
         self.assertIn("символы вне латиницы", output)
 
+    def test_the_site_script_writes_the_operator_with_the_servers_own_rules(self):
+        code, output = self.run_script("configure-site.sh", b"Test Operator\nPrivacy@Example.org\n")
+        self.assertEqual(code, 0, output)
+        text = self.env.read_text(encoding="utf-8")
+        self.assertIn("DASH_OPERATOR_NAME=Test Operator\n", text)
+        self.assertIn("DASH_CONTACT_EMAIL=Privacy@Example.org\n", text)
+        self.assertTrue(text.startswith(self.START.decode()))                                        # прежние строки на месте
+        config = server.Config(self.read_env())
+        self.assertEqual((config.operator_name, config.contact_email, config.site_problems()), ("Test Operator", "privacy@example.org", []))
+        self.assertEqual(len(self.leftovers()), 1, self.leftovers())                                 # одна копия прежнего файла
+        # Enter оставляет текущие значения и ничего не переписывает
+        before, files = self.env.read_bytes(), self.leftovers()
+        code, output = self.run_script("configure-site.sh", b"\n\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("Изменений нет", output)
+        self.assertEqual((self.env.read_bytes(), self.leftovers()), (before, files))
+        # «-» очищает поля: ключи убираются из файла, остальное остаётся
+        code, output = self.run_script("configure-site.sh", b"-\n-\n")
+        self.assertEqual(code, 0, output)
+        text = self.env.read_text(encoding="utf-8")
+        self.assertNotIn("DASH_OPERATOR_NAME", text)
+        self.assertNotIn("DASH_CONTACT_EMAIL", text)
+        self.assertTrue(text.startswith(self.START.decode()))                                        # (заголовок-комментарий от первой записи остаётся)
+        self.assertEqual(server.Config(self.read_env()).site_problems(), [])
+
+    def test_the_site_script_accepts_one_value_without_the_other(self):
+        code, output = self.run_script("configure-site.sh", b"Test Operator\n\n")
+        self.assertEqual(code, 0, output)
+        text = self.env.read_text(encoding="utf-8")
+        self.assertIn("DASH_OPERATOR_NAME=Test Operator\n", text)
+        self.assertNotIn("DASH_CONTACT_EMAIL", text)
+
+    def test_wrong_operator_values_write_nothing(self):
+        for answers, key in ((b"Test Operator\nnot-an-address\n", "DASH_CONTACT_EMAIL"),
+                             (b"Test Operator\nname@example\n", "DASH_CONTACT_EMAIL"),
+                             (b"x" * 101 + b"\nprivacy@example.org\n", "DASH_OPERATOR_NAME")):
+            code, output = self.run_script("configure-site.sh", answers)
+            self.assertNotEqual(code, 0, (answers, output))
+            self.assertIn(key, output)
+            self.assertIn("Ничего не записано", output)
+            self.assertEqual(self.env.read_bytes(), self.START, answers)
+            self.assertEqual(self.leftovers(), [], answers)
+
+    def test_a_stray_byte_in_the_operator_name_is_asked_again(self):
+        code, output = self.run_script("configure-site.sh", b"Test \xd0Operator\nTest Operator\nprivacy@example.org\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("символы вне латиницы", output)
+        self.assertIn("DASH_OPERATOR_NAME=Test Operator\n", self.env.read_text(encoding="utf-8"))
+        code, output = self.run_script("configure-site.sh", b"Cyrillic \xd0\xb8\n" * 3)             # кириллица не проходит: три попытки и выход
+        self.assertNotEqual(code, 0)
+        self.assertIn("три попытки не вышли", output)
+
+
+@unittest.skipUnless(BASH, "нужна оболочка bash")
+class PruneBackupsTests(unittest.TestCase):
+    """deploy/prune-backups.sh: копии базы старше срока из политики (90 суток) удаляются только с --delete и только они."""
+    SCRIPT = Path(server.__file__).resolve().parent / "deploy" / "prune-backups.sh"
+    DAY = 86400
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        now = time.time()
+        self.old = ["dash-backup-before-email-20250101-1000.sqlite3", "dash-backup-before-google-20240601-0900.sqlite3"]
+        self.new = ["dash-backup-before-legal-20260101-1000.sqlite3", "dash-backup-before-recent.sqlite3"]
+        for name, days in ((self.old[0], 90.5), (self.old[1], 200), (self.new[0], 89.5), (self.new[1], 1)):
+            self.make(name, days, now)
+        # не копии: другие имена, подкаталог и каталог с подходящим именем; возраст у них большой, но трогать их нельзя
+        self.others = ["notes.txt", "dash.sqlite3", "dash-backup-before-email.sqlite3.txt", "backup-old.sqlite3"]
+        for name in self.others:
+            self.make(name, 400, now)
+        (self.dir / "dash-backup-before-dir.sqlite3").mkdir()
+        (self.dir / "sub").mkdir()
+        self.make("sub/dash-backup-before-nested.sqlite3", 400, now)
+        self.everything = self.names()
+
+    def make(self, name, days, now):
+        path = self.dir / name
+        path.write_bytes(b"sqlite stand-in")
+        os.utime(path, (now - days * self.DAY,) * 2)
+
+    def names(self):
+        return sorted(p.relative_to(self.dir).as_posix() for p in self.dir.rglob("*"))
+
+    def run_script(self, *args, **extra):
+        env = dict(os.environ, DASH_BACKUP_DIR=str(self.dir).replace("\\", "/"))
+        env.update(extra)
+        done = subprocess.run([BASH, str(self.SCRIPT).replace("\\", "/"), *args], capture_output=True, env=env, timeout=60)
+        return done.returncode, (done.stdout + done.stderr).decode("utf-8", "replace")
+
+    def test_by_default_it_only_shows_what_it_would_delete(self):
+        code, output = self.run_script()
+        self.assertEqual(code, 0, output)
+        for name in self.old:
+            self.assertIn(name, output)
+        for name in self.new + self.others:
+            self.assertNotIn(name, output)
+        self.assertIn("Показано копий: 2 (новее 90 суток: 2)", output)
+        self.assertEqual(self.names(), self.everything)                              # ничего не удалено
+
+    def test_delete_removes_only_the_old_copies(self):
+        code, output = self.run_script("--delete")
+        self.assertEqual(code, 0, output)
+        self.assertIn("Удалено копий: 2, осталось: 2", output)
+        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old)))
+        code, output = self.run_script("--delete")                                   # повторный запуск ничего не находит
+        self.assertEqual(code, 0, output)
+        self.assertIn("Копий старше 90 суток нет", output)
+
+    def test_the_term_comes_from_the_environment(self):
+        code, output = self.run_script("--delete", DASH_BACKUP_DAYS="30")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old) - {self.new[0]}))   # 89 суток старше 30
+        code, output = self.run_script("--delete", DASH_BACKUP_DAYS="365")
+        self.assertIn("Копий старше 365 суток нет", output)
+        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old) - {self.new[0]}))
+
+    def test_bad_arguments_and_terms_are_refused_before_anything_is_touched(self):
+        for args, extra in ((("--wrong",), {}), (("--delete", "extra"), {}), ((), {"DASH_BACKUP_DAYS": "0"}), ((), {"DASH_BACKUP_DAYS": "abc"}),
+                            (("--delete",), {"DASH_BACKUP_DAYS": "-5"}), (("--delete",), {"DASH_BACKUP_DAYS": "1.5"}), (("--delete",), {"DASH_BACKUP_DAYS": "007"})):
+            code, output = self.run_script(*args, **extra)
+            self.assertEqual(code, 2, (args, extra, output))
+            self.assertEqual(self.names(), self.everything, (args, extra))
+        self.assertEqual(self.run_script(DASH_BACKUP_DIR=str(self.dir / "missing").replace("\\", "/"))[0], 1)
+
+
+class EraseStoreTests(unittest.TestCase):
+    """Удаление данных и записи (право на удаление): что стирается и что остаётся."""
+    PW = "correct horse battery"
+    TABLES = ("samples", "logs", "devices", "device_cfg", "cfg_changes", "tokens", "boards")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = server.Store(Path(self.tmp.name) / "e.sqlite3")
+        self.admin_id = self.store.ensure_admin("garden", "admin-password-123", now=NOW)
+
+    def person(self, name):
+        """Человек с платой, токеном, показаниями, журналом, настройками, сессией и ссылкой из письма."""
+        who = self.store.register_user(name, self.PW, "1.2.3.4", now=NOW, email=name + "@example.com")
+        device = name + "-1"
+        token, _, _ = self.store.add_board("Теплица " + name, device, who["id"], now=NOW)
+        self.store.ingest(device, {"sample": {"temp": 22.0, "sht_ok": True},
+                                  "log": {"from": 0, "boot": "b1", "text": "первая\nвторая"},
+                                  "cfg": {"cloud": True, "v": {"temp_target": 23.0}}}, now=NOW + 60)
+        self.store.cfg_submit(device, {"temp_target": 25.0}, {"id": who["id"], "username": name, "role": "user"}, now=NOW + 70)
+        session = self.store.create_session(who["id"], "1.2.3.4", now=NOW)
+        link = self.store.issue_mail_token(who["id"], "email", name + "@example.com", NOW)
+        return who, device, token, session, link
+
+    def rows(self, device):
+        with closing(sqlite3.connect(self.store.path)) as cx:
+            return {table: cx.execute("SELECT COUNT(*) FROM %s WHERE device=?" % table, (device,)).fetchone()[0] for table in self.TABLES}
+
+    def test_erasing_data_keeps_the_account_the_boards_and_the_tokens(self):
+        ivan, device, token, _, _ = self.person("ivan")
+        ann, ann_device, _, _, _ = self.person("ann")
+        before = self.rows(device)
+        self.assertEqual((before["samples"], before["logs"], before["devices"], before["device_cfg"], before["cfg_changes"]), (1, 2, 1, 1, 1))
+        counts = self.store.purge_user_data(ivan["id"])
+        self.assertEqual(counts, {"boards": 1, "samples": 1, "logs": 2})
+        after = self.rows(device)
+        self.assertEqual({k: after[k] for k in ("samples", "logs", "devices", "device_cfg", "cfg_changes")},
+                         {"samples": 0, "logs": 0, "devices": 0, "device_cfg": 0, "cfg_changes": 0})
+        self.assertEqual((after["boards"], after["tokens"]), (1, 1))                  # плата и токен на месте
+        self.assertEqual(self.store.login_user("ivan", self.PW)["id"], ivan["id"])    # запись тоже
+        ann_rows = self.rows(ann_device)
+        self.assertEqual((ann_rows["samples"], ann_rows["logs"], ann_rows["cfg_changes"]), (1, 2, 1))   # чужое не тронуто
+        self.assertEqual(self.store.devices({"id": ann["id"], "role": "user"}, now=NOW + 100)[0]["device"], ann_device)
+        self.assertEqual(self.store.devices({"id": ivan["id"], "role": "user"}, now=NOW + 100), [])      # у Ивана данных нет
+        self.assertIsNotNone(self.store.authenticate(token, "1.2.3.4", now=NOW + 200))                   # плата может слать дальше
+        self.store.ingest(device, {"sample": {"temp": 21.0, "sht_ok": True}}, now=NOW + 300)
+        self.assertEqual(self.rows(device)["samples"], 1)
+        self.assertEqual(self.store.purge_user_data(self.person("zoe")[0]["id"]), {"boards": 1, "samples": 1, "logs": 2})
+        self.assertEqual(self.store.purge_user_data(self.store.register_user("empty", self.PW, now=NOW)["id"]), {"boards": 0, "samples": 0, "logs": 0})
+
+    def test_deleting_a_person_leaves_nothing_about_them_and_nothing_is_taken_from_others(self):
+        ivan, device, token, session, link = self.person("ivan")
+        ann, ann_device, ann_token, ann_session, _ = self.person("ann")
+        self.assertTrue(self.store.delete_user(ivan["id"]))
+        self.assertEqual(set(self.rows(device).values()), {0})
+        with closing(sqlite3.connect(self.store.path)) as cx:
+            self.assertEqual(cx.execute("SELECT COUNT(*) FROM users WHERE id=? OR username='ivan' OR email='ivan@example.com'", (ivan["id"],)).fetchone()[0], 0)
+            self.assertEqual(cx.execute("SELECT COUNT(*) FROM sessions WHERE user_id=?", (ivan["id"],)).fetchone()[0], 0)
+            self.assertEqual(cx.execute("SELECT COUNT(*) FROM mail_tokens WHERE user_id=?", (ivan["id"],)).fetchone()[0], 0)
+            self.assertEqual(cx.execute("SELECT COUNT(*) FROM cfg_changes WHERE user_id=? OR username='ivan'", (ivan["id"],)).fetchone()[0], 0)
+        for path in Path(self.tmp.name).iterdir():                                    # и в самих файлах базы (в том числе в журнале WAL) адреса не осталось
+            self.assertNotIn(b"ivan@example.com", path.read_bytes(), path.name)
+        self.assertIsNone(self.store.authenticate(token, "1.2.3.4", now=NOW + 5))
+        self.assertIsNone(self.store.session_user(session, now=NOW + 5))
+        self.assertIsNone(self.store.confirm_email(link, NOW + 5))
+        self.assertIsNone(self.store.login_user("ivan", self.PW))
+        self.assertEqual(self.rows(ann_device)["samples"], 1)                          # чужое на месте
+        self.assertIsNotNone(self.store.authenticate(ann_token, "1.2.3.4", now=NOW + 5))
+        self.assertEqual(self.store.session_user(ann_session, now=NOW + 5)["id"], ann["id"])
+        self.assertFalse(self.store.delete_user(ivan["id"]))
+        with self.assertRaises(server.Conflict):
+            self.store.delete_user(self.admin_id)                                      # администратор задан в .env и не удаляется
+        self.assertEqual(self.store.register_user("ivan", self.PW, now=NOW + 9, email="ivan@example.com")["username"], "ivan")   # имя и адрес свободны
+
+    def test_erased_content_does_not_stay_in_the_database_file(self):
+        # Удалённые строки не должны жить в свободных страницах файла и в журнале WAL, пока их не перезапишут
+        ivan = self.person("ivan")[0]
+        marker = "метка-для-проверки-удаления-9f31"
+        with closing(sqlite3.connect(self.store.path)) as cx, cx:
+            cx.execute("INSERT INTO logs(device, ts, level, line) VALUES ('ivan-1', ?, 'info', ?)", (NOW, marker))
+        self.assertIn(marker.encode(), b"".join(p.read_bytes() for p in Path(self.tmp.name).iterdir()))   # проверка проверяет: пока строка есть, она видна в файлах
+        self.store.purge_user_data(ivan["id"])
+        self.assertNotIn(marker.encode(), b"".join(p.read_bytes() for p in Path(self.tmp.name).iterdir()))
+        self.store.delete_user(ivan["id"])
+        self.assertNotIn(b"ivan@example.com", b"".join(p.read_bytes() for p in Path(self.tmp.name).iterdir()))
+
+    def test_password_check_and_session_age(self):
+        ivan = self.person("ivan")[0]
+        self.assertTrue(self.store.check_password(ivan["id"], self.PW))
+        for bad in (self.PW + "x", "", None, 12345, "x" * 500):
+            self.assertFalse(self.store.check_password(ivan["id"], bad), repr(bad))
+        self.assertFalse(self.store.check_password(99999, self.PW))
+        self.assertTrue(self.store.check_password(self.admin_id, "admin-password-123"))        # у администратора пароль из .env
+        self.assertFalse(self.store.check_password(self.admin_id, self.PW))
+        google, _ = self.store.google_login("sub-1", "gina@example.com", now=NOW)
+        for attempt in ("", "!", self.PW):
+            self.assertFalse(self.store.check_password(google["id"], attempt), repr(attempt))  # у записи из Google пароля нет
+        token = self.store.create_session(ivan["id"], "1.2.3.4", now=NOW)
+        self.assertEqual((self.store.session_age(token, now=NOW), self.store.session_age(token, now=NOW + 1000)), (0, 1000))
+        self.assertEqual(self.store.session_age(token, now=NOW - 5), 0)
+        self.assertIsNone(self.store.session_age("не-сессия"))
+        self.assertIsNone(self.store.session_age(""))
+        self.assertIsNone(self.store.session_age(None))
+
+
+class EraseHttpTests(unittest.TestCase):
+    """Те же действия, как их видит страница «Аккаунт»."""
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+    PW = "correct horse battery"
+    counter = 0
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = mail_config(Path(cls.tmp.name) / "p.sqlite3", DASH_CONTACT_EMAIL="privacy@example.org")
+        cls.cfg = cfg
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.outbox = Outbox()
+        cls.httpd.mailer.transport = cls.outbox
+        cls.httpd.mailer.synchronous = True
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.mail_ip_limiter = server.FailureLimiter(limit=server.MAIL_PER_IP, window=3600)
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)
+        self.httpd.ingest_gate = server.RateGate(0)
+        self.outbox.sent.clear()
+        self.store.set_registration(True)
+
+    def unique(self, prefix="gone"):
+        type(self).counter += 1
+        return "%s%d" % (prefix, type(self).counter)
+
+    def request(self, method, path, body=None, headers=None, cookie=None, admin=False):
+        headers = dict(headers or {})
+        if cookie:
+            headers["Cookie"] = server.SESSION_COOKIE + "=" + cookie
+        if admin:
+            headers["Authorization"] = "Basic " + base64.b64encode(("garden:%s" % PASSWORD).encode()).decode()
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read()
+        finally:
+            conn.close()
+
+    def call(self, method, path, payload=None, cookie=None, admin=False, ip=None):
+        headers = dict(self.ACTION, **({"X-Real-IP": ip} if ip else {}))
+        status, resp_headers, raw = self.request(method, path, None if payload is None else json.dumps(payload).encode(), headers, cookie, admin)
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        return status, data, resp_headers
+
+    def person(self, verified=True, boards=True):
+        """-> (cookie, имя, адрес, плата, токен): человек зарегистрирован через API, адрес подтверждён, у платы есть показания."""
+        name = self.unique()
+        email = name + "@example.com"
+        status, data, headers = self.call("POST", "/api/register", {"username": name, "email": email, "password": self.PW})
+        self.assertEqual(status, 201, data)
+        cookie = headers["Set-Cookie"].split(";")[0].split("=", 1)[1]
+        if verified:
+            self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token(email)})[0], 200)
+        device = name + "-1"
+        token = None
+        if boards:
+            status, data, _ = self.call("POST", "/api/boards", {"name": "Теплица", "device": device}, cookie=cookie)
+            self.assertEqual(status, 201, data)
+            token = data["token"]
+            ingest = {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+            body = {"device": device, "sample": {"temp": 22.0, "sht_ok": True}, "log": {"from": 0, "boot": "b1", "text": "строка"}}
+            self.assertEqual(self.request("POST", "/api/ingest", json.dumps(body).encode(), ingest)[0], 200)
+        return cookie, name, email, device, token
+
+    def test_erasing_data_needs_the_page_header_and_an_explicit_confirmation(self):
+        cookie, name, _, device, token = self.person()
+        body = json.dumps({"confirm": True}).encode()
+        self.assertEqual(self.request("POST", "/api/account/data/delete", body, {"Content-Type": "application/json"}, cookie)[0], 403)   # нет заголовка страницы
+        self.assertEqual(self.request("POST", "/api/account/data/delete", body, dict(self.ACTION, **{"Sec-Fetch-Site": "cross-site"}), cookie)[0], 403)
+        self.assertEqual(self.request("GET", "/api/account/data/delete", cookie=cookie)[0], 405)
+        self.assertEqual(self.call("POST", "/api/account/data/delete", {"confirm": True})[0], 401)                                    # без входа
+        for bad in ({}, {"confirm": "yes"}, {"confirm": 1}, {"confirm": False}):
+            self.assertEqual(self.call("POST", "/api/account/data/delete", bad, cookie=cookie)[0], 400, bad)
+        self.assertEqual(len(json.loads(self.request("GET", "/api/devices", cookie=cookie)[2])["devices"]), 1)                     # пока всё на месте
+        status, data, _ = self.call("POST", "/api/account/data/delete", {"confirm": True}, cookie=cookie)
+        self.assertEqual((status, data), (200, {"ok": True, "boards": 1, "samples": 1, "logs": 1}))
+        self.assertEqual(json.loads(self.request("GET", "/api/devices", cookie=cookie)[2])["devices"], [])
+        self.assertEqual(self.call("GET", "/api/boards", cookie=cookie)[1]["boards"][0]["device"], device)                          # плата и токен остались
+        self.assertEqual(self.call("GET", "/api/me", cookie=cookie)[0], 200)                                                         # и вход тоже
+        ingest = {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+        self.assertEqual(self.request("POST", "/api/ingest", json.dumps({"device": device, "sample": {"temp": 20.0, "sht_ok": True}}).encode(), ingest)[0], 200)
+
+    def test_deleting_the_account_with_a_password(self):
+        other = self.person()
+        cookie, name, email, device, token = self.person()
+        second = self.call("POST", "/api/login", {"username": name, "password": self.PW})[2]["Set-Cookie"].split(";")[0].split("=", 1)[1]
+        self.outbox.sent.clear()
+        for bad in ({}, {"confirm": ""}, {"confirm": "someone-else", "password": self.PW}, {"confirm": 5, "password": self.PW}):
+            self.assertEqual(self.call("POST", "/api/account/delete", bad, cookie=cookie)[0], 400, bad)                              # имя не совпало
+        status, data, _ = self.call("POST", "/api/account/delete", {"confirm": name}, cookie=cookie)
+        self.assertEqual((status, "пароль" in data["error"]), (400, True))                                                          # без пароля нельзя
+        status, data, _ = self.call("POST", "/api/account/delete", {"confirm": name, "password": "wrong-password-123"}, cookie=cookie)
+        self.assertEqual((status, "пароль" in data["error"]), (400, True))
+        self.assertEqual(self.call("GET", "/api/me", cookie=cookie)[0], 200)                                                         # ничего не удалено
+        status, data, headers = self.call("POST", "/api/account/delete", {"confirm": name.upper(), "password": self.PW}, cookie=cookie)   # регистр имени не важен
+        self.assertEqual((status, data), (200, {"ok": True}))
+        self.assertIn("Max-Age=0", headers["Set-Cookie"])                                                                            # cookie входа сброшена
+        self.assertEqual(self.call("GET", "/api/me", cookie=cookie)[0], 401)
+        self.assertEqual(self.call("GET", "/api/me", cookie=second)[0], 401)                                                         # и все остальные входы
+        self.assertEqual(self.call("POST", "/api/login", {"username": name, "password": self.PW})[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"username": email, "password": self.PW})[0], 401)
+        ingest = {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+        self.assertEqual(self.request("POST", "/api/ingest", json.dumps({"device": device, "sample": {"temp": 20.0, "sht_ok": True}}).encode(), ingest)[0], 401)
+        self.assertNotIn(device, [b["device"] for b in self.call("GET", "/api/boards", admin=True)[1]["boards"]])                    # платы нет и у администратора
+        self.assertEqual(self.call("GET", "/api/boards", cookie=other[0])[1]["boards"][0]["device"], other[3])                       # чужое на месте
+        letters = self.outbox.to(email)
+        self.assertEqual(len(letters), 1)
+        self.assertEqual(letters[0]["Subject"], "MicroGarden: аккаунт удалён")
+        self.assertIn(name, letters[0].get_content())
+        self.assertIn("privacy@example.org", letters[0].get_content())                                                                # куда писать, если удалили не вы
+        self.assertIn(self.cfg.public_url + "/privacy", letters[0].get_content())                                                     # где сроки, пока следы остаются в копиях
+        self.assertNotIn("нигде не хранится", letters[0].get_content())                                                               # письмо не обещает больше, чем сделано
+        self.assertEqual(self.call("POST", "/api/register", {"username": name, "email": email, "password": self.PW})[0], 201)        # имя и адрес свободны
+
+    def test_no_goodbye_letter_to_an_unconfirmed_address(self):
+        cookie, name, email, _, _ = self.person(verified=False, boards=False)
+        self.outbox.sent.clear()
+        self.assertEqual(self.call("POST", "/api/account/delete", {"confirm": name, "password": self.PW}, cookie=cookie)[0], 200)
+        self.assertEqual(self.outbox.sent, [])                                                                                       # адрес мог ввести кто угодно
+
+    def test_wrong_passwords_are_counted_as_failed_sign_ins(self):
+        cookie, name, _, _, _ = self.person(boards=False)
+        for _ in range(10):
+            self.assertEqual(self.call("POST", "/api/account/delete", {"confirm": name, "password": "wrong-password-123"}, cookie=cookie)[0], 400)
+        status, _, headers = self.call("POST", "/api/account/delete", {"confirm": name, "password": self.PW}, cookie=cookie)
+        self.assertEqual((status, headers["Retry-After"]), (429, "600"))
+        self.assertEqual(self.call("GET", "/api/me", cookie=cookie)[0], 200)
+
+    def test_a_google_record_confirms_the_deletion_with_a_fresh_sign_in(self):
+        who, _ = self.store.google_login("sub-erase", "gina.erase@example.com", now=int(time.time()))
+        cookie = self.store.create_session(who["id"], "1.2.3.4")
+        name = who["username"]
+        self.assertEqual(self.call("POST", "/api/account/delete", {"confirm": "wrong"}, cookie=cookie)[0], 400)                      # имя всё равно вводится
+        with closing(sqlite3.connect(self.store.path)) as cx, cx:                                                                    # вход был давно
+            cx.execute("UPDATE sessions SET created_at=? WHERE user_id=?", (int(time.time()) - server.DELETE_FRESH_SEC - 60, who["id"]))
+        status, data, _ = self.call("POST", "/api/account/delete", {"confirm": name}, cookie=cookie)
+        self.assertEqual((status, "войдите заново" in data["error"]), (409, True))
+        self.assertEqual(self.call("GET", "/api/me", cookie=cookie)[0], 200)
+        fresh = self.store.create_session(who["id"], "1.2.3.4")                                                                      # новый вход
+        self.assertEqual(self.call("POST", "/api/account/delete", {"confirm": name}, cookie=fresh)[0], 200)
+        self.assertEqual(self.call("GET", "/api/me", cookie=fresh)[0], 401)
+        self.assertEqual([m["To"] for m in self.outbox.sent], ["gina.erase@example.com"])                                            # адрес подтверждён Google
+
+    def test_the_administrator_erases_data_but_cannot_delete_the_account(self):
+        status, data, _ = self.call("POST", "/api/boards", {"name": "Админская", "device": self.unique("adm")}, admin=True)
+        self.assertEqual(status, 201, data)
+        status, data, _ = self.call("POST", "/api/account/delete", {"confirm": "garden", "password": PASSWORD}, admin=True)
+        self.assertEqual((status, ".env" in data["error"]), (409, True))
+        self.assertEqual(self.call("GET", "/api/me", admin=True)[1]["user"]["username"], "garden")
+        self.assertEqual(self.call("POST", "/api/account/data/delete", {"confirm": True}, admin=True)[0], 200)
+
+    def test_the_admin_list_loses_the_person_too(self):
+        cookie, name, _, _, _ = self.person(boards=False)
+        self.assertIn(name, [u["username"] for u in self.call("GET", "/api/admin/users", admin=True)[1]["users"]])
+        self.assertEqual(self.call("POST", "/api/account/delete", {"confirm": name, "password": self.PW}, cookie=cookie)[0], 200)
+        self.assertNotIn(name, [u["username"] for u in self.call("GET", "/api/admin/users", admin=True)[1]["users"]])
+
+
+class LegalPageTests(unittest.TestCase):
+    """Политика конфиденциальности и условия: открыты всем, подставляют настройки оператора и ничего не берут без экранирования."""
+    FIELDS = {"OPERATOR", "CONTACT", "RETENTION_DAYS", "LOG_RETENTION_DAYS", "SESSION_DAYS", "SITE"}
+
+    def serve(self, **extra):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = mail_config(Path(tmp.name) / "l.sqlite3", **extra)
+        store = server.Store(cfg.db)
+        httpd = server.DashServer(cfg, store)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+        def stop():
+            httpd.shutdown()
+            httpd.server_close()
+        self.addCleanup(stop)
+        return httpd.server_address[1], cfg, store
+
+    def get(self, port, path, cookie=None, method="GET"):
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            conn.request(method, path, headers={"Cookie": server.SESSION_COOKIE + "=" + cookie} if cookie else {})
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.read().decode("utf-8")
+        finally:
+            conn.close()
+
+    def test_every_field_in_the_pages_is_known_and_none_is_left_unfilled(self):
+        for name in ("privacy.html", "terms.html"):
+            raw = (server.STATIC_DIR / name).read_text(encoding="utf-8")
+            self.assertTrue(set(server.LEGAL_FIELD_RE.findall(raw)) <= self.FIELDS, name)
+            self.assertIn("{{OPERATOR}}", raw)
+            self.assertIn("{{CONTACT}}", raw)
+            rendered = server.legal_text(mail_config("x.sqlite3"), name)
+            self.assertNotIn("{{", rendered, name)
+            self.assertNotIn("}}", rendered, name)
+
+    def test_pages_are_public_and_show_the_operator_and_the_settings(self):
+        port, cfg, store = self.serve(DASH_OPERATOR_NAME="Тестовый оператор", DASH_CONTACT_EMAIL="Privacy@Example.org",
+                                      DASH_RETENTION_DAYS="123", DASH_LOG_RETENTION_DAYS="45", DASH_SESSION_DAYS="9")
+        person = store.register_user("legal-reader", "correct horse battery", now=NOW)
+        cookie = store.create_session(person["id"], "1.2.3.4")
+        for path in ("/privacy", "/privacy.html", "/terms", "/terms.html"):
+            for who in (None, cookie):                                              # вошедшего не уводят на главную: читать можно всем
+                status, headers, body = self.get(port, path, who)
+                self.assertEqual(status, 200, (path, who))
+                self.assertIn("text/html", headers["Content-Type"])
+                self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
+                self.assertEqual(headers["Cache-Control"], "no-cache")
+                self.assertIn("Тестовый оператор", body)
+                self.assertIn('<a href="mailto:privacy@example.org">privacy@example.org</a>', body)
+                self.assertNotIn("{{", body)
+                self.assertNotIn('class="todo"', body)                                # всё задано: красных пометок нет
+                self.assertNotIn("<script", body)
+                self.assertNotIn(" style=", body)
+        body = self.get(port, "/privacy")[2]
+        for text in ("123 суток", "45 суток", "9 суток", "dash_session", "dash_oauth"):
+            self.assertIn(text, body, text)
+        self.assertIn("https://dash.example.org", body)                             # адрес сайта из настроек
+        self.assertEqual(self.get(port, "/terms", method="HEAD")[0], 200)
+        self.assertIn(self.get(port, "/privacy", method="POST")[0], (401, 403, 405))
+
+    def test_what_is_not_set_is_visible_and_what_is_set_is_escaped(self):
+        port, _, _ = self.serve()
+        body = self.get(port, "/privacy")[2]
+        self.assertIn('class="todo"', body)
+        self.assertIn("DASH_OPERATOR_NAME", body)
+        self.assertIn("DASH_CONTACT_EMAIL", body)
+        port, _, _ = self.serve(DASH_OPERATOR_NAME="<script>alert(1)</script> & \"Co\"")
+        body = self.get(port, "/terms")[2]
+        self.assertNotIn("<script>alert(1)", body)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Co&quot;", body)
+
+    def test_the_policy_says_what_the_code_really_does(self):
+        # Политика не должна расходиться с кодом: имена cookie, срок входа через Google и области берутся из тех же констант
+        body = server.legal_text(mail_config("x.sqlite3"), "privacy.html")
+        self.assertIn(server.SESSION_COOKIE, body)
+        self.assertIn(server.OAUTH_COOKIE, body)
+        self.assertIn("%d минут" % (server.GOOGLE_STATE_TTL // 60), body)
+        for word in ("scrypt", "SHA-256", "удалить", "dvi.gov.lv", "GDPR", "localStorage", "резервные копии"):
+            self.assertIn(word.lower(), body.lower(), word)
+        scope = re.search(r'"scope": "([^"]+)"', Path(server.__file__).read_text(encoding="utf-8")).group(1)
+        self.assertEqual(scope, "openid email")                                     # политика называет именно эти области
+        self.assertIn("<code>openid</code> и <code>email</code>", body)
+
+    def test_operator_settings_are_validated(self):
+        self.assertEqual(mail_config("x.sqlite3").site_problems(), [])
+        self.assertEqual(mail_config("x.sqlite3", DASH_OPERATOR_NAME="Тестовый оператор", DASH_CONTACT_EMAIL="a@b.co").site_problems(), [])
+        for extra, name in (({"DASH_CONTACT_EMAIL": "not-an-address"}, "DASH_CONTACT_EMAIL"), ({"DASH_CONTACT_EMAIL": "иван@пример.рф"}, "DASH_CONTACT_EMAIL"),
+                            ({"DASH_OPERATOR_NAME": "x" * 101}, "DASH_OPERATOR_NAME"), ({"DASH_OPERATOR_NAME": "строка\nс переводом"}, "DASH_OPERATOR_NAME")):
+            problems = mail_config("x.sqlite3", **extra).site_problems()
+            self.assertTrue(any(p.startswith(name) for p in problems), (extra, problems))
+        with self.assertRaises(SystemExit):
+            mail_config("x.sqlite3", DASH_CONTACT_EMAIL="not-an-address").validate()
+
 
 class ConfigTests(unittest.TestCase):
     def test_accounts_settings_are_validated(self):

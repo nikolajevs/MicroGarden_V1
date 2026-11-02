@@ -68,6 +68,25 @@
     return askOld ? { ok: true, old: oldPassword, new: pass.password } : { ok: true, new: pass.password };
   }
 
+  // Удаление записи: нужно ввести своё имя (так случайное нажатие ничего не удалит) и пароль, если он у записи есть.
+  // Пока имя записи не загружено, подтверждать нечего: пустое поле не должно совпасть с пустым именем.
+  function validateDeletion(typedName, username, password, needPassword) {
+    if (!username) return { ok: false, error: 'Запись ещё загружается: подождите секунду и попробуйте снова' };
+    if (String(typedName == null ? '' : typedName).trim().toLowerCase() !== String(username).toLowerCase()) {
+      return { ok: false, error: 'Для подтверждения введите своё имя: ' + username };
+    }
+    if (needPassword === false) return { ok: true, confirm: String(typedName).trim() };
+    if (!password) return { ok: false, error: 'Введите пароль' };
+    return { ok: true, confirm: String(typedName).trim(), password };
+  }
+
+  // Что стёрто, словами: «12 замеров, 40 строк журнала (плат: 2)»
+  function eraseSummary(counts) {
+    const c = counts || {};
+    return (c.samples || 0) + ' ' + plural(c.samples || 0, 'замер', 'замера', 'замеров') + ', ' + (c.logs || 0) + ' '
+      + plural(c.logs || 0, 'строка журнала', 'строки журнала', 'строк журнала') + ' (плат: ' + (c.boards || 0) + '). Платы и токены остались.';
+  }
+
   // Новый пароль по ссылке из письма: имени на странице нет, поэтому сравнивать с ним нечего
   function validateNewPassword(password, repeat) {
     const pass = validatePassword(password, '');
@@ -180,7 +199,7 @@
   }
 
   const api = { USERNAME_RE, EMAIL_RE, EMAIL_MAX, PASSWORD_MIN, PASSWORD_MAX, GOOGLE_ERRORS, validateUsername, validateEmail,
-                validatePassword, validateRegistration, validatePasswordChange, validateNewPassword, validateEmailChange,
+                validatePassword, validateRegistration, validatePasswordChange, validateNewPassword, validateDeletion, eraseSummary, validateEmailChange,
                 tokenFromHash, googleError, googleHref, safeNext, agoText, plural, describeUser, describeEmail };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.AuthLib = api;

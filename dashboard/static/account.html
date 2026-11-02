@@ -74,10 +74,67 @@
     <p id="done" class="empty" role="status" hidden>Пароль изменён. На остальных устройствах вход закрыт, там войдите заново.</p>
   </section>
 
+  <section class="panel" id="data" aria-labelledby="data-title">
+    <h2 id="data-title">Мои данные и удаление</h2>
+    <p class="legend-note lead">Что хранится, зачем и как долго, сказано в <a href="/privacy">политике конфиденциальности</a>. Здесь вы можете стереть свои данные или всю запись.</p>
+
+    <div class="erase" id="erase-data">
+      <h3>Показания и журналы</h3>
+      <p class="legend-note">Стереть показания, журналы и историю настроек всех ваших плат. Сами платы и токены останутся, и плата продолжит присылать новые показания: чтобы остановить приём, отзовите токен или удалите плату на странице «Платы». Отменить это нельзя.</p>
+      <div>
+        <button type="button" class="btn danger" id="data-ask">Стереть показания и журналы…</button>
+      </div>
+      <div class="confirm-bar" id="data-confirm" role="alert" hidden>
+        <span>Стереть показания и журналы всех ваших плат? Отменить это нельзя.</span>
+        <button type="button" class="btn small danger" id="data-yes">Стереть</button>
+        <button type="button" class="btn small" id="data-no">Отмена</button>
+      </div>
+      <p id="data-error" class="form-error" role="alert" hidden></p>
+      <p id="data-done" class="empty" role="status" hidden></p>
+    </div>
+
+    <div class="erase danger" id="delete">
+      <h3>Удалить аккаунт и все данные</h3>
+      <p id="delete-admin" class="legend-note" hidden>Аккаунт администратора задан в файле .env на сервере и удаляется только владельцем сервера.</p>
+      <div id="delete-box" class="erase-body">
+        <p class="legend-note">Запись, платы, токены, показания, журналы, история настроек, сессии, связь с Google и почта будут удалены сразу и без возможности восстановления. Если почта подтверждена, на неё придёт короткое письмо об удалении.</p>
+        <div>
+          <button type="button" class="btn danger" id="delete-ask">Удалить аккаунт…</button>
+        </div>
+        <form id="delete-form" class="auth-form" novalidate hidden>
+          <p id="delete-need-login" class="legend-note" hidden>Пароля у записи нет, поэтому подтверждением служит свежий вход через Google. Если вы входили больше 15 минут назад, сначала <a href="/auth/google?next=%2Faccount%23delete">войдите заново</a>.</p>
+          <label class="field">
+            <span class="label">Введите своё имя «<span id="delete-name" class="typed-name"></span>», чтобы подтвердить</span>
+            <input class="input" id="delete-confirm" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required>
+          </label>
+          <label class="field" id="delete-password-field">
+            <span class="label">Пароль</span>
+            <input class="input" id="delete-password" type="password" autocomplete="current-password" maxlength="128" required>
+          </label>
+          <div class="created-actions">
+            <button type="submit" class="btn danger" id="delete-submit">Удалить навсегда</button>
+            <button type="button" class="btn" id="delete-cancel">Отмена</button>
+          </div>
+        </form>
+        <p id="delete-error" class="form-error" role="alert" hidden></p>
+      </div>
+    </div>
+  </section>
+
   <section class="panel" aria-labelledby="logout-title">
     <h2 id="logout-title">Выход</h2>
     <button type="button" class="btn" id="logout">Выйти</button>
   </section>
+  <footer class="site-foot">
+    <nav aria-label="Правовая информация и данные">
+      <a href="/privacy">Политика конфиденциальности</a>
+      <a href="/terms">Условия использования</a>
+      <a href="/privacy#cookies">Файлы cookie</a>
+      <a href="/account#delete">Удалить данные и аккаунт</a>
+      <a href="/privacy#contact">Контакты</a>
+      <a href="https://github.com/nikolajevs/MicroGarden_V1" rel="noopener">Исходный код</a>
+    </nav>
+  </footer>
 </div>
 <script src="/auth-lib.js"></script>
 <script src="/account.js"></script>
