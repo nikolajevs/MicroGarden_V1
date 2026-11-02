@@ -1,0 +1,16 @@
+#VRML V2.0 utf8
+# Formed-lead schematic envelope only; dimensions in mm.
+Transform { translation 0 0 5.5 rotation 1 0 0 1.570796327 children [ Shape { appearance Appearance { material Material { diffuseColor 0.85 0.85 0.85 transparency 0.15 } } geometry Cylinder { radius 2.9 height 1 } } ] }
+Transform { translation 0 0 8.15 rotation 1 0 0 1.570796327 children [ Shape { appearance Appearance { material Material { diffuseColor 0.85 0.85 0.85 transparency 0.15 } } geometry Cylinder { radius 2.5 height 4.3 } } ] }
+Transform { translation -3.81 0 -0.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation -2.8425000000000002 0 1.5 rotation 0 1 0 1.0938024876817203 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 2.1781241929697215 } } ] }
+Transform { translation -1.875 0 3.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation -1.27 0 -0.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation -0.9475 0 1.5 rotation 0 1 0 0.5728522476727977 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 1.1899684869777014 } } ] }
+Transform { translation -0.625 0 3.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation 1.27 0 -0.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation 0.9475 0 1.5 rotation 0 1 0 -0.5728522476727977 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 1.1899684869777014 } } ] }
+Transform { translation 0.625 0 3.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation 3.81 0 -0.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }
+Transform { translation 2.8425000000000002 0 1.5 rotation 0 1 0 -1.0938024876817203 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 2.1781241929697215 } } ] }
+Transform { translation 1.875 0 3.5 rotation 0 1 0 0.0 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.5 0.5 3.0 } } ] }

@@ -1,0 +1,1085 @@
+{
+  "stock": [
+    {
+      "shop": "Склад",
+      "id": 114,
+      "mpn": "INA238AIDGSR",
+      "name": "Монитор тока/напряжения/мощности",
+      "value": "85V, 16-bit, I²C",
+      "package": "VSSOP-10 (DGS), 0.5 mm",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 1,
+      "stock_left": 0,
+      "refs": [
+        "U102"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 14,
+      "mpn": "EEEFT1E821AP",
+      "name": "Конденсатор электролитический SMD",
+      "value": "820 мкФ, 25 В",
+      "package": "SMD Aluminum Can, Ø10 × 10,2 мм",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 1,
+      "stock_left": 0,
+      "refs": [
+        "C110"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 20,
+      "mpn": "SS56",
+      "name": "Диод Шоттки SMD",
+      "value": "60 В, 5 А",
+      "package": "SMC (DO-214AB)",
+      "needed": 3,
+      "buy": 0,
+      "on_hand": 3,
+      "stock_total": 45,
+      "stock_left": 42,
+      "refs": [
+        "D102",
+        "D501",
+        "D701"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 26,
+      "mpn": "ST1S14PHR",
+      "name": "DC/DC преобразователь понижающий (Buck)",
+      "value": "5,5–48 В, 3 А, 850 кГц",
+      "package": "PowerSO-8 / HSOP8, exposed pad",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 3,
+      "stock_left": 2,
+      "refs": [
+        "U101"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 27,
+      "mpn": "ST1S10PHR",
+      "name": "Step-Down; регулируемый выход от 1,22 В; встроенный N-MOSFET; Power Good; Soft Start; защита по току",
+      "value": "2,5–18 В, 3 А, 900 кГц",
+      "package": "PowerSO-8 / SOIC-8-EP",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 4,
+      "stock_left": 3,
+      "refs": [
+        "U201"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 3,
+      "mpn": "12065C225KATM-HW",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "2,2 мкФ, 50 В, ±10%, X7R",
+      "package": "1206 (3216)",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 9,
+      "stock_left": 8,
+      "refs": [
+        "C105"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 31,
+      "mpn": "SRN2512-2R2M",
+      "name": "Дроссель силовой SMD",
+      "value": "2,2 мкГн, ±20%, 2,3 А",
+      "package": "1008 (2520), 2,5 × 2,0 × 1,2 мм",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 2,
+      "stock_left": 1,
+      "refs": [
+        "L201"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 47,
+      "mpn": "CL32B106KBJNNNE",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "10 мкФ, 50 В, ±10%, X7R",
+      "package": "1210 (3225)",
+      "needed": 4,
+      "buy": 0,
+      "on_hand": 4,
+      "stock_total": 6,
+      "stock_left": 2,
+      "refs": [
+        "C103",
+        "C104",
+        "C501",
+        "C502"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 51,
+      "mpn": "Резистор SMD 2 кОм, ±5%",
+      "name": "Резистор SMD",
+      "value": "2 кОм, ±5%",
+      "package": "1206 (3216)",
+      "needed": 5,
+      "buy": 0,
+      "on_hand": 5,
+      "stock_total": 6,
+      "stock_left": 1,
+      "refs": [
+        "R703",
+        "R706",
+        "R907",
+        "R908",
+        "R909"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 52,
+      "mpn": "MSMA1206R0070FCM",
+      "name": "Резистор-шунт SMD",
+      "value": "0,007 Ом (7 мОм), ±1%, 1 Вт",
+      "package": "1206 (3216)",
+      "needed": 3,
+      "buy": 0,
+      "on_hand": 3,
+      "stock_total": 4,
+      "stock_left": 1,
+      "refs": [
+        "R111",
+        "R112",
+        "R113"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 54,
+      "mpn": "CL10B104KB8NNNC",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "100 нФ, 50 В, ±10%, X7R",
+      "package": "0603 (1608)",
+      "needed": 12,
+      "buy": 0,
+      "on_hand": 12,
+      "stock_total": 23,
+      "stock_left": 11,
+      "refs": [
+        "C115",
+        "C107",
+        "C106",
+        "C112",
+        "C202",
+        "C208",
+        "C303",
+        "C305",
+        "C401",
+        "C403",
+        "C503",
+        "C504"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 55,
+      "mpn": "RC0603FR-07100KL",
+      "name": "Резистор SMD",
+      "value": "100 кОм, ±1%, 0,1 Вт",
+      "package": "0603 (1608)",
+      "needed": 5,
+      "buy": 0,
+      "on_hand": 5,
+      "stock_total": 14,
+      "stock_left": 9,
+      "refs": [
+        "R201",
+        "R203",
+        "R412",
+        "R422",
+        "R708"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 57,
+      "mpn": "CL21A225KOFNNNE",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "2,2 мкФ, 16 В, ±10%, X5R",
+      "package": "0805 (2012)",
+      "needed": 2,
+      "buy": 0,
+      "on_hand": 2,
+      "stock_total": 18,
+      "stock_left": 16,
+      "refs": [
+        "C203",
+        "C209"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 59,
+      "mpn": "Резистор SMD 10 кОм, ±1%",
+      "name": "Резистор SMD",
+      "value": "10 кОм, ±1%",
+      "package": "0805 (2012)",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 19,
+      "stock_left": 18,
+      "refs": [
+        "R103"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 6,
+      "mpn": "CL32A106KLULNNE",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "10 мкФ, 35 В, ±10%, X5R",
+      "package": "1210 (3225)",
+      "needed": 2,
+      "buy": 0,
+      "on_hand": 2,
+      "stock_total": 8,
+      "stock_left": 6,
+      "refs": [
+        "C111",
+        "C201"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 61,
+      "mpn": "Резистор SMD 47 кОм, ±1%",
+      "name": "Резистор SMD",
+      "value": "47 кОм, ±1%",
+      "package": "1206 (3216)",
+      "needed": 2,
+      "buy": 0,
+      "on_hand": 2,
+      "stock_total": 6,
+      "stock_left": 4,
+      "refs": [
+        "R107",
+        "R202"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 62,
+      "mpn": "RC0603FR-071KL",
+      "name": "Резистор SMD",
+      "value": "1 кОм, ±1%, 0,1 Вт",
+      "package": "0603 (1608)",
+      "needed": 4,
+      "buy": 0,
+      "on_hand": 4,
+      "stock_total": 14,
+      "stock_left": 10,
+      "refs": [
+        "R403",
+        "R411",
+        "R421",
+        "R707"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 7,
+      "mpn": "CL21A226KPCLRNC",
+      "name": "Конденсатор керамический SMD MLCC",
+      "value": "22 мкФ, 10 В, ±10%, X5R",
+      "package": "0805 (2012)",
+      "needed": 5,
+      "buy": 0,
+      "on_hand": 5,
+      "stock_total": 9,
+      "stock_left": 4,
+      "refs": [
+        "C204",
+        "C205",
+        "C206",
+        "C207",
+        "C304"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 70,
+      "mpn": "Резистор SMD 10 кОм, ±5%",
+      "name": "Резистор SMD",
+      "value": "10 кОм, ±5%",
+      "package": "0805 (2012)",
+      "needed": 15,
+      "buy": 0,
+      "on_hand": 15,
+      "stock_total": 85,
+      "stock_left": 70,
+      "refs": [
+        "R204",
+        "R205",
+        "R206",
+        "R207",
+        "R303",
+        "R304",
+        "R305",
+        "R306",
+        "R307",
+        "R404",
+        "R501",
+        "R504",
+        "R507",
+        "R701",
+        "R704"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 71,
+      "mpn": "Резистор SMD 100 Ом, ±5%",
+      "name": "Резистор SMD",
+      "value": "100 Ом, ±5%",
+      "package": "0805 (2012)",
+      "needed": 8,
+      "buy": 0,
+      "on_hand": 8,
+      "stock_total": 85,
+      "stock_left": 77,
+      "refs": [
+        "R109",
+        "R110",
+        "R301",
+        "R302",
+        "R401",
+        "R402",
+        "R506",
+        "R705"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 72,
+      "mpn": "Резистор SMD 4,7 кОм, ±5%",
+      "name": "Резистор SMD",
+      "value": "4,7 кОм, ±5%",
+      "package": "0805 (2012)",
+      "needed": 9,
+      "buy": 0,
+      "on_hand": 9,
+      "stock_total": 85,
+      "stock_left": 76,
+      "refs": [
+        "R308",
+        "R309",
+        "R502",
+        "R503",
+        "R505",
+        "R702",
+        "R901",
+        "R902",
+        "R903"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 73,
+      "mpn": "Резистор SMD 100 кОм, ±5%",
+      "name": "Резистор SMD",
+      "value": "100 кОм, ±5%",
+      "package": "0805 (2012)",
+      "needed": 3,
+      "buy": 0,
+      "on_hand": 3,
+      "stock_total": 85,
+      "stock_left": 82,
+      "refs": [
+        "R904",
+        "R905",
+        "R906"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 74,
+      "mpn": "Резистор SMD 150 кОм, ±5%",
+      "name": "Резистор SMD",
+      "value": "150 кОм, ±5%",
+      "package": "0805 (2012)",
+      "needed": 3,
+      "buy": 0,
+      "on_hand": 3,
+      "stock_total": 85,
+      "stock_left": 82,
+      "refs": [
+        "R104",
+        "R105",
+        "R106"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 87,
+      "mpn": "KF2510 / KF2540 4P",
+      "name": "Разъём KF2510 4-контактный Male/Female",
+      "value": "4 контакта, шаг 2,54 мм",
+      "package": "Wire-to-Board / 4P",
+      "needed": 2,
+      "buy": 0,
+      "on_hand": 2,
+      "stock_total": 9,
+      "stock_left": 7,
+      "refs": [
+        "J411",
+        "J421"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 90,
+      "mpn": "XH2.54-4P Right Angle",
+      "name": "Разъём XH2.54 угловой 4-контактный",
+      "value": "4 контакта, шаг 2,54 мм",
+      "package": "THT, угловой 90°, 4P",
+      "needed": 1,
+      "buy": 0,
+      "on_hand": 1,
+      "stock_total": 60,
+      "stock_left": 59,
+      "refs": [
+        "J401"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 93,
+      "mpn": "KF301-5.0-2P",
+      "name": "Клеммник винтовой PCB 2-контактный",
+      "value": "2 контакта, шаг 5,0 мм",
+      "package": "THT, 2P",
+      "needed": 10,
+      "buy": 0,
+      "on_hand": 10,
+      "stock_total": 31,
+      "stock_left": 21,
+      "refs": [
+        "J101",
+        "J403",
+        "J501",
+        "J502",
+        "J503",
+        "J504",
+        "J505",
+        "J506",
+        "J701",
+        "J702"
+      ],
+      "line": 0.0
+    },
+    {
+      "shop": "Склад",
+      "id": 95,
+      "mpn": "6X6X10MM Tact Switch",
+      "name": "Тактовая кнопка Tact Switch 6×6×10 мм",
+      "value": "SPST-NO, моментальная",
+      "package": "THT / DIP, 4 Pin, 6×6×10 мм",
+      "needed": 2,
+      "buy": 0,
+      "on_hand": 2,
+      "stock_total": 15,
+      "stock_left": 13,
+      "refs": [
+        "SW201",
+        "SW202"
+      ],
+      "line": 0.0
+    }
+  ],
+  "buy": [
+    {
+      "shop": "Electrobase",
+      "mpn": "ABS07-32.768KHZ-7-T",
+      "sku": "EB297444889",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.79,
+      "line": 0.79,
+      "stock": "Pieejams piegādātāja noliktavā >1000 gab. 🏪 Saņemšana veikalā līdz 28.10.2026. 🚚 Piegāde līdz 30.10.2026.",
+      "url": "https://electrobase.lv/katalogs/kvarca-generatori-tht/resonator-ceramic-32768khz-20ppm-7pf-smd-32x15x09mm",
+      "price_date": "2026-10-23",
+      "refs": [
+        "Y301"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "AO3422",
+      "sku": "EB4428624",
+      "needed": 3,
+      "buy": 5,
+      "unit": "шт.",
+      "price_unit": 0.26,
+      "line": 1.3,
+      "stock": "Pieejams piegādātāja noliktavā >1000 gab. 🏪 Saņemšana veikalā līdz 28.10.2026. 🚚 Piegāde līdz 30.10.2026.",
+      "url": "https://electrobase.lv/katalogs/tranzistori-ar-n-veida-kanalu-smd/transistor-n-mosfet-unipolar-55v-17a-800mw-sot23",
+      "price_date": "2026-10-23",
+      "refs": [
+        "Q411",
+        "Q421",
+        "Q704"
+      ],
+      "accessory_count": 0,
+      "min_qty": 5,
+      "multiple": 5,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "C1206C100J5GACTU",
+      "sku": "C1206C100J5GACTU",
+      "needed": 2,
+      "buy": 2,
+      "unit": "шт.",
+      "price_unit": 0.25,
+      "line": 0.5,
+      "stock": ">1000",
+      "url": "https://electrobase.lv/katalogs/kondensatori-mlcc-smd-0201/capacitor-ceramic-mlcc-10pf-50vdc-c0g-5-smd-1206",
+      "price_date": "2026-10-23",
+      "refs": [
+        "C301",
+        "C302"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "ESP32-WROOM-32E-N4",
+      "sku": "EB152133148",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 7.48,
+      "line": 7.48,
+      "stock": "Pieejams piegādātāja noliktavā >1000 gab. 🏪 Saņemšana veikalā līdz 28.10.2026. 🚚 Piegāde līdz 30.10.2026.",
+      "url": "https://electrobase.lv/katalogs/moduli-iot-wifi-bluetooth-lora/module-iot-bluetooth-low-energywifi-smd-0",
+      "price_date": "2026-10-23",
+      "refs": [
+        "U202"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "JNRH1207-220M-A",
+      "sku": "JNRH1207-220M-A",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.54,
+      "line": 0.54,
+      "stock": "В наличии",
+      "url": "https://electrobase.lv/katalogs/induktori-tht/inductor-wire-smd-22uh-ioper-54a-r-525o-30-isat-56a",
+      "price_date": "2026-10-23",
+      "refs": [
+        "L101"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "MCP7940N-I/SN",
+      "sku": "EB2031421749",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 1.5,
+      "line": 1.5,
+      "stock": "Pieejams piegādātāja noliktavā >1000 gab. 🏪 Saņemšana veikalā līdz 28.10.2026. 🚚 Piegāde līdz 30.10.2026.",
+      "url": "https://electrobase.lv/katalogs/rtc-shemas/ic-rtc-circuit-i2c-sram-64bsram-1855vdc-so8-4085degc-tube-0",
+      "price_date": "2026-10-23",
+      "refs": [
+        "U301"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "MEM2061-01-188-00-A",
+      "sku": "MEM2061-01-188-00-A",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 1.74,
+      "line": 1.74,
+      "stock": "В наличии",
+      "url": "https://electrobase.lv/katalogs/savienojumi-kartem/connector-cards-microsd-push-push-smt-gold-flash-pin-8-0",
+      "price_date": "2026-10-23",
+      "refs": [
+        "J301"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "OSTAPA57E2A",
+      "sku": "EB1854986288",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.85,
+      "line": 0.85,
+      "stock": "99 (supplier warehouse, owner quote)",
+      "url": "https://electrobase.lv/katalogs/diodes-led-tht-18mm/led-rgb-5mm-140deg-front-convex-231vdc-noof-term-4-round",
+      "price_date": "2026-10-25",
+      "refs": [
+        "D901"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Electrobase",
+      "mpn": "SMBJ26A-E3/52",
+      "sku": "SMBJ26A-E3/52",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.5,
+      "line": 0.5,
+      "stock": "В наличии",
+      "url": "https://electrobase.lv/katalogs/diodes-transil-smd-vienvirziena/diode-tvs-600w-289319v-143a-unidirectional-5-smbj",
+      "price_date": "2026-10-23",
+      "refs": [
+        "D101"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "3403.0166.11",
+      "sku": "3403.0166.11",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.75,
+      "line": 0.75,
+      "stock": "30",
+      "url": "https://www.salvats.lv/lv/drosinataji-smd-10x3x3mm-umt-leni/1a-umt-drosinataji-leni-250vac125vdc-101x3x3mm-smd",
+      "price_date": "2026-10-23",
+      "refs": [
+        "F105"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "3403.0169.11",
+      "sku": "3403.0169.11",
+      "needed": 8,
+      "buy": 8,
+      "unit": "шт.",
+      "price_unit": 0.78,
+      "line": 6.24,
+      "stock": "28",
+      "url": "https://www.salvats.lv/lv/drosinataji-smd-10x3x3mm-umt-leni/2a-umt-drosinataji-leni-250vac125vdc-101x3x3mm-smd",
+      "price_date": "2026-10-23",
+      "refs": [
+        "F104",
+        "F401",
+        "F501",
+        "F502",
+        "F503",
+        "F504",
+        "F505",
+        "F506"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "3413.0327.11",
+      "sku": "3413.0327.11",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.8,
+      "line": 0.8,
+      "stock": "35",
+      "url": "https://www.salvats.lv/lv/drosinataji-smd-1206-32x16x06mm/drosinatajs-smd-1206-8a-63v-fast",
+      "price_date": "2026-10-23",
+      "refs": [
+        "F102"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "3413.0331.11",
+      "sku": "3413.0331.11",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.8,
+      "line": 0.8,
+      "stock": "8 (страница товара 2026-10-28)",
+      "url": "https://www.salvats.lv/lv/drosinataji-smd-1206-32x16x06mm/drosinatajs-smd-1206-20a-63v-fast",
+      "price_date": "2026-10-28",
+      "refs": [
+        "F101"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "BAT-CR2032/P",
+      "sku": "BAT-CR2032/P",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.75,
+      "line": 0.75,
+      "stock": "17",
+      "url": "https://www.salvats.lv/lv/litija-baterijas/cr2032-litija-baterija-30v-o20x32mm-panasonic-442g",
+      "price_date": "2026-10-23",
+      "refs": [],
+      "accessory_count": 1,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "BC-2001",
+      "sku": "BC-2001",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.33,
+      "line": 0.33,
+      "stock": "6",
+      "url": "https://www.salvats.lv/lv/baterijas-turetaji-1/bateriju-turetajs-metaliska-cemme-cr2032-1-baterija",
+      "price_date": "2026-10-23",
+      "refs": [
+        "BT301"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "BC847B-DIO",
+      "sku": "BC847B-DIO",
+      "needed": 6,
+      "buy": 6,
+      "unit": "шт.",
+      "price_unit": 0.06,
+      "line": 0.36,
+      "stock": "336",
+      "url": "https://www.salvats.lv/lv/npn-tranzistori-smd/bc847b1f-smd-tranzistors-npn-50v-01a-300mhz-sot23",
+      "price_date": "2026-10-23",
+      "refs": [
+        "Q502",
+        "Q504",
+        "Q701",
+        "Q901",
+        "Q902",
+        "Q903"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "BC857B",
+      "sku": "BC857B",
+      "needed": 3,
+      "buy": 3,
+      "unit": "шт.",
+      "price_unit": 0.08,
+      "line": 0.24,
+      "stock": "18",
+      "url": "https://www.salvats.lv/lv/pnp-tranzistori-smd/bc857b3f-smd-tranzistors-pnp-50v-01a-hfe220475-035w-200mhz-sot23",
+      "price_date": "2026-10-23",
+      "refs": [
+        "Q503",
+        "Q505",
+        "Q702"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "BZV55C12",
+      "sku": "BZV55C12",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.13,
+      "line": 0.13,
+      "stock": "18",
+      "url": "https://www.salvats.lv/lv/stabilitroni-smd-bzv55/12v-stabilitrons-smd-bzv55-5-05w-minimelf",
+      "price_date": "2026-10-23",
+      "refs": [
+        "D103"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "CRCW120682K0FKTABC",
+      "sku": "CRCW120682K0FKTABC",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.03,
+      "line": 0.03,
+      "stock": "284",
+      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/82k-1206-1-smd-rezistors-1206",
+      "price_date": "2026-10-23",
+      "refs": [
+        "R101"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "CSD19531KCS",
+      "sku": "CSD19531KCS",
+      "needed": 4,
+      "buy": 4,
+      "unit": "шт.",
+      "price_unit": 2.95,
+      "line": 11.8,
+      "stock": "В наличии 7 шт. (снимок каталога 2026-10-23)",
+      "url": "https://www.salvats.lv/lv/100v-n-fet-tht/csd19531kcs-tranzistors-n-fet-100v-vgs2233v-20v-100a-214w-0r0073-to-220",
+      "price_date": "2026-10-23",
+      "refs": [
+        "Q102",
+        "Q103",
+        "Q501",
+        "Q703"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "SMD1206-10K-1%",
+      "sku": "SMD1206-10K-1%",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.03,
+      "line": 0.03,
+      "stock": "486",
+      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/10k-1206-1-smd-rezistors-1206",
+      "price_date": "2026-10-23",
+      "refs": [
+        "R108"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "SMD1206-6K2-1%",
+      "sku": "SMD1206-6K2-1%",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.03,
+      "line": 0.03,
+      "stock": "830",
+      "url": "https://www.salvats.lv/lv/rezistori-smd-1206-025w/6k2-1206-1-smd-rezistors-1206",
+      "price_date": "2026-10-23",
+      "refs": [
+        "R102"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "UPW1H221MPD",
+      "sku": "UPW1H221MPD",
+      "needed": 2,
+      "buy": 2,
+      "unit": "шт.",
+      "price_unit": 0.63,
+      "line": 1.26,
+      "stock": "66",
+      "url": "https://www.salvats.lv/lv/kondensatori-elektrolitiskie-zemas-induktivitates-low-esr/22050v-105c-o10x16mm-20-kondensatori-zemas-induktivitates-011r-5000h-nichicon-ar-lokaniem-izvadiem",
+      "price_date": "2026-10-23",
+      "refs": [
+        "C101",
+        "C102"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "USBLC6-2SC6",
+      "sku": "USBLC6-2SC6",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.67,
+      "line": 0.67,
+      "stock": "В наличии",
+      "url": "https://www.salvats.lv/lv/u/usblc6-2sc6-smd-mikroshema-esd-protection-sot23-6",
+      "price_date": "2026-10-23",
+      "refs": [
+        "U401"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    },
+    {
+      "shop": "Salvats",
+      "mpn": "ZL201-10G",
+      "sku": "ZL201-10G",
+      "needed": 1,
+      "buy": 1,
+      "unit": "шт.",
+      "price_unit": 0.16,
+      "line": 0.16,
+      "stock": "41",
+      "url": "https://www.salvats.lv/lv/listes-un-nuju-ligzdas/254mm-uz-pcb-10pin-stekers-1",
+      "price_date": "2026-10-23",
+      "refs": [
+        "J201"
+      ],
+      "accessory_count": 0,
+      "min_qty": 1,
+      "multiple": 1,
+      "unpriced": false
+    }
+  ],
+  "summary": {
+    "electrical_components": 152,
+    "testpads": 5,
+    "accessories": {
+      "BAT-CR2032/P": 1
+    },
+    "stock_rows": 27,
+    "stock_pieces": 107,
+    "buy_rows": 25,
+    "buy_pieces": 48,
+    "shop_totals": {
+      "Electrobase": "15.20",
+      "Salvats": "24.38"
+    },
+    "parts_EUR": "39.58",
+    "shipping_EUR": "5.87",
+    "total_EUR": "45.45",
+    "unpriced_items": [],
+    "unpriced_allowance_EUR": "0.00",
+    "price_basis": "V1 catalogue snapshot 2026-10-23, including CSD19531KCS from catalog.db; OSTAPA57E2A owner Electrobase quote 2026-10-25; 3413.0331.11 read from the Salvats product page on 2026-10-28 (procurement_lite.json); delivery as in the EU-0.1 README of 24.10.2026, not rechecked. No reservation or order."
+  }
+}

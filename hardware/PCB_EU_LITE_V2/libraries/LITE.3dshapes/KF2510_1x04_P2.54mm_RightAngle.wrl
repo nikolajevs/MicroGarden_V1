@@ -1,0 +1,12 @@
+#VRML V2.0 utf8
+# Schematic envelope from LHE 2510-4AW drawing; not a qualified mechanical model.
+Transform { translation 3.81 -0.9 2.85 children [ Shape { appearance Appearance { material Material { diffuseColor 0.87 0.84 0.72 } } geometry Box { size 10.16 3.2 5.7 } } ] }
+Transform { translation 3.81 -6.65 5.2 children [ Shape { appearance Appearance { material Material { diffuseColor 0.87 0.84 0.72 } } geometry Box { size 10.16 8.3 1 } } ] }
+Transform { translation 0 0 -0.45 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 0.64 5.9 } } ] }
+Transform { translation 0 -5.15 2.18 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 10.3 0.64 } } ] }
+Transform { translation 2.54 0 -0.45 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 0.64 5.9 } } ] }
+Transform { translation 2.54 -5.15 2.18 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 10.3 0.64 } } ] }
+Transform { translation 5.08 0 -0.45 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 0.64 5.9 } } ] }
+Transform { translation 5.08 -5.15 2.18 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 10.3 0.64 } } ] }
+Transform { translation 7.62 0 -0.45 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 0.64 5.9 } } ] }
+Transform { translation 7.62 -5.15 2.18 children [ Shape { appearance Appearance { material Material { diffuseColor 0.7 0.7 0.72 } } geometry Box { size 0.64 10.3 0.64 } } ] }

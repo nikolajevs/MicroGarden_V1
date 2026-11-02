@@ -7,8 +7,9 @@ import sys
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
-HW = ROOT / 'hardware/PCB_EU_LITE'
-sys.path.insert(0, str(HW / 'tools'))
+# V1 (released r3 prototype) and V2 (six 24 V lamp outputs) are separate, self-contained KiCad projects.
+PROJECTS = {ROOT / 'hardware/PCB_EU_LITE': 'PCB_EU_LITE.kicad_pcb', ROOT / 'hardware/PCB_EU_LITE_V2': None}
+sys.path.insert(0, str(ROOT / 'hardware/PCB_EU_LITE/tools'))
 from kicad_sexpr import parse, children, child
 
 
@@ -22,6 +23,23 @@ def main():
         if not condition:
             errors.append(message)
 
+    for HW, board in PROJECTS.items():
+        check_project(HW, board, require)
+
+    for path in [*ROOT.glob('*.md'), *(ROOT / 'hardware').rglob('*.md')]:
+        value = path.read_text(encoding='utf-8')
+        for link in re.findall(r'\]\(([^\s)]+)\)', value):
+            if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*:', link) or link.startswith('#'):
+                continue
+            target = unquote(link.split('#', 1)[0])
+            require((path.parent / target).exists(), f'{path.relative_to(ROOT)}: broken link {link}')
+    if errors:
+        raise SystemExit('\n'.join(errors))
+    print(f'PASS | {checked} standalone dependency, footprint, model, template and documentation checks ({len(PROJECTS)} projects)')
+
+
+def check_project(HW, board, require):
+    """Local libraries, footprints, models, template and tools of one project; nothing may point outside its folder."""
     for name, kind in [('fp-lib-table', 'fp_lib_table'), ('sym-lib-table', 'sym_lib_table')]:
         root = parse((HW / name).read_text(encoding='utf-8'))
         require(root[0] == kind, f'{name}: invalid table')
@@ -40,9 +58,9 @@ def main():
         if not footprint:
             continue
         lib, name = footprint.split(':')
-        require((HW / 'libraries' / (lib + '.pretty') / (name + '.kicad_mod')).exists(), f'{item["ref"]}: missing footprint {footprint}')
+        require((HW / 'libraries' / (lib + '.pretty') / (name + '.kicad_mod')).exists(), f'{HW.name} {item["ref"]}: missing footprint {footprint}')
 
-    for path in [HW/'PCB_EU_LITE.kicad_pcb', *(HW/'libraries').rglob('*.kicad_mod')]:
+    for path in [*([HW/board] if board else []), *(HW/'libraries').rglob('*.kicad_mod')]:
         value = path.read_text(encoding='utf-8')
         for model in re.findall(r'\(model "\$\{KIPRJMOD\}/([^"\n]+)"', value):
             resolved = (HW / model).resolve()
@@ -60,17 +78,7 @@ def main():
         value = path.read_text(encoding='utf-8')
         ast.parse(value, filename=str(path))
         require(not re.search(r"HERE\.parent\s*/\s*['\"]PCB_EU", value), f'{path.name}: external code dependency')
-
-    for path in [*ROOT.glob('*.md'), *HW.rglob('*.md')]:
-        value = path.read_text(encoding='utf-8')
-        for link in re.findall(r'\]\(([^\s)]+)\)', value):
-            if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*:', link) or link.startswith('#'):
-                continue
-            target = unquote(link.split('#', 1)[0])
-            require((path.parent / target).exists(), f'{path.relative_to(ROOT)}: broken link {link}')
-    if errors:
-        raise SystemExit('\n'.join(errors))
-    print(f'PASS | {checked} standalone dependency, footprint, model, template and documentation checks')
+        require(not re.search(r"HERE\.parent|parents\[2\]|\.\./PCB_EU", value), f'{HW.name}/tools/{path.name}: depends on a sibling project folder')
 
 
 if __name__ == '__main__':
