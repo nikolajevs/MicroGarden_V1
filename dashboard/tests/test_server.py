@@ -3391,6 +3391,16 @@ class PruneBackupsTests(unittest.TestCase):
         self.new = ["dash-backup-before-legal-20260101-1000.sqlite3", "dash-backup-before-recent.sqlite3"]
         for name, days in ((self.old[0], 90.5), (self.old[1], 200), (self.new[0], 89.5), (self.new[1], 1)):
             self.make(name, days, now)
+        # Хвосты -wal и -shm, которые SQLite создаёт, когда копию открывают: у старой копии они моложе срока (появились при проверке
+        # целостности уже после копирования) и всё равно уходят вместе с ней; хвост новой копии остаётся; хвост без копии удаляется
+        # по своему возрасту, а молодой остаётся
+        orphan = "dash-backup-before-gone-20240101-0000.sqlite3-shm"
+        self.old_tails = [self.old[0] + "-wal", self.old[0] + "-shm", self.old[1] + "-wal", orphan]
+        self.young_tails = [self.new[0] + "-wal", "dash-backup-before-young-20261101-1000.sqlite3-shm"]
+        for name, days in ((self.old_tails[0], 1), (self.old_tails[1], 1), (self.old_tails[2], 199), (orphan, 300),
+                           (self.young_tails[0], 1), (self.young_tails[1], 2)):
+            self.make(name, days, now)
+        self.gone = self.old + self.old_tails                                       # всё, что должно исчезнуть при сроке 90 суток
         # не копии: другие имена, подкаталог и каталог с подходящим именем; возраст у них большой, но трогать их нельзя
         self.others = ["notes.txt", "dash.sqlite3", "dash-backup-before-email.sqlite3.txt", "backup-old.sqlite3"]
         for name in self.others:
@@ -3417,18 +3427,18 @@ class PruneBackupsTests(unittest.TestCase):
     def test_by_default_it_only_shows_what_it_would_delete(self):
         code, output = self.run_script()
         self.assertEqual(code, 0, output)
-        for name in self.old:
-            self.assertIn(name, output)
-        for name in self.new + self.others:
+        shown = [line.split(": ", 1)[1] for line in output.splitlines() if line.startswith("старше 90 суток: ")]
+        self.assertEqual(sorted(shown), sorted(self.gone))                           # ровно то, что исчезнет, хвосты тоже
+        for name in self.new + self.young_tails + self.others:
             self.assertNotIn(name, output)
-        self.assertIn("Показано копий: 2 (новее 90 суток: 2)", output)
+        self.assertIn("Показано копий: 2, файлов вместе с хвостами -wal и -shm: 6 (новее 90 суток: 2)", output)
         self.assertEqual(self.names(), self.everything)                              # ничего не удалено
 
-    def test_delete_removes_only_the_old_copies(self):
+    def test_delete_removes_only_the_old_copies_and_their_tails(self):
         code, output = self.run_script("--delete")
         self.assertEqual(code, 0, output)
-        self.assertIn("Удалено копий: 2, осталось: 2", output)
-        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old)))
+        self.assertIn("Удалено копий: 2, файлов: 6, осталось копий: 2", output)
+        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.gone)))
         code, output = self.run_script("--delete")                                   # повторный запуск ничего не находит
         self.assertEqual(code, 0, output)
         self.assertIn("Копий старше 90 суток нет", output)
@@ -3436,10 +3446,11 @@ class PruneBackupsTests(unittest.TestCase):
     def test_the_term_comes_from_the_environment(self):
         code, output = self.run_script("--delete", DASH_BACKUP_DAYS="30")
         self.assertEqual(code, 0, output)
-        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old) - {self.new[0]}))   # 89 суток старше 30
+        after = sorted(set(self.everything) - set(self.gone) - {self.new[0], self.young_tails[0]})   # 89 суток старше 30, хвост уходит с копией
+        self.assertEqual(self.names(), after)
         code, output = self.run_script("--delete", DASH_BACKUP_DAYS="365")
         self.assertIn("Копий старше 365 суток нет", output)
-        self.assertEqual(self.names(), sorted(set(self.everything) - set(self.old) - {self.new[0]}))
+        self.assertEqual(self.names(), after)
 
     def test_bad_arguments_and_terms_are_refused_before_anything_is_touched(self):
         for args, extra in ((("--wrong",), {}), (("--delete", "extra"), {}), ((), {"DASH_BACKUP_DAYS": "0"}), ((), {"DASH_BACKUP_DAYS": "abc"}),
