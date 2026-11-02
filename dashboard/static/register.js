@@ -43,6 +43,7 @@
       $('register-form').hidden = !data.open;
       $('closed').hidden = data.open;
       mailRequired = !!data.mail;
+      $('google-box').hidden = !(data.google && data.open);    // при закрытой регистрации новую запись через Google не создать
       $('email-field').hidden = !mailRequired;
       $('note-mail').hidden = !mailRequired;
       $('note-nomail').hidden = mailRequired;

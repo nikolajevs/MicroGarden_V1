@@ -2,14 +2,18 @@
 """Тесты сервера телеметрии: python -m unittest discover -s dashboard/tests -v"""
 import base64
 import contextlib
+import hashlib
 import http.client
 import io
 import json
+import os
 import re
+import shutil
 import smtplib
 import socket
 import sqlite3
 import ssl
+import subprocess
 import sys
 import tempfile
 import threading
@@ -18,6 +22,8 @@ import unittest
 from contextlib import closing
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
@@ -2638,6 +2644,686 @@ class MailHttpTests(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/account/email/resend", {}, cookie=cookie)[0], 200)
 
 
+DROP = object()      # утверждение, которое нужно убрать из ID-токена
+
+
+def google_config(db, **extra):
+    env = {"DASH_GOOGLE_CLIENT_ID": "1234567890-abcdefghijklmnop.apps.googleusercontent.com",
+           "DASH_GOOGLE_CLIENT_SECRET": "GOCSPX-test-secret-value"}
+    env.update(extra)
+    return mail_config(db, **env)
+
+
+def google_token(cfg, **claims):
+    """ID-токен вроде того, что выдаёт Google (подпись не настоящая: сервер её и не проверяет, см. GoogleClient)."""
+    now = int(time.time())
+    payload = {"iss": "https://accounts.google.com", "aud": cfg.google_client_id, "sub": "1000000001", "email": "ivan@example.com",
+               "email_verified": True, "iat": now, "exp": now + 3600}
+    payload.update(claims)
+
+    def part(obj):
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=").decode()
+
+    return "%s.%s.%s" % (part({"alg": "RS256", "typ": "JWT"}), part({k: v for k, v in payload.items() if v is not DROP}), part("signature"))
+
+
+class FakeGoogle:
+    """Вместо Google: принимает обмен кода, сверяет секрет клиента, адрес возврата и PKCE и отдаёт ID-токен с заданными утверждениями."""
+
+    def __init__(self, cfg):
+        self.cfg, self.calls, self.claims, self.error, self.answer = cfg, [], {}, None, None
+        self.nonce = self.challenge = None
+
+    def started(self, location):
+        """Разбор адреса, на который сервер отправил человека; -> state."""
+        query = parse_qs(urlsplit(location).query)
+        self.nonce, self.challenge = query["nonce"][0], query["code_challenge"][0]
+        return query["state"][0]
+
+    def __call__(self, form):
+        self.calls.append(dict(form))
+        if self.error:
+            raise self.error
+        if self.answer is not None:
+            return self.answer
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(form["code_verifier"].encode()).digest()).rstrip(b"=").decode()
+        expected = (self.cfg.google_client_secret, self.cfg.public_url + "/auth/google/callback", "authorization_code", self.challenge)
+        if (form["client_secret"], form["redirect_uri"], form["grant_type"], challenge) != expected:
+            return {"error": "invalid_grant"}
+        return {"id_token": google_token(self.cfg, **dict({"nonce": self.nonce}, **self.claims)), "access_token": "ya29.fake", "token_type": "Bearer"}
+
+
+class GoogleConfigTests(unittest.TestCase):
+    def test_google_is_off_until_configured(self):
+        cfg = mail_config("x.sqlite3")
+        self.assertEqual((cfg.google_enabled, cfg.google_problems()), (False, []))
+        cfg = google_config("x.sqlite3")
+        self.assertEqual((cfg.google_enabled, cfg.google_problems()), (True, []))
+        self.assertFalse(server.GoogleClient(mail_config("x.sqlite3")).enabled)
+        self.assertEqual(server.GoogleClient(cfg).redirect_uri, "https://dash.example.org/auth/google/callback")
+
+    def test_wrong_google_settings_are_named(self):
+        for extra, name in (({"DASH_GOOGLE_CLIENT_ID": "not-an-id"}, "DASH_GOOGLE_CLIENT_ID"),
+                            ({"DASH_GOOGLE_CLIENT_ID": ""}, "DASH_GOOGLE_CLIENT_ID"),
+                            ({"DASH_GOOGLE_CLIENT_SECRET": ""}, "DASH_GOOGLE_CLIENT_SECRET"),
+                            ({"DASH_GOOGLE_CLIENT_SECRET": "short"}, "DASH_GOOGLE_CLIENT_SECRET"),
+                            ({"DASH_PUBLIC_URL": ""}, "DASH_PUBLIC_URL")):
+            problems = google_config("x.sqlite3", **extra).google_problems()
+            self.assertTrue(any(p.startswith(name) for p in problems), (extra, problems))
+        with self.assertRaises(SystemExit):
+            google_config("x.sqlite3", DASH_GOOGLE_CLIENT_ID="not-an-id").validate()       # сервер с неверной настройкой не запускается
+        google_config("x.sqlite3").validate()
+        self.assertFalse(google_config("x.sqlite3", DASH_PUBLIC_URL="").google_enabled)    # без адреса сайта адреса возврата нет
+
+
+class GoogleClientTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = google_config("x.sqlite3")
+        self.fake = FakeGoogle(self.cfg)
+        self.client = server.GoogleClient(self.cfg, post=self.fake)
+
+    def begin(self, next_path="/boards"):
+        state, url = self.client.begin(next_path)
+        self.assertEqual(self.fake.started(url), state)
+        return state
+
+    def test_authorization_address(self):
+        state, url = self.client.begin()
+        parts = urlsplit(url)
+        query = {key: values[0] for key, values in parse_qs(parts.query).items()}
+        self.assertEqual("%s://%s%s" % (parts.scheme, parts.netloc, parts.path), "https://accounts.google.com/o/oauth2/v2/auth")
+        self.assertEqual((query["client_id"], query["redirect_uri"], query["response_type"], query["scope"]),
+                         (self.cfg.google_client_id, "https://dash.example.org/auth/google/callback", "code", "openid email"))
+        self.assertEqual((query["code_challenge_method"], query["prompt"], query["state"]), ("S256", "select_account", state))
+        self.assertGreaterEqual(len(state), 40)
+        self.assertGreaterEqual(len(query["nonce"]), 24)
+        self.assertEqual(len(base64.urlsafe_b64decode(query["code_challenge"] + "=")), 32)      # SHA-256 от проверочной строки
+        self.assertNotIn(self.cfg.google_client_secret, url)                                    # секрет в адрес страницы не попадает
+
+    def test_good_sign_in(self):
+        state = self.begin("/settings")
+        claims = self.client.finish(state, "one-time-code")
+        self.assertEqual(claims, {"sub": "1000000001", "email": "ivan@example.com", "next": "/settings"})
+        form = self.fake.calls[0]
+        self.assertEqual((form["code"], form["client_id"], form["client_secret"], form["grant_type"]),
+                         ("one-time-code", self.cfg.google_client_id, self.cfg.google_client_secret, "authorization_code"))
+        self.assertEqual(form["redirect_uri"], "https://dash.example.org/auth/google/callback")
+
+    def test_address_is_normalised_and_audience_may_be_a_list(self):
+        state = self.begin()
+        self.fake.claims = {"email": "Ivan.P@Example.COM", "aud": [self.cfg.google_client_id, "other"], "azp": self.cfg.google_client_id,
+                            "email_verified": "true"}
+        self.assertEqual(self.client.finish(state, "c")["email"], "ivan.p@example.com")
+
+    def test_a_start_is_used_once_and_expires(self):
+        state = self.begin()
+        self.client.finish(state, "c")
+        with self.assertRaises(server.GoogleError) as caught:
+            self.client.finish(state, "c")
+        self.assertEqual(caught.exception.code, "state")
+        for bad in ("", "unknown", None):
+            with self.assertRaises(server.GoogleError):
+                self.client.finish(bad, "c")
+        state = self.begin()
+        with self.assertRaises(server.GoogleError) as caught:
+            self.client.finish(state, "c", now=time.time() + server.GOOGLE_STATE_TTL + 5)
+        self.assertEqual(caught.exception.code, "state")
+        self.assertEqual(len(self.fake.calls), 1)                              # Google не спрашивали ни разу лишнего
+
+    def test_token_claims_are_checked(self):
+        now = int(time.time())
+        cases = [
+            ({"iss": "https://evil.example"}, "error"), ({"iss": DROP}, "error"),
+            ({"aud": "someone-else"}, "error"), ({"aud": DROP}, "error"),
+            ({"aud": [self.cfg.google_client_id, "other"], "azp": "other"}, "error"),
+            ({"exp": now - 3600}, "error"), ({"exp": DROP}, "error"), ({"exp": True}, "error"), ({"exp": "soon"}, "error"),
+            ({"iat": now + 3600}, "error"),
+            ({"nonce": "forged"}, "state"), ({"nonce": DROP}, "state"),
+            ({"sub": DROP}, "error"), ({"sub": ""}, "error"), ({"sub": 12345}, "error"), ({"sub": "9" * 256}, "error"),
+            ({"email_verified": False}, "unverified"), ({"email_verified": "false"}, "unverified"), ({"email_verified": 1}, "unverified"),
+            ({"email_verified": DROP}, "unverified"),
+            ({"email": DROP}, "email"), ({"email": "not-an-address"}, "email"), ({"email": "иван@example.com"}, "email"), ({"email": 7}, "email"),
+        ]
+        for claims, code in cases:
+            state = self.begin()
+            self.fake.claims = claims
+            with self.assertRaises(server.GoogleError, msg=str(claims)) as caught:
+                self.client.finish(state, "c")
+            self.assertEqual(caught.exception.code, code, str(claims))
+
+    def test_broken_tokens_and_exchange_failures(self):
+        for answer in ({"id_token": "no-dots"}, {"id_token": "a.b"}, {"id_token": "a.!!!.c"}, {"id_token": "a.%s.c" % base64.urlsafe_b64encode(b"[1]").decode()},
+                       {"id_token": 5}, {"error": "invalid_client"}, {}, ["x"], "text"):
+            state = self.begin()
+            self.fake.answer = answer
+            with self.assertRaises(server.GoogleError, msg=str(answer)) as caught:
+                self.client.finish(state, "c")
+            self.assertEqual(caught.exception.code, "error")
+        self.fake.answer = None
+        for failure in (OSError("down"), ValueError("not json"), TimeoutError()):
+            state = self.begin()
+            self.fake.error = failure
+            with self.assertRaises(server.GoogleError) as caught:
+                self.client.finish(state, "c")
+            self.assertEqual(caught.exception.code, "error")
+            self.assertNotIn(self.cfg.google_client_secret, str(caught.exception))
+        self.fake.error = None
+        state = self.begin()
+        with self.assertRaises(server.GoogleError):
+            self.client.finish(state, "x" * 3000)                              # слишком длинный код
+
+    def test_wrong_secret_or_verifier_is_refused_by_google(self):
+        state = self.begin()
+        self.client.cfg = google_config("x.sqlite3", DASH_GOOGLE_CLIENT_SECRET="GOCSPX-another-secret")   # у Google записан другой секрет
+        with self.assertRaises(server.GoogleError) as caught:
+            self.client.finish(state, "c")
+        self.assertIn("invalid_grant", str(caught.exception))                    # причину Google видно в журнале, секрета в тексте нет
+        self.assertNotIn("another-secret", str(caught.exception))
+
+    def test_too_many_unfinished_sign_ins(self):
+        with mock.patch.object(server, "GOOGLE_STATES_MAX", 3):
+            for _ in range(3):
+                self.client.begin()
+            with self.assertRaises(server.GoogleError) as caught:
+                self.client.begin()
+            self.assertEqual(caught.exception.code, "busy")
+            later = time.time() + server.GOOGLE_STATE_TTL + 1
+            self.client.begin(now=later)                                       # старые начатые входы вытесняются по сроку
+
+    def test_next_path_rule_matches_the_page(self):
+        for good in ("/", "/boards", "/boards?x=1", "/settings?device=a-1", "/account#top"):
+            self.assertEqual(server.safe_next(good), good)
+        for bad in ("https://evil.example/", "//evil.example", "/\\evil.example", "javascript:alert(1)", "boards", "", None, 5, "/a\nb",
+                    "/a\x00b", "/" + "x" * 400, "/login", "/login?next=/", "/register", "/login.html", "/forgot", "/forgot.html"):
+            self.assertEqual(server.safe_next(bad), "/", repr(bad))
+
+
+class GoogleStoreTests(unittest.TestCase):
+    PW = "correct horse battery"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = server.Store(Path(self.tmp.name) / "g.sqlite3")
+        self.admin_id = self.store.ensure_admin("garden", "admin-password-123", now=NOW)
+
+    def test_new_person_gets_a_record_without_a_password(self):
+        who, created = self.store.google_login("sub-1", "ivan.petrov@example.com", "1.2.3.4", now=NOW)
+        self.assertEqual((who["username"], who["role"], created), ("ivan.petrov", "user", True))
+        self.assertEqual(self.store.email_state(who["id"], NOW), {"address": "ivan.petrov@example.com", "verified": True, "pending": None})
+        self.assertEqual(self.store.sign_in_state(who["id"]), {"has_password": False, "google": True})
+        self.assertTrue(self.store.email_verified(who["id"]))
+        for attempt in ("", "!", self.PW, "scrypt", "x" * 200):                  # пароля нет: подойти нечему
+            self.assertIsNone(self.store.login_user("ivan.petrov", attempt))
+            self.assertIsNone(self.store.login_user("ivan.petrov@example.com", attempt))
+        again, created = self.store.google_login("sub-1", "changed@example.com", "1.2.3.4", now=NOW + 5)
+        self.assertEqual((again["id"], created), (who["id"], False))             # постоянный идентификатор главнее адреса
+        row = [u for u in self.store.list_users() if u["username"] == "ivan.petrov"][0]
+        self.assertEqual((row["google"], row["email"], row["email_verified"], row["last_login_at"], row["reg_ip"]),
+                         (True, "ivan.petrov@example.com", True, NOW + 5, "1.2.3.4"))
+
+    def test_usernames_are_valid_and_unique(self):
+        names = [self.store.google_login("s%d" % n, email, now=NOW)[0]["username"] for n, email in enumerate((
+            "a@example.com", "admin@example.com", "first.last+tag@example.com", "x" * 40 + "@example.com", "ivan@a.example.com",
+            "ivan@b.example.com", "ivan@c.example.com", "root@example.com"))]
+        self.assertEqual(names[:5], ["axx", "g-admin", "first.last_tag", "x" * 24, "ivan"])
+        self.assertTrue(re.fullmatch(r"ivan-[0-9]{4}", names[5]) and re.fullmatch(r"ivan-[0-9]{4}", names[6]), names)
+        self.assertNotEqual(names[5], names[6])
+        self.assertEqual(names[7], "g-root")
+        for name in names:
+            self.assertTrue(server.USERNAME_RE.fullmatch(name), name)
+            server.clean_username(name)                                           # не зарезервированные имена
+
+    def test_verified_address_links_the_existing_record(self):
+        ivan = self.store.register_user("ivan", self.PW, "1.2.3.4", now=NOW, email="ivan@example.com")
+        self.store.confirm_email(self.store.issue_mail_token(ivan["id"], "email", "ivan@example.com", NOW), NOW + 1)
+        who, created = self.store.google_login("sub-ivan", "ivan@example.com", now=NOW + 2)
+        self.assertEqual((who["id"], who["username"], created), (ivan["id"], "ivan", False))
+        self.assertEqual(self.store.sign_in_state(ivan["id"]), {"has_password": True, "google": True})
+        self.assertEqual(self.store.login_user("ivan", self.PW)["id"], ivan["id"])      # пароль остался
+        self.assertEqual(self.store.google_login("sub-ivan", "ivan@example.com", now=NOW + 3)[0]["id"], ivan["id"])
+        with self.assertRaises(server.GoogleRefused) as caught:                  # тот же адрес у другого человека Google: в чужую запись не пускаем
+            self.store.google_login("sub-someone-else", "ivan@example.com", now=NOW + 4)
+        self.assertEqual(caught.exception.code, "other")
+        self.assertEqual(len(self.store.list_users()), 2)
+
+    def test_an_unconfirmed_claim_on_the_address_does_not_open_the_google_record(self):
+        # Заранее созданная чужая запись с адресом человека не должна получить вход в запись, которую он потом заведёт через Google
+        mallory = self.store.register_user("mallory", self.PW, "6.6.6.6", now=NOW, email="victim@example.com")
+        token = self.store.issue_mail_token(mallory["id"], "email", "victim@example.com", NOW)
+        who, created = self.store.google_login("sub-victim", "victim@example.com", now=NOW + 5)
+        self.assertTrue(created)
+        self.assertNotEqual(who["id"], mallory["id"])
+        self.assertEqual(self.store.email_state(mallory["id"], NOW + 6), {"address": None, "verified": False, "pending": None})
+        self.assertIsNone(self.store.confirm_email(token, NOW + 6))               # её ссылка тоже снята
+        self.assertIsNone(self.store.login_user("victim@example.com", self.PW))   # по этому адресу и её паролю никто не войдёт
+        self.assertEqual(self.store.login_user("mallory", self.PW)["id"], mallory["id"])
+        self.assertEqual([t["username"] for t in self.store.find_reset_targets("victim@example.com")], [who["username"]])
+
+    def test_refusals_create_nothing(self):
+        who, _ = self.store.google_login("sub-blocked", "blocked@example.com", now=NOW)
+        self.store.set_user_disabled(who["id"], True)
+        with self.assertRaises(server.GoogleRefused) as caught:
+            self.store.google_login("sub-blocked", "blocked@example.com", now=NOW + 1)
+        self.assertEqual(caught.exception.code, "blocked")
+        # администратор входит только по паролю, даже если на его запись вернулась почта Google
+        link = self.store.set_email(self.admin_id, "owner@example.com", "admin-password-123", NOW)
+        self.store.confirm_email(link, NOW + 1)
+        with self.assertRaises(server.GoogleRefused) as caught:
+            self.store.google_login("sub-owner", "owner@example.com", now=NOW + 2)
+        self.assertEqual(caught.exception.code, "admin")
+        count = len(self.store.list_users())
+        self.store.set_registration(False)
+        with self.assertRaises(server.GoogleRefused) as caught:
+            self.store.google_login("sub-new", "new@example.com", now=NOW + 3)
+        self.assertEqual(caught.exception.code, "closed")
+        self.store.set_registration(True)
+        self.store.max_users = count
+        with self.assertRaises(server.GoogleRefused) as caught:
+            self.store.google_login("sub-new", "new@example.com", now=NOW + 4)
+        self.assertEqual(caught.exception.code, "full")
+        self.assertEqual(len(self.store.list_users()), count)
+        self.store.set_registration(False)
+        self.store.max_users = server.MAX_USERS
+        self.store.set_user_disabled(who["id"], False)
+        self.assertEqual(self.store.google_login("sub-blocked", "blocked@example.com", now=NOW + 5)[0]["id"], who["id"])   # прежний входит и при закрытой регистрации
+
+    def test_a_google_record_can_set_a_password_and_an_address_without_the_old_ones(self):
+        who, _ = self.store.google_login("sub-1", "anna@example.com", now=NOW)
+        link = self.store.set_email(who["id"], "anna@new.example.org", None, NOW + 1)                      # подтверждением служит вход
+        self.assertEqual(self.store.email_state(who["id"], NOW + 2)["pending"], "anna@new.example.org")
+        self.assertEqual(self.store.confirm_email(link, NOW + 3)["email"], "anna@new.example.org")
+        self.store.change_password(who["id"], None, "brand new password")                                  # первый пароль без текущего
+        self.assertEqual(self.store.sign_in_state(who["id"]), {"has_password": True, "google": True})
+        self.assertEqual(self.store.login_user("anna", "brand new password")["id"], who["id"])
+        with self.assertRaises(server.WrongPassword):                                                       # теперь пароль есть и спрашивается
+            self.store.change_password(who["id"], "wrong password 1", "another new password")
+        with self.assertRaises(server.WrongPassword):
+            self.store.set_email(who["id"], "other@example.org", "wrong password 1", NOW + 4)
+        self.assertEqual(self.store.google_login("sub-1", "anna@new.example.org", now=NOW + 5)[0]["id"], who["id"])
+
+    def test_a_google_record_gets_a_password_by_mail_too(self):
+        who, _ = self.store.google_login("sub-1", "anna@example.com", now=NOW)
+        target = self.store.find_reset_targets("anna@example.com")[0]
+        self.assertEqual(target["id"], who["id"])
+        link = self.store.issue_mail_token(target["id"], "reset", "anna@example.com", NOW)
+        self.assertEqual(self.store.reset_with_token(link, "brand new password", NOW + 1), {"username": "anna"})
+        self.assertEqual(self.store.login_user("anna@example.com", "brand new password")["id"], who["id"])
+
+    def test_old_database_gets_the_google_column(self):
+        old = Path(self.tmp.name) / "old.sqlite3"
+        with closing(sqlite3.connect(old)) as cx, cx:
+            cx.execute("CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE,"
+                       " pass_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', created_at INTEGER NOT NULL,"
+                       " last_login_at INTEGER, reg_ip TEXT, disabled INTEGER NOT NULL DEFAULT 0)")
+            cx.execute("INSERT INTO users(username, pass_hash, created_at) VALUES('old', 'x', ?)", (NOW,))
+        store = server.Store(old)
+        self.assertEqual(store.sign_in_state(1), {"has_password": True, "google": False})
+        server.Store(old)
+        with closing(sqlite3.connect(old)) as cx:
+            self.assertIn("users_google_sub", {row[1] for row in cx.execute("PRAGMA index_list(users)")})
+            with cx:
+                cx.execute("UPDATE users SET google_sub='dup' WHERE id=1")
+            with self.assertRaises(sqlite3.IntegrityError):
+                with cx:
+                    cx.execute("INSERT INTO users(username, pass_hash, created_at, google_sub) VALUES('other', 'x', 1, 'dup')")
+
+
+class GoogleHttpTests(unittest.TestCase):
+    """Сервер с настроенным входом через Google; вместо Google отвечает FakeGoogle, вместо SMTP копит письма Outbox."""
+    ACTION = {"X-Dash-Action": "1", "Content-Type": "application/json"}
+    PW = "correct horse battery"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cfg = google_config(Path(cls.tmp.name) / "g.sqlite3")
+        cls.cfg = cfg
+        cls.store = server.Store(cfg.db)
+        cls.httpd = server.DashServer(cfg, cls.store)
+        cls.outbox = Outbox()
+        cls.httpd.mailer.transport = cls.outbox
+        cls.httpd.mailer.synchronous = True
+        cls.fake = FakeGoogle(cfg)
+        cls.httpd.google.post = cls.fake
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.httpd.limiter = server.FailureLimiter()
+        self.httpd.name_limiter = server.FailureLimiter(limit=20, window=600)
+        self.httpd.reg_limiter = server.FailureLimiter(limit=server.REGISTRATIONS_PER_HOUR, window=3600)
+        self.httpd.google_ip_limiter = server.FailureLimiter(limit=server.GOOGLE_PER_IP, window=3600)
+        self.httpd.mail_ip_limiter = server.FailureLimiter(limit=server.MAIL_PER_IP, window=3600)
+        self.httpd.mail_addr_limiter = server.FailureLimiter(limit=server.MAIL_PER_ADDRESS, window=3600)
+        self.httpd.token_limiter = server.FailureLimiter(limit=20, window=600)
+        self.outbox.sent.clear()
+        self.fake.calls.clear()
+        self.fake.claims, self.fake.error, self.fake.answer = {}, None, None
+        self.store.set_registration(True)
+        self.store.max_users = server.MAX_USERS
+
+    def get(self, path, cookies=None, headers=None):
+        """-> (код, заголовки без повторов, список всех Set-Cookie, тело)."""
+        sent = dict(headers or {})
+        if cookies:
+            sent["Cookie"] = "; ".join("%s=%s" % pair for pair in cookies.items())
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request("GET", path, headers=sent)
+            resp = conn.getresponse()
+            return resp.status, dict(resp.getheaders()), resp.msg.get_all("Set-Cookie") or [], resp.read()
+        finally:
+            conn.close()
+
+    def call(self, method, path, payload=None, cookie=None, ip=None):
+        headers = dict(self.ACTION, **({"X-Real-IP": ip} if ip else {}))
+        if cookie:
+            headers["Cookie"] = server.SESSION_COOKIE + "=" + cookie
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request(method, path, body=None if payload is None else json.dumps(payload).encode(), headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read()
+            return resp.status, (json.loads(raw) if raw else None), dict(resp.getheaders())
+        finally:
+            conn.close()
+
+    @staticmethod
+    def cookie_value(cookies, name):
+        for line in cookies:
+            if line.startswith(name + "="):
+                return line.split(";")[0].split("=", 1)[1]
+        return None
+
+    def begin(self, query="", ip=None):
+        status, headers, cookies, _ = self.get("/auth/google" + query, headers={"X-Real-IP": ip} if ip else None)
+        self.assertEqual(status, 302)
+        state = self.fake.started(headers["Location"])
+        self.assertEqual(self.cookie_value(cookies, server.OAUTH_COOKIE), state)
+        return state
+
+    def finish(self, state, cookie=None, extra="", code="one-time-code", ip=None):
+        cookies = {server.OAUTH_COOKIE: state if cookie is None else cookie} if cookie != "" else None
+        query = "/auth/google/callback?state=%s&code=%s%s" % (state, code, extra)
+        return self.get(query, cookies, {"X-Real-IP": ip} if ip else None)
+
+    def sign_in(self, sub="1000000001", email="ivan@example.com", query="", **claims):
+        self.fake.claims = dict({"sub": sub, "email": email}, **claims)
+        status, headers, cookies, _ = self.finish(self.begin(query))
+        self.assertEqual(status, 302, headers)
+        return headers["Location"], self.cookie_value(cookies, server.SESSION_COOKIE), cookies
+
+    def test_the_start_sends_the_person_to_google_with_a_bound_cookie(self):
+        status, headers, cookies, _ = self.get("/auth/google")
+        self.assertEqual(status, 302)
+        query = parse_qs(urlsplit(headers["Location"]).query)
+        self.assertTrue(headers["Location"].startswith("https://accounts.google.com/o/oauth2/v2/auth?"))
+        self.assertEqual((query["client_id"], query["redirect_uri"], query["code_challenge_method"]),
+                         ([self.cfg.google_client_id], ["https://dash.example.org/auth/google/callback"], ["S256"]))
+        line = [c for c in cookies if c.startswith(server.OAUTH_COOKIE + "=")][0]
+        for part in ("HttpOnly", "SameSite=Lax", "Path=/auth/google", "Max-Age=%d" % server.GOOGLE_STATE_TTL):
+            self.assertIn(part, line)
+        self.assertNotIn("Secure", line)                                     # по голому http браузер Secure-cookie не вернёт
+        _, _, cookies, _ = self.get("/auth/google", headers={"X-Forwarded-Proto": "https"})
+        self.assertIn("; Secure", [c for c in cookies if c.startswith(server.OAUTH_COOKIE)][0])
+        self.assertEqual(json.loads(self.get("/api/registration")[3]), {"open": True, "mail": True, "google": True})
+
+    def test_a_new_person_signs_in_and_lands_on_the_boards_page(self):
+        self.fake.claims = {"sub": "g-100", "email": "Anna.Lee@Example.com"}
+        state = self.begin()
+        status, headers, cookies, _ = self.finish(state)
+        self.assertEqual((status, headers["Location"]), (302, "/boards"))
+        session = [c for c in cookies if c.startswith(server.SESSION_COOKIE + "=")][0]
+        for part in ("HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=%d" % (server.SESSION_DAYS * 86400)):
+            self.assertIn(part, session)
+        cleared = [c for c in cookies if c.startswith(server.OAUTH_COOKIE + "=")][0]
+        self.assertIn("Max-Age=0", cleared)                                  # cookie входа одноразовая
+        token = self.cookie_value(cookies, server.SESSION_COOKIE)
+        me = self.call("GET", "/api/me", cookie=token)[1]
+        self.assertEqual((me["user"]["username"], me["has_password"], me["google"]), ("anna.lee", False, True))
+        self.assertEqual(me["email"], {"address": "anna.lee@example.com", "verified": True, "pending": None})
+        # почта уже подтверждена Google: платы добавлять можно сразу, письмо не нужно
+        self.assertEqual(self.call("POST", "/api/boards", {"name": "Теплица", "device": "anna-1"}, cookie=token)[0], 201)
+        self.assertEqual(self.outbox.sent, [])
+        self.assertEqual(self.call("GET", "/api/admin/users", cookie=token)[0], 403)
+
+    def test_a_returning_person_goes_where_they_were_going(self):
+        self.assertEqual(self.sign_in("g-200", "bob@example.com")[0], "/boards")
+        self.assertEqual(self.sign_in("g-200", "bob@example.com")[0], "/")                                  # прежний человек: на главную
+        self.assertEqual(self.sign_in("g-200", "bob@example.com", query="?next=%2Fsettings%3Fdevice%3Dbob-1")[0], "/settings?device=bob-1")
+        for evil in ("%2F%2Fevil.example", "https%3A%2F%2Fevil.example%2F", "%2Flogin", "javascript%3Aalert(1)"):
+            self.assertEqual(self.sign_in("g-200", "bob@example.com", query="?next=" + evil)[0], "/", evil)
+
+    def test_the_callback_needs_the_cookie_and_the_started_sign_in(self):
+        self.fake.claims = {"sub": "g-300", "email": "carol@example.com"}
+        state = self.begin()
+        for kwargs in ({"cookie": ""}, {"cookie": "another-browser-state"}):      # без cookie и с чужой: вход, начатый в другом браузере
+            status, headers, cookies, _ = self.finish(state, **kwargs)
+            self.assertEqual((status, headers["Location"]), (302, "/login?google=state"), kwargs)
+            self.assertIsNone(self.cookie_value(cookies, server.SESSION_COOKIE))
+        self.assertEqual(self.fake.calls, [])                                       # к Google за токеном не ходили
+        status, headers, _, _ = self.finish(self.begin())
+        self.assertEqual(headers["Location"], "/boards")
+        # тот же адрес возврата во второй раз: начатый вход израсходован
+        state = self.begin()
+        self.assertEqual(self.finish(state)[1]["Location"], "/")
+        self.assertEqual(self.finish(state)[1]["Location"], "/login?google=state")
+        status, headers, cookies, _ = self.get("/auth/google/callback?state=never-started&code=c", {server.OAUTH_COOKIE: "never-started"})
+        self.assertEqual((status, headers["Location"]), (302, "/login?google=state"))
+        self.assertEqual(self.get("/auth/google/callback")[1]["Location"], "/login?google=state")           # вообще без параметров
+        self.assertEqual(self.get("/auth/google/callback", headers={"Referer": "https://evil.example"})[1]["Location"], "/login?google=state")
+
+    def test_a_refusal_at_google_and_failures_return_to_the_login_page(self):
+        state = self.begin()
+        status, headers, cookies, _ = self.get("/auth/google/callback?error=access_denied&state=" + state, {server.OAUTH_COOKIE: state})
+        self.assertEqual((status, headers["Location"]), (302, "/login?google=denied"))
+        self.assertIn("Max-Age=0", [c for c in cookies if c.startswith(server.OAUTH_COOKIE)][0])
+        self.assertEqual(self.finish(state)[1]["Location"], "/login?google=state")                          # начатый вход забыт
+        cases = [({"email_verified": False}, "unverified"), ({"aud": "someone-else"}, "error"), ({"nonce": "forged"}, "state"),
+                 ({"email": DROP}, "email")]
+        people = len(self.store.list_users())
+        for claims, code in cases:
+            self.fake.claims = dict({"sub": "g-400", "email": "dave@example.com"}, **claims)
+            status, headers, cookies, _ = self.finish(self.begin())
+            self.assertEqual(headers["Location"], "/login?google=" + code, claims)
+            self.assertIsNone(self.cookie_value(cookies, server.SESSION_COOKIE))
+        self.fake.claims = {}
+        self.fake.error = OSError("Google недоступен")
+        self.assertEqual(self.finish(self.begin())[1]["Location"], "/login?google=error")
+        self.fake.error = None
+        self.assertEqual(len(self.store.list_users()), people)                      # ни одной новой записи
+
+    def test_people_who_cannot_sign_in_are_told_why(self):
+        who = self.sign_in("g-500", "erin@example.com")[0]
+        token = self.sign_in("g-500", "erin@example.com")[1]
+        self.assertEqual(self.call("POST", "/api/logout", cookie=token)[0], 200)
+        erin = [u for u in self.store.list_users() if u["username"] == "erin"][0]
+        self.store.set_user_disabled(erin["id"], True)
+        self.fake.claims = {"sub": "g-500", "email": "erin@example.com"}
+        self.assertEqual(self.finish(self.begin())[1]["Location"], "/login?google=blocked")
+        self.store.set_registration(False)
+        self.fake.claims = {"sub": "g-501", "email": "frank@example.com"}
+        self.assertEqual(self.finish(self.begin())[1]["Location"], "/login?google=closed")
+        self.assertEqual(who, "/boards")
+
+    def test_the_admin_is_never_signed_in_through_google(self):
+        link = self.store.set_email(self.store.admin_id, "owner@example.com", PASSWORD)
+        self.store.confirm_email(link)
+        self.fake.claims = {"sub": "g-600", "email": "owner@example.com"}
+        status, headers, cookies, _ = self.finish(self.begin())
+        self.assertEqual(headers["Location"], "/login?google=admin")
+        self.assertIsNone(self.cookie_value(cookies, server.SESSION_COOKIE))
+
+    def test_a_google_record_sets_a_first_password_without_the_old_one(self):
+        _, token, _ = self.sign_in("g-700", "gina@example.com")
+        self.assertEqual(self.call("POST", "/api/account/password", {"new": "short"}, cookie=token)[0], 400)
+        self.assertEqual(self.call("POST", "/api/account/password", {"new": "brand new password"}, cookie=token)[0], 200)
+        self.assertEqual(self.call("GET", "/api/me", cookie=token)[1]["has_password"], True)
+        self.assertEqual(self.call("POST", "/api/login", {"username": "gina", "password": "brand new password"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": "gina@example.com", "password": "brand new password"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/account/password", {"new": "another new password"}, cookie=token)[0], 400)   # теперь нужен текущий
+
+    def test_passwords_never_open_a_record_without_one_and_forgot_gives_it_a_password(self):
+        self.sign_in("g-800", "hugo@example.com")
+        for attempt in ("", "!", self.PW):
+            self.assertEqual(self.call("POST", "/api/login", {"username": "hugo", "password": attempt}, ip="10.5.5.5")[0], 401)
+        self.assertEqual(self.call("POST", "/api/forgot", {"email": "hugo@example.com"})[0], 200)
+        token = self.outbox.last_token("hugo@example.com")
+        self.assertEqual(self.call("POST", "/api/reset", {"token": token, "password": "brand new password"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/login", {"username": "hugo@example.com", "password": "brand new password"})[0], 200)
+
+    def test_it_links_the_record_that_has_the_same_confirmed_address(self):
+        status, data, headers = self.call("POST", "/api/register", {"username": "ivan-pw", "email": "ivan.pw@example.com", "password": self.PW})
+        self.assertEqual(status, 201)
+        self.assertEqual(self.call("POST", "/api/verify", {"token": self.outbox.last_token("ivan.pw@example.com")})[0], 200)
+        self.fake.claims = {"sub": "g-900", "email": "ivan.pw@example.com"}
+        status, headers, cookies, _ = self.finish(self.begin())
+        self.assertEqual(headers["Location"], "/")
+        me = self.call("GET", "/api/me", cookie=self.cookie_value(cookies, server.SESSION_COOKIE))[1]
+        self.assertEqual((me["user"]["username"], me["has_password"], me["google"]), ("ivan-pw", True, True))
+        self.assertEqual(self.call("POST", "/api/login", {"username": "ivan-pw", "password": self.PW})[0], 200)   # пароль остался
+
+    def test_starts_are_limited_per_address(self):
+        self.httpd.google_ip_limiter = server.FailureLimiter(limit=3, window=3600)
+        for _ in range(3):
+            self.assertTrue(self.get("/auth/google", headers={"X-Real-IP": "10.6.6.6"})[1]["Location"].startswith("https://accounts"))
+        self.assertEqual(self.get("/auth/google", headers={"X-Real-IP": "10.6.6.6"})[1]["Location"], "/login?google=limit")
+        self.assertTrue(self.get("/auth/google", headers={"X-Real-IP": "10.6.6.7"})[1]["Location"].startswith("https://accounts"))
+
+    def test_only_get_starts_a_sign_in(self):
+        for method in ("POST", "DELETE"):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            conn.request(method, "/auth/google", body=b"{}", headers=self.ACTION)
+            self.assertIn(conn.getresponse().status, (401, 404, 405))
+            conn.close()
+
+
+def find_bash():
+    """Настоящий bash (не заглушка WSL) для проверки скриптов deploy/configure-*.sh; None, если его нет."""
+    for candidate in (shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"):
+        if candidate and Path(candidate).exists():
+            try:
+                probe = subprocess.run([candidate, "-c", "echo $BASH_VERSION; uname -r"], capture_output=True, timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if probe.returncode == 0 and probe.stdout.strip() and b"microsoft" not in probe.stdout.lower():
+                return candidate
+    return None
+
+
+BASH = find_bash()
+
+
+@unittest.skipUnless(BASH, "нужна оболочка bash")
+class ConfigureScriptTests(unittest.TestCase):
+    """Скрипты, которыми владелец вводит ключи на VPS (deploy/configure-mail.sh и configure-google.sh), на пробном .env."""
+    DEPLOY = Path(server.__file__).resolve().parent / "deploy"
+    ID = b"1234567890-abcdefghijklmnop.apps.googleusercontent.com"
+    SECRET = b"GOCSPX-test-secret-0123456789"
+    START = (b"DASH_VIEW_USER=garden\nDASH_PUBLIC_URL=https://dash.dvinsk.lat\nDASH_SMTP_HOST=smtp.resend.com\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.env = Path(self.tmp.name) / "x.env"
+        self.env.write_bytes(self.START)
+
+    @staticmethod
+    def posix(path):
+        return str(path).replace("\\", "/")
+
+    def run_script(self, name, answers):
+        env = dict(os.environ, DASH_ENV_FILE=self.posix(self.env), DASH_PYTHON=self.posix(sys.executable), PYTHONUTF8="1")
+        done = subprocess.run([BASH, self.posix(self.DEPLOY / name)], input=answers, capture_output=True, env=env, timeout=90)
+        return done.returncode, (done.stdout + done.stderr).decode("utf-8", "replace")
+
+    def leftovers(self):
+        return sorted(p.name for p in Path(self.tmp.name).iterdir() if p.name != "x.env")
+
+    def test_a_stray_byte_in_the_site_address_is_asked_again_instead_of_breaking_the_file(self):
+        # Так упал первый запуск на VPS: в адресе сайта оказался одинокий байт 0xD0 («dvinsk.la\xd0t»)
+        code, output = self.run_script("configure-google.sh", b"https://dash.dvinsk.la\xd0t\n\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("символы вне латиницы", output)
+        text = self.env.read_bytes().decode("utf-8")                                 # файл читается как UTF-8
+        self.assertIn("DASH_PUBLIC_URL=https://dash.dvinsk.lat\n", text)
+        self.assertIn("DASH_GOOGLE_CLIENT_ID=" + self.ID.decode(), text)
+        self.assertIn("DASH_GOOGLE_CLIENT_SECRET=" + self.SECRET.decode(), text)
+        self.assertNotIn(self.SECRET.decode(), output)                               # секрет нигде не напечатан
+        self.assertEqual(len(self.leftovers()), 1, self.leftovers())                 # одна копия прежнего файла, временных файлов нет
+        self.assertTrue(self.leftovers()[0].startswith("x.env.bak-"))
+        self.assertEqual(server.Config(self.read_env()).google_problems(), [])
+
+    def read_env(self):
+        env = {}
+        for line in self.env.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.startswith("DASH_"):
+                env[key] = value
+        return env
+
+    def test_an_invisible_character_in_the_secret_stops_the_script_without_touching_the_file(self):
+        bad = b"GOCSPX-bad\xe2\x80\x8b-0123456789\n"                                  # невидимый знак нулевой ширины при вставке
+        code, output = self.run_script("configure-google.sh", b"\n" + self.ID + b"\n" + bad * 3)
+        self.assertNotEqual(code, 0)
+        self.assertIn("три попытки не вышли", output)
+        self.assertEqual(self.env.read_bytes(), self.START)
+        self.assertEqual(self.leftovers(), [])
+
+    def test_the_second_try_may_be_right(self):
+        code, output = self.run_script("configure-google.sh", b"\n" + self.ID + b"\nGOCSPX-bad\xd0-0123456789\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("DASH_GOOGLE_CLIENT_SECRET=" + self.SECRET.decode(), self.env.read_text(encoding="utf-8"))
+
+    def test_wrong_values_write_nothing(self):
+        for answers in (b"https://dash.dvinsk.lat/app\n" + self.ID + b"\n" + self.SECRET + b"\n",            # адрес с путём
+                        b"http://dash.dvinsk.lat\n" + self.ID + b"\n" + self.SECRET + b"\n",               # без https
+                        b"\nnot-an-id\n" + self.SECRET + b"\n",                                           # идентификатор не оттуда
+                        b"\n" + self.ID + b"\nshort\n",                                                   # короткий секрет
+                        b"\n" + self.ID + b"\nGOCSPX test secret value\n",                                # пробелы в секрете
+                        b"\n" + self.ID + b"\n\n"):                                                       # секрет не задан
+            code, output = self.run_script("configure-google.sh", answers)
+            self.assertNotEqual(code, 0, (answers, output))
+            self.assertIn("Ничего не записано", output)
+            self.assertEqual(self.env.read_bytes(), self.START, answers)
+            self.assertEqual(self.leftovers(), [], answers)
+
+    def test_a_trailing_slash_in_the_address_is_dropped(self):
+        code, output = self.run_script("configure-google.sh", b"https://dash.dvinsk.lat/\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("DASH_PUBLIC_URL=https://dash.dvinsk.lat\n", self.env.read_text(encoding="utf-8"))
+
+    def test_nothing_changes_when_nothing_is_new(self):
+        self.run_script("configure-google.sh", b"\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        before = self.env.read_bytes()
+        files = self.leftovers()
+        code, output = self.run_script("configure-google.sh", b"\n\n\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("Изменений нет", output)
+        self.assertEqual((self.env.read_bytes(), self.leftovers()), (before, files))                        # ни переписывания, ни новых копий
+
+    def test_the_mail_script_writes_the_mail_keys_and_hides_the_password(self):
+        key = b"re_test_key_value_12345"
+        code, output = self.run_script("configure-mail.sh", b"\n\n\n\n" + key + b"\n\n-\n\n")
+        self.assertEqual(code, 0, output)
+        text = self.env.read_text(encoding="utf-8")
+        for line in ("DASH_SMTP_HOST=smtp.resend.com", "DASH_SMTP_PORT=587", "DASH_SMTP_USER=resend", "DASH_SMTP_PASSWORD=" + key.decode(),
+                     "DASH_MAIL_FROM=MicroGarden <noreply@dvinsk.lat>"):
+            self.assertIn(line, text)
+        self.assertNotIn("DASH_MAIL_REPLY_TO", text)
+        self.assertNotIn(key.decode(), output)
+        self.assertEqual(server.Config(self.read_env()).mail_problems(), [])
+        code, output = self.run_script("configure-mail.sh", b"\n\n\xd0\n")                                 # байт вместо порта: вопрос повторяется
+        self.assertIn("символы вне латиницы", output)
+
+
 class ConfigTests(unittest.TestCase):
     def test_accounts_settings_are_validated(self):
         base = {"DASH_VIEW_PASSWORD": PASSWORD}
@@ -2660,6 +3346,22 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.Config({"DASH_INGEST_TOKEN": TOKEN, "DASH_VIEW_PASSWORD": "short"}).validate()
         server.Config({"DASH_INGEST_TOKEN": TOKEN, "DASH_VIEW_PASSWORD": PASSWORD}).validate()
+
+    def test_env_file_with_broken_bytes_stops_the_start_with_a_clear_message(self):
+        # Побитый байт (скрипт настройки раньше мог его записать) не должен ронять сервер трассировкой, а значение не должно попасть в текст
+        import os
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in ("DASH_TEST_OK", "DASH_TEST_AFTER")])
+        with tempfile.TemporaryDirectory() as tmp:
+            env = Path(tmp) / ".env"
+            env.write_bytes(b"DASH_TEST_OK=\xd0\xb4\xd0\xb0\nDASH_TEST_PUBLIC_URL=https://dash.example.la\xd0t\nDASH_TEST_AFTER=1\n")
+            with self.assertRaises(SystemExit) as caught:
+                server.load_env_file(env)
+            message = str(caught.exception)
+            self.assertIn("строке 2", message)
+            self.assertIn("DASH_TEST_PUBLIC_URL", message)
+            self.assertNotIn("dash.example", message)                                 # значение в сообщение не попадает
+            self.assertEqual(os.environ.get("DASH_TEST_OK"), "да")                    # строки до сбоя прочитаны, после сбоя нет
+            self.assertIsNone(os.environ.get("DASH_TEST_AFTER"))
 
     def test_env_file_does_not_override_environment(self):
         import os

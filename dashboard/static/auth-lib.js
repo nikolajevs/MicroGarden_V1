@@ -57,13 +57,15 @@
     return result;
   }
 
-  // Смена пароля: новый пароль проверяется по тем же правилам, а повтор должен совпасть
-  function validatePasswordChange(oldPassword, newPassword, repeat, username) {
-    if (!oldPassword) return { ok: false, error: 'Введите текущий пароль' };
+  // Смена пароля: новый пароль проверяется по тем же правилам, а повтор должен совпасть. У записи, созданной входом
+  // через Google, пароля нет, и первый задаётся без текущего (needOld === false).
+  function validatePasswordChange(oldPassword, newPassword, repeat, username, needOld) {
+    const askOld = needOld !== false;
+    if (askOld && !oldPassword) return { ok: false, error: 'Введите текущий пароль' };
     const pass = validatePassword(newPassword, username);
     if (!pass.ok) return pass;
     if (newPassword !== repeat) return { ok: false, error: 'Новые пароли не совпадают' };
-    return { ok: true, old: oldPassword, new: pass.password };
+    return askOld ? { ok: true, old: oldPassword, new: pass.password } : { ok: true, new: pass.password };
   }
 
   // Новый пароль по ссылке из письма: имени на странице нет, поэтому сравнивать с ним нечего
@@ -74,12 +76,40 @@
     return { ok: true, password: pass.password };
   }
 
-  // Привязка или смена почты в аккаунте: адрес и текущий пароль
-  function validateEmailChange(email, password) {
+  // Привязка или смена почты в аккаунте: адрес и текущий пароль (у записи из Google пароля нет, needPassword === false)
+  function validateEmailChange(email, password, needPassword) {
     const mail = validateEmail(email);
     if (!mail.ok) return mail;
+    if (needPassword === false) return { ok: true, email: mail.email };
     if (!password) return { ok: false, error: 'Введите пароль' };
     return { ok: true, email: mail.email, password };
+  }
+
+  // Почему вход через Google не удался: код приходит в адресе страницы входа (?google=код), см. server.py: _google_callback
+  const GOOGLE_ERRORS = {
+    denied: 'Вход через Google отменён.',
+    state: 'Вход через Google не удался: время вышло или вход был начат в другом браузере. Попробуйте ещё раз.',
+    error: 'Не удалось войти через Google. Попробуйте ещё раз или войдите по паролю.',
+    unverified: 'Google не подтвердил адрес вашей почты, поэтому войти этим способом нельзя.',
+    email: 'Адрес почты из Google не подошёл (нужна латиница). Войдите по паролю.',
+    busy: 'Сейчас слишком много входов. Попробуйте через несколько минут.',
+    limit: 'Слишком много попыток входа через Google с вашего адреса. Попробуйте позже.',
+    closed: 'Регистрация закрыта: новую запись через Google создать нельзя.',
+    full: 'На сервере нет места для новых записей.',
+    blocked: 'Запись заблокирована администратором.',
+    admin: 'Администратор входит только по имени и паролю.',
+    other: 'Эта запись уже связана с другим аккаунтом Google. Войдите тем аккаунтом или по паролю.',
+  };
+
+  function googleError(code) {
+    if (typeof code !== 'string' || !code) return '';
+    return Object.prototype.hasOwnProperty.call(GOOGLE_ERRORS, code) ? GOOGLE_ERRORS[code] : GOOGLE_ERRORS.error;
+  }
+
+  // Адрес кнопки «Войти через Google»: после входа человека вернут туда, куда он шёл (только путь на этом сайте)
+  function googleHref(next) {
+    const path = safeNext(next);
+    return path === '/' ? '/auth/google' : '/auth/google?next=' + encodeURIComponent(path);
   }
 
   // Ссылка из письма выглядит как https://сайт/reset#token=...; значение после «#» в журналы сервера и в Referer не попадает
@@ -124,7 +154,8 @@
       statusText: item.disabled ? 'Заблокирован' : admin ? 'Администратор' : 'Активен',
       lastLogin: 'Вход: ' + agoText(item.last_login_at, now),
       boards: item.boards + ' ' + plural(item.boards, 'плата', 'платы', 'плат'),
-      email: item.email ? 'Почта: ' + item.email + (item.email_verified ? ' (подтверждена)' : ' (не подтверждена)') : 'Почта не указана',
+      email: (item.email ? 'Почта: ' + item.email + (item.email_verified ? ' (подтверждена)' : ' (не подтверждена)') : 'Почта не указана')
+        + (item.google ? ' · вход через Google' : ''),
       canBlock: !admin && !item.disabled,
       canUnblock: !admin && item.disabled,
       canReset: !admin,
@@ -148,9 +179,9 @@
       note: 'Откройте ссылку из письма, чтобы подтвердить адрес. Пока он не подтверждён, добавлять платы нельзя.', canResend: true };
   }
 
-  const api = { USERNAME_RE, EMAIL_RE, EMAIL_MAX, PASSWORD_MIN, PASSWORD_MAX, validateUsername, validateEmail, validatePassword,
-                validateRegistration, validatePasswordChange, validateNewPassword, validateEmailChange, tokenFromHash,
-                safeNext, agoText, plural, describeUser, describeEmail };
+  const api = { USERNAME_RE, EMAIL_RE, EMAIL_MAX, PASSWORD_MIN, PASSWORD_MAX, GOOGLE_ERRORS, validateUsername, validateEmail,
+                validatePassword, validateRegistration, validatePasswordChange, validateNewPassword, validateEmailChange,
+                tokenFromHash, googleError, googleHref, safeNext, agoText, plural, describeUser, describeEmail };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.AuthLib = api;
 })();
