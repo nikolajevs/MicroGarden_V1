@@ -6,11 +6,14 @@ import hashlib
 import http.client
 import io
 import json
+import os
 import re
+import shutil
 import smtplib
 import socket
 import sqlite3
 import ssl
+import subprocess
 import sys
 import tempfile
 import threading
@@ -3202,6 +3205,125 @@ class GoogleHttpTests(unittest.TestCase):
             conn.close()
 
 
+def find_bash():
+    """Настоящий bash (не заглушка WSL) для проверки скриптов deploy/configure-*.sh; None, если его нет."""
+    for candidate in (shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"):
+        if candidate and Path(candidate).exists():
+            try:
+                probe = subprocess.run([candidate, "-c", "echo $BASH_VERSION; uname -r"], capture_output=True, timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if probe.returncode == 0 and probe.stdout.strip() and b"microsoft" not in probe.stdout.lower():
+                return candidate
+    return None
+
+
+BASH = find_bash()
+
+
+@unittest.skipUnless(BASH, "нужна оболочка bash")
+class ConfigureScriptTests(unittest.TestCase):
+    """Скрипты, которыми владелец вводит ключи на VPS (deploy/configure-mail.sh и configure-google.sh), на пробном .env."""
+    DEPLOY = Path(server.__file__).resolve().parent / "deploy"
+    ID = b"1234567890-abcdefghijklmnop.apps.googleusercontent.com"
+    SECRET = b"GOCSPX-test-secret-0123456789"
+    START = (b"DASH_VIEW_USER=garden\nDASH_PUBLIC_URL=https://dash.dvinsk.lat\nDASH_SMTP_HOST=smtp.resend.com\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.env = Path(self.tmp.name) / "x.env"
+        self.env.write_bytes(self.START)
+
+    @staticmethod
+    def posix(path):
+        return str(path).replace("\\", "/")
+
+    def run_script(self, name, answers):
+        env = dict(os.environ, DASH_ENV_FILE=self.posix(self.env), DASH_PYTHON=self.posix(sys.executable), PYTHONUTF8="1")
+        done = subprocess.run([BASH, self.posix(self.DEPLOY / name)], input=answers, capture_output=True, env=env, timeout=90)
+        return done.returncode, (done.stdout + done.stderr).decode("utf-8", "replace")
+
+    def leftovers(self):
+        return sorted(p.name for p in Path(self.tmp.name).iterdir() if p.name != "x.env")
+
+    def test_a_stray_byte_in_the_site_address_is_asked_again_instead_of_breaking_the_file(self):
+        # Так упал первый запуск на VPS: в адресе сайта оказался одинокий байт 0xD0 («dvinsk.la\xd0t»)
+        code, output = self.run_script("configure-google.sh", b"https://dash.dvinsk.la\xd0t\n\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("символы вне латиницы", output)
+        text = self.env.read_bytes().decode("utf-8")                                 # файл читается как UTF-8
+        self.assertIn("DASH_PUBLIC_URL=https://dash.dvinsk.lat\n", text)
+        self.assertIn("DASH_GOOGLE_CLIENT_ID=" + self.ID.decode(), text)
+        self.assertIn("DASH_GOOGLE_CLIENT_SECRET=" + self.SECRET.decode(), text)
+        self.assertNotIn(self.SECRET.decode(), output)                               # секрет нигде не напечатан
+        self.assertEqual(len(self.leftovers()), 1, self.leftovers())                 # одна копия прежнего файла, временных файлов нет
+        self.assertTrue(self.leftovers()[0].startswith("x.env.bak-"))
+        self.assertEqual(server.Config(self.read_env()).google_problems(), [])
+
+    def read_env(self):
+        env = {}
+        for line in self.env.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.startswith("DASH_"):
+                env[key] = value
+        return env
+
+    def test_an_invisible_character_in_the_secret_stops_the_script_without_touching_the_file(self):
+        bad = b"GOCSPX-bad\xe2\x80\x8b-0123456789\n"                                  # невидимый знак нулевой ширины при вставке
+        code, output = self.run_script("configure-google.sh", b"\n" + self.ID + b"\n" + bad * 3)
+        self.assertNotEqual(code, 0)
+        self.assertIn("три попытки не вышли", output)
+        self.assertEqual(self.env.read_bytes(), self.START)
+        self.assertEqual(self.leftovers(), [])
+
+    def test_the_second_try_may_be_right(self):
+        code, output = self.run_script("configure-google.sh", b"\n" + self.ID + b"\nGOCSPX-bad\xd0-0123456789\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("DASH_GOOGLE_CLIENT_SECRET=" + self.SECRET.decode(), self.env.read_text(encoding="utf-8"))
+
+    def test_wrong_values_write_nothing(self):
+        for answers in (b"https://dash.dvinsk.lat/app\n" + self.ID + b"\n" + self.SECRET + b"\n",            # адрес с путём
+                        b"http://dash.dvinsk.lat\n" + self.ID + b"\n" + self.SECRET + b"\n",               # без https
+                        b"\nnot-an-id\n" + self.SECRET + b"\n",                                           # идентификатор не оттуда
+                        b"\n" + self.ID + b"\nshort\n",                                                   # короткий секрет
+                        b"\n" + self.ID + b"\nGOCSPX test secret value\n",                                # пробелы в секрете
+                        b"\n" + self.ID + b"\n\n"):                                                       # секрет не задан
+            code, output = self.run_script("configure-google.sh", answers)
+            self.assertNotEqual(code, 0, (answers, output))
+            self.assertIn("Ничего не записано", output)
+            self.assertEqual(self.env.read_bytes(), self.START, answers)
+            self.assertEqual(self.leftovers(), [], answers)
+
+    def test_a_trailing_slash_in_the_address_is_dropped(self):
+        code, output = self.run_script("configure-google.sh", b"https://dash.dvinsk.lat/\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("DASH_PUBLIC_URL=https://dash.dvinsk.lat\n", self.env.read_text(encoding="utf-8"))
+
+    def test_nothing_changes_when_nothing_is_new(self):
+        self.run_script("configure-google.sh", b"\n" + self.ID + b"\n" + self.SECRET + b"\n")
+        before = self.env.read_bytes()
+        files = self.leftovers()
+        code, output = self.run_script("configure-google.sh", b"\n\n\n")
+        self.assertEqual(code, 0, output)
+        self.assertIn("Изменений нет", output)
+        self.assertEqual((self.env.read_bytes(), self.leftovers()), (before, files))                        # ни переписывания, ни новых копий
+
+    def test_the_mail_script_writes_the_mail_keys_and_hides_the_password(self):
+        key = b"re_test_key_value_12345"
+        code, output = self.run_script("configure-mail.sh", b"\n\n\n\n" + key + b"\n\n-\n\n")
+        self.assertEqual(code, 0, output)
+        text = self.env.read_text(encoding="utf-8")
+        for line in ("DASH_SMTP_HOST=smtp.resend.com", "DASH_SMTP_PORT=587", "DASH_SMTP_USER=resend", "DASH_SMTP_PASSWORD=" + key.decode(),
+                     "DASH_MAIL_FROM=MicroGarden <noreply@dvinsk.lat>"):
+            self.assertIn(line, text)
+        self.assertNotIn("DASH_MAIL_REPLY_TO", text)
+        self.assertNotIn(key.decode(), output)
+        self.assertEqual(server.Config(self.read_env()).mail_problems(), [])
+        code, output = self.run_script("configure-mail.sh", b"\n\n\xd0\n")                                 # байт вместо порта: вопрос повторяется
+        self.assertIn("символы вне латиницы", output)
+
+
 class ConfigTests(unittest.TestCase):
     def test_accounts_settings_are_validated(self):
         base = {"DASH_VIEW_PASSWORD": PASSWORD}
@@ -3224,6 +3346,22 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.Config({"DASH_INGEST_TOKEN": TOKEN, "DASH_VIEW_PASSWORD": "short"}).validate()
         server.Config({"DASH_INGEST_TOKEN": TOKEN, "DASH_VIEW_PASSWORD": PASSWORD}).validate()
+
+    def test_env_file_with_broken_bytes_stops_the_start_with_a_clear_message(self):
+        # Побитый байт (скрипт настройки раньше мог его записать) не должен ронять сервер трассировкой, а значение не должно попасть в текст
+        import os
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in ("DASH_TEST_OK", "DASH_TEST_AFTER")])
+        with tempfile.TemporaryDirectory() as tmp:
+            env = Path(tmp) / ".env"
+            env.write_bytes(b"DASH_TEST_OK=\xd0\xb4\xd0\xb0\nDASH_TEST_PUBLIC_URL=https://dash.example.la\xd0t\nDASH_TEST_AFTER=1\n")
+            with self.assertRaises(SystemExit) as caught:
+                server.load_env_file(env)
+            message = str(caught.exception)
+            self.assertIn("строке 2", message)
+            self.assertIn("DASH_TEST_PUBLIC_URL", message)
+            self.assertNotIn("dash.example", message)                                 # значение в сообщение не попадает
+            self.assertEqual(os.environ.get("DASH_TEST_OK"), "да")                    # строки до сбоя прочитаны, после сбоя нет
+            self.assertIsNone(os.environ.get("DASH_TEST_AFTER"))
 
     def test_env_file_does_not_override_environment(self):
         import os

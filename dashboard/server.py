@@ -361,12 +361,20 @@ def classify(line):
 
 
 def load_env_file(path):
-    """KEY=VALUE построчно; уже заданные переменные окружения не перезаписываются."""
+    """KEY=VALUE построчно; уже заданные переменные окружения не перезаписываются. Строка с байтами, которые не читаются
+    как UTF-8, останавливает запуск понятным сообщением (номер строки и имя ключа, без значения): иначе сервер падал бы
+    с трассировкой, а pm2 перезапускал бы его по кругу."""
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        data = Path(path).read_bytes()
     except OSError:
         return
-    for raw in text.splitlines():
+    for number, raw_line in enumerate(data.split(b"\n"), 1):
+        try:
+            raw = raw_line.decode("utf-8")
+        except UnicodeDecodeError:
+            key = raw_line.partition(b"=")[0].decode("ascii", "replace")[:40]
+            raise SystemExit("Сервер не запущен: в файле .env в строке %d (%s) есть байты, которые не читаются как UTF-8. "
+                             "Исправьте строку или верните копию .env.bak-… рядом с файлом" % (number, key)) from None
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

@@ -27,8 +27,8 @@ if [ -n "${NEW_DASH_SMTP_USER:-}" ] && [ -z "${NEW_DASH_SMTP_PASSWORD:-}" ]; the
   exit 1
 fi
 case "$NEW_DASH_SMTP_PORT" in ''|*[!0-9]*) echo "Порт должен быть числом. Ничего не записано." >&2; exit 1;; esac
-case "$NEW_DASH_PUBLIC_URL" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "Адрес сайта должен начинаться с https://. Ничего не записано." >&2; exit 1;; esac
 NEW_DASH_PUBLIC_URL="${NEW_DASH_PUBLIC_URL%/}"; export NEW_DASH_PUBLIC_URL
+check_url "$NEW_DASH_PUBLIC_URL"
 
 write_env "# Почта (записано configure-mail.sh)"
 restart_panel

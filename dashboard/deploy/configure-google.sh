@@ -19,17 +19,14 @@ ask DASH_PUBLIC_URL "Адрес сайта (из него строится ад�
 ask DASH_GOOGLE_CLIENT_ID "Идентификатор клиента (…apps.googleusercontent.com)" ""
 ask_secret DASH_GOOGLE_CLIENT_SECRET "Секрет клиента (из консоли Google, вид GOCSPX-…)"
 
-case "$NEW_DASH_PUBLIC_URL" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "Адрес сайта должен начинаться с https://. Ничего не записано." >&2; exit 1;; esac
 NEW_DASH_PUBLIC_URL="${NEW_DASH_PUBLIC_URL%/}"; export NEW_DASH_PUBLIC_URL
+check_url "$NEW_DASH_PUBLIC_URL"
 if [ -n "$NEW_DASH_GOOGLE_CLIENT_ID$NEW_DASH_GOOGLE_CLIENT_SECRET" ]; then
-  case "$NEW_DASH_GOOGLE_CLIENT_ID" in
-    *.apps.googleusercontent.com) ;;
-    *) echo "Идентификатор клиента должен оканчиваться на .apps.googleusercontent.com. Ничего не записано." >&2; exit 1;;
-  esac
-  if [ "${#NEW_DASH_GOOGLE_CLIENT_SECRET}" -lt 10 ]; then
-    echo "Секрет клиента слишком короткий или не задан (он нужен вместе с идентификатором). Ничего не записано." >&2
-    exit 1
-  fi
+  id_re='^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$'; secret_re='^[!-~]{10,}$'
+  ( LC_ALL=C; [[ $NEW_DASH_GOOGLE_CLIENT_ID =~ $id_re ]] ) || {
+    echo "Идентификатор клиента должен быть вида 123456-abc.apps.googleusercontent.com (латиница, цифры, точки и дефисы). Ничего не записано." >&2; exit 1; }
+  ( LC_ALL=C; [[ $NEW_DASH_GOOGLE_CLIENT_SECRET =~ $secret_re ]] ) || {
+    echo "Секрет клиента слишком короткий, не задан или в нём есть пробелы (он нужен вместе с идентификатором). Ничего не записано." >&2; exit 1; }
   echo "В консоли Google у клиента должен быть адрес возврата: $NEW_DASH_PUBLIC_URL/auth/google/callback"
 fi
 

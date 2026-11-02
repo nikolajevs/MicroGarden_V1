@@ -26,25 +26,53 @@ PY
 
 trim() { local v="${1//$'\r'/}"; v="${v#"${v%%[![:space:]]*}"}"; printf '%s' "${v%"${v##*[![:space:]]}"}"; }
 
+# Только латиница, цифры и обычные знаки: русская буква, похожая на латинскую, или невидимый знак при вставке сделали бы
+# значение (например, адрес сайта) неверным, а побитый байт мог испортить сам .env. Любой байт вне диапазона от пробела
+# до «~» не проходит. Диапазон записан явно, а не классом [[:print:]]: в некоторых оболочках класс пропускает байты
+# выше 0x7F (в Git Bash на Windows проверено).
+ascii_ok() ( LC_ALL=C; re='^[ -~]*$'; [[ $1 =~ $re ]] )
+
+BAD_INPUT="В ответе есть символы вне латиницы и обычных знаков (так бывает при вставке: невидимый знак или русская буква, похожая на латинскую). Введите значение ещё раз"
+
 # ask КЛЮЧ "подпись" "значение по умолчанию": Enter оставляет текущее значение из .env, а если его нет, значение по умолчанию;
-# «-» очищает поле. Ответ попадает в переменную NEW_КЛЮЧ, которую потом читает write_env.
+# «-» очищает поле. Ответ попадает в переменную NEW_КЛЮЧ, которую потом читает write_env. Неподходящие символы в ответе
+# не принимаются: вопрос повторяется (три попытки, потом выход без записи).
 ask() {
-  local key="$1" label="$2" fallback="$3" now answer
+  local key="$1" label="$2" fallback="$3" now answer tries=0
   now="$(current "$key")"
   now="${now:-$fallback}"
-  read -r -p "$label${now:+ [$now]}: " answer || answer=""
-  answer="$(trim "$answer")"
+  while :; do
+    read -r -p "$label${now:+ [$now]}: " answer || answer=""
+    answer="$(trim "$answer")"
+    ascii_ok "$answer" && break
+    tries=$((tries + 1))
+    [ "$tries" -lt 3 ] || { echo "$BAD_INPUT: три попытки не вышли. Ничего не записано." >&2; exit 1; }
+    echo "$BAD_INPUT (Enter оставит значение в скобках)." >&2
+  done
   if [ "$answer" = "-" ]; then export "NEW_$key="; else export "NEW_$key=${answer:-$now}"; fi
 }
 
 # ask_secret КЛЮЧ "подпись": ввод не виден; Enter оставляет текущее значение. Само значение никогда не печатается
 ask_secret() {
-  local key="$1" label="$2" now answer
+  local key="$1" label="$2" now answer tries=0
   now="$(current "$key")"
-  read -r -s -p "$label${now:+ (сейчас задан, Enter оставит его)}: " answer || answer=""
-  echo
-  answer="$(trim "$answer")"
+  while :; do
+    read -r -s -p "$label${now:+ (сейчас задан, Enter оставит его)}: " answer || answer=""
+    echo
+    answer="$(trim "$answer")"
+    ascii_ok "$answer" && break
+    tries=$((tries + 1))
+    [ "$tries" -lt 3 ] || { echo "$BAD_INPUT: три попытки не вышли. Ничего не записано." >&2; exit 1; }
+    echo "$BAD_INPUT." >&2
+  done
   export "NEW_$key=${answer:-$now}"
+}
+
+# check_url "адрес": адрес сайта без пути и слэша на конце (как требует сервер, server.py: PUBLIC_URL_RE)
+check_url() {
+  local re='^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$'
+  ( LC_ALL=C; [[ $1 =~ $re ]] ) || { echo "Адрес сайта должен быть вида https://dash.dvinsk.lat (без пути и без слэша на конце). Ничего не записано." >&2; exit 1; }
+  case "$1" in https://*|http://localhost*|http://127.0.0.1*) ;; *) echo "Адрес сайта должен начинаться с https://. Ничего не записано." >&2; exit 1;; esac
 }
 
 # Запись: ключи NEW_DASH_* заменяют или добавляют строки в .env, пустое значение убирает ключ, остальные строки остаются
@@ -53,8 +81,22 @@ write_env() {
   "$PY" - "$ENV_FILE" "$1" <<'PY'
 import os, sys, time
 path, header = sys.argv[1], sys.argv[2]
-updates = {name[4:]: value for name, value in os.environ.items() if name.startswith("NEW_DASH_")}
-lines = open(path, encoding="utf-8").read().splitlines()
+# Значения читаются как байты и строго как UTF-8: побитый байт не должен попасть в .env (сервер не смог бы его прочитать)
+raw_env = os.environb if hasattr(os, "environb") else {k.encode(): v.encode("utf-8", "surrogateescape") for k, v in os.environ.items()}
+updates = {}
+for name, raw in raw_env.items():
+    if name.startswith(b"NEW_DASH_"):
+        try:
+            updates[name[4:].decode("ascii")] = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            print("В значении %s есть недопустимые байты. Ничего не записано: запустите скрипт заново и введите значение ещё раз."
+                  % name[4:].decode("ascii", "replace"), file=sys.stderr)
+            sys.exit(1)
+try:
+    lines = open(path, encoding="utf-8").read().splitlines()
+except UnicodeDecodeError:
+    print("Файл %s не читается как UTF-8 (в нём есть побитые байты). Ничего не записано." % path, file=sys.stderr)
+    sys.exit(1)
 secret = lambda key: key.endswith(("PASSWORD", "SECRET"))
 changed, seen, out = [], set(), []
 for line in lines:
@@ -79,15 +121,20 @@ if missing:
 if not changed:
     print("Изменений нет: значения те же, файл не тронут.")
     sys.exit(0)
+data = ("\n".join(out) + "\n").encode("utf-8")      # до создания любых файлов: если не кодируется, на диске ничего не меняется
 backup = "%s.bak-%s" % (path, time.strftime("%Y%m%d-%H%M%S"))
 fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-with os.fdopen(fd, "w", encoding="utf-8") as handle:
-    handle.write("\n".join(lines) + "\n")
+with os.fdopen(fd, "wb") as handle:
+    handle.write(("\n".join(lines) + "\n").encode("utf-8"))
 tmp = path + ".tmp"
-fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-with os.fdopen(fd, "w", encoding="utf-8") as handle:
-    handle.write("\n".join(out) + "\n")
-os.replace(tmp, path)
+try:
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(data)
+    os.replace(tmp, path)
+finally:
+    if os.path.exists(tmp):
+        os.remove(tmp)
 os.chmod(path, 0o600)
 print("Записано в %s (копия прежнего файла: %s)." % (path, os.path.basename(backup)))
 print("Изменения:")
