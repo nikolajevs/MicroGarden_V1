@@ -24,6 +24,7 @@ import base64
 import csv
 import hashlib
 import hmac
+import html
 import io
 import json
 import logging
@@ -115,6 +116,7 @@ GOOGLE_PER_IP = 30             # начатых входов через Google �
 GOOGLE_TIMEOUT = 10
 OAUTH_COOKIE = "dash_oauth"
 NO_PASSWORD_MARK = "!"         # у записи, созданной входом через Google, пароля нет: его задают в «Аккаунте» или по почте
+DELETE_FRESH_SEC = 900         # запись без пароля (из Google) удаляется только в течение 15 минут после входа
 
 # Числовые поля показаний: имя -> (минимум, максимум, целое). Всё, что вне диапазона или не
 # число, отбрасывается: плата с повреждённым ответом датчика не должна ломать графики.
@@ -320,6 +322,9 @@ PUBLIC_PAGES = {"/login": "login.html", "/login.html": "login.html",
 # Страницы по ссылкам из писем: открываются кому угодно и без перенаправления, вошёл человек или нет. Сама ссылка лежит
 # после «#», поэтому в журналы сервера и в Referer она не попадает.
 OPEN_PAGES = {"/verify": "verify.html", "/reset": "reset.html"}
+# Политика конфиденциальности и условия: открыты всем без перенаправления (на них ведёт подвал каждой страницы). В текст
+# подставляются оператор, адрес для обращений и сроки хранения из настроек сервера: поля вида {{OPERATOR}} в файлах, см. legal_text
+LEGAL_PAGES = {"/privacy": "privacy.html", "/privacy.html": "privacy.html", "/terms": "terms.html", "/terms.html": "terms.html"}
 # Скрипты и стили открыты: в них нет секретов, а странице входа они нужны до входа
 ASSETS = {
     "/style.css": ("style.css", CSS),
@@ -416,6 +421,21 @@ class Config:
         # Вход через Google: идентификатор и секрет клиента из консоли Google, адрес возврата строится из DASH_PUBLIC_URL
         self.google_client_id = env.get("DASH_GOOGLE_CLIENT_ID", "").strip()
         self.google_client_secret = env.get("DASH_GOOGLE_CLIENT_SECRET", "").strip()
+        # Кто отвечает за сервис: имя и адрес для обращений показываются на страницах «Политика конфиденциальности» и «Условия»
+        self.operator_name = env.get("DASH_OPERATOR_NAME", "").strip()
+        self.contact_email = env.get("DASH_CONTACT_EMAIL", "").strip().lower()
+
+    def site_problems(self):
+        """Что не так с данными оператора для юридических страниц (пустой список, если всё в порядке или они не заданы)."""
+        problems = []
+        if self.operator_name and (len(self.operator_name) > 100 or not self.operator_name.isprintable()):
+            problems.append("DASH_OPERATOR_NAME: имя или название до 100 символов, без управляющих знаков")
+        if self.contact_email:
+            try:
+                clean_email(self.contact_email)
+            except ValueError:
+                problems.append("DASH_CONTACT_EMAIL: адрес вида name@example.com (латиница)")
+        return problems
 
     @property
     def google_enabled(self):
@@ -474,7 +494,7 @@ class Config:
         return problems
 
     def validate(self):
-        problems = self.mail_problems() + self.google_problems()
+        problems = self.mail_problems() + self.google_problems() + self.site_problems()
         # Токен из .env необязателен: токены приёма создаются на странице /boards.
         if self.ingest_token and len(self.ingest_token) < 24:
             problems.append("DASH_INGEST_TOKEN: нужен токен не короче 24 символов (или уберите его из .env)")
@@ -761,7 +781,17 @@ class Store:
     def _connect(self):
         cx = sqlite3.connect(self.path, timeout=10)
         cx.execute("PRAGMA synchronous=NORMAL")
+        cx.execute("PRAGMA secure_delete=ON")   # удалённое затирается нулями, а не лежит в свободных страницах файла
         return cx
+
+    def _checkpoint(self):
+        """Старые страницы остаются в основном файле, пока журнал (WAL) не перенесён в него: после удаления данных человека
+        переносим сразу и усекаем журнал, чтобы удалённое не пережило удаление."""
+        try:
+            with closing(self._connect()) as cx:
+                cx.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+        except sqlite3.Error:
+            LOG.warning("не удалось перенести журнал базы после удаления данных: удалённое останется в файле до очередного переноса")
 
     # --- запись ---------------------------------------------------------------------------
     def ingest(self, device, body, now=None):
@@ -1045,6 +1075,7 @@ class Store:
             if cx.execute("SELECT 1 FROM tokens WHERE device=? AND revoked_at IS NULL", (device,)).fetchone():
                 raise Conflict("у платы есть действующие токены: сначала отзовите их")
             self._delete_board_rows(cx, device)
+        self._checkpoint()
         return True
 
     @staticmethod
@@ -1283,6 +1314,38 @@ class Store:
             cx.execute("DELETE FROM sessions WHERE user_id=? AND token_hash != ?", (user_id, keep))
             cx.execute("DELETE FROM mail_tokens WHERE user_id=? AND kind='reset'", (user_id,))   # письмо о сбросе, пришедшее раньше, теряет силу
 
+    def _password_ok(self, pass_hash, password):
+        """Подходит ли пароль к записи (у администратора пароль из .env; у записи из Google пароля нет и подойти нечему)."""
+        if not isinstance(password, str) or len(password) > PASSWORD_MAX or pass_hash == NO_PASSWORD_MARK:
+            return False
+        return self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK else verify_password(password, pass_hash)
+
+    def check_password(self, user_id, password):
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT pass_hash FROM users WHERE id=?", (user_id,)).fetchone()
+        return row is not None and self._password_ok(row[0], password)
+
+    def session_age(self, token, now=None):
+        """Сколько секунд назад начат этот вход (создана сессия) или None, если такой сессии нет."""
+        now = int(time.time() if now is None else now)
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT created_at FROM sessions WHERE token_hash=?", (self._session_hash(token or ""),)).fetchone()
+        return None if row is None else max(0, now - row[0])
+
+    def purge_user_data(self, user_id):
+        """Стирает показания, журнал и историю настроек всех плат человека (право на удаление данных). Сами платы и их токены
+        остаются: плата продолжит присылать новые показания, пока токен не отозван. -> {"boards", "samples", "logs"}."""
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            devices = [device for (device,) in cx.execute("SELECT device FROM boards WHERE owner_id=?", (user_id,)).fetchall()]
+            counts = {"boards": len(devices), "samples": 0, "logs": 0}
+            for device in devices:
+                counts["samples"] += cx.execute("DELETE FROM samples WHERE device=?", (device,)).rowcount
+                counts["logs"] += cx.execute("DELETE FROM logs WHERE device=?", (device,)).rowcount
+                for table in ("devices", "device_cfg", "cfg_changes"):
+                    cx.execute("DELETE FROM %s WHERE device=?" % table, (device,))
+        self._checkpoint()
+        return counts
+
     # --- почта: адрес, подтверждение, восстановление пароля ---------------------------------
     @staticmethod
     def _mail_hash(token):
@@ -1325,8 +1388,7 @@ class Store:
         if row is None:
             raise ValueError("человек не найден")
         pass_hash, current, verified = row
-        if pass_hash != NO_PASSWORD_MARK and (not isinstance(password, str) or not (
-                self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK else verify_password(password, pass_hash))):
+        if pass_hash != NO_PASSWORD_MARK and not self._password_ok(pass_hash, password):
             raise WrongPassword("пароль неверен")     # у записи из Google пароля нет: подтверждением служит вход
         if verified and current == email:
             raise Conflict("этот адрес уже подтверждён")
@@ -1528,6 +1590,7 @@ class Store:
             cx.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             cx.execute("DELETE FROM mail_tokens WHERE user_id=?", (user_id,))
             cx.execute("DELETE FROM users WHERE id=?", (user_id,))
+        self._checkpoint()
         return True
 
     # --- чтение ---------------------------------------------------------------------------
@@ -1627,6 +1690,36 @@ def mail_text(kind, username, link, ttl_text):
 
 
 TTL_TEXT = {"email": "сутки", "reset": "час"}
+
+
+def deleted_mail_text(username, contact, site):
+    """Последнее письмо после удаления записи: так владелец адреса узнает, если запись удалил кто-то другой. Оно не обещает
+    больше, чем сделано: из рабочей базы всё стёрто сразу, а следы в копиях и журналах живут до сроков из политики."""
+    reach = ("напишите оператору сервиса: %s" % contact) if contact else "напишите оператору сервиса"
+    return ("MicroGarden: аккаунт удалён",
+            "Здравствуйте, %s!\n\n"
+            "Ваш аккаунт в панели MicroGarden и все связанные с ним данные (платы, токены, показания, журналы) удалены из рабочей "
+            "базы по запросу из вашей записи. Следы могут какое-то время оставаться в резервных копиях и журналах сервера: сроки "
+            "названы в политике конфиденциальности (%s/privacy). Это письмо последнее, больше мы вам не пишем.\n\n"
+            "Если аккаунт удалили не вы, %s. Восстановить удалённое нельзя, но можно выяснить, как это произошло.\n"
+            "\n--\nMicroGarden, панель телеметрии. Письмо отправлено автоматически.\n" % (username, site, reach))
+
+
+LEGAL_FIELD_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
+
+
+def legal_text(cfg, name):
+    """Страница политики или условий: файл, в который подставлены оператор, адрес для обращений и сроки хранения из
+    настроек сервера. Всё подставляемое экранируется; не заданное в настройках видно как красная пометка «не указан»."""
+    todo = '<span class="todo">не указан: задайте %s в .env</span>'
+    contact = html.escape(cfg.contact_email, quote=True)
+    values = {
+        "OPERATOR": html.escape(cfg.operator_name) if cfg.operator_name else todo % "DASH_OPERATOR_NAME",
+        "CONTACT": '<a href="mailto:%s">%s</a>' % (contact, contact) if cfg.contact_email else todo % "DASH_CONTACT_EMAIL",
+        "RETENTION_DAYS": str(cfg.retention_days), "LOG_RETENTION_DAYS": str(cfg.log_retention_days),
+        "SESSION_DAYS": str(cfg.session_days), "SITE": html.escape(cfg.public_url or "адрес этого сайта"),
+    }
+    return LEGAL_FIELD_RE.sub(lambda match: values[match.group(1)], (STATIC_DIR / name).read_text(encoding="utf-8"))
 
 
 class Mailer:
@@ -2101,6 +2194,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._google_start(query) if path == "/auth/google" else self._google_callback(query)
             if path in OPEN_PAGES and reading:
                 return self._page(OPEN_PAGES[path])
+            if path in LEGAL_PAGES and reading:
+                return self._send(200, legal_text(self.server.cfg, LEGAL_PAGES[path]).encode("utf-8"), HTML, {"Cache-Control": "no-cache"})
 
             try:
                 who = self._principal()
@@ -2133,6 +2228,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._account_password(who)
             if path in ("/api/account/email", "/api/account/email/resend"):
                 return self._account_email(path, who)
+            if path in ("/api/account/delete", "/api/account/data/delete"):
+                return self._account_erase(path, who)
             if path.startswith("/api/admin/"):
                 return self._admin_api(path, who)
             if path in ("/api/boards", "/api/tokens") or path.startswith(("/api/boards/", "/api/tokens/")):
@@ -2436,6 +2533,46 @@ class Handler(BaseHTTPRequestHandler):
         server.mail_ip_limiter.fail(ip)
         sent = server.send_link("email", email, token, who["username"])
         return self._json(200, {"ok": True, "mail_sent": sent, "email": store.email_state(who["id"])})
+
+    # --- удаление своих данных и записи (право на удаление) --------------------------------
+    def _account_erase(self, path, who):
+        """Стереть показания, журналы и историю настроек своих плат (платы и токены остаются) или удалить всю запись.
+        Запись с паролем подтверждается паролем, запись из Google (пароля нет) свежим входом; имя вводится в любом случае."""
+        if not self._action("POST", "POST"):
+            return None
+        server, store, ip = self.server, self.server.store, self._client_ip()
+        if server.limiter.blocked(ip):
+            return self._error(429, "слишком много неудачных попыток", {"Retry-After": "600"})
+        body = self._read_json()
+        if path.endswith("/data/delete"):
+            if body.get("confirm") is not True:
+                raise ValueError("нужно подтверждение: confirm=true")
+            counts = store.purge_user_data(who["id"])
+            LOG.info("данные плат стёрты по просьбе владельца записи %s: плат %d, замеров %d, строк журнала %d, с %s",
+                     who["username"], counts["boards"], counts["samples"], counts["logs"], ip)
+            return self._json(200, dict(counts, ok=True))
+        if who["role"] == "admin":
+            raise Conflict("аккаунт администратора удаляется только владельцем сервера: он задан в файле .env")
+        confirm = body.get("confirm")
+        if not isinstance(confirm, str) or confirm.strip().lower() != who["username"].lower():
+            raise ValueError("для подтверждения введите своё имя: %s" % who["username"])
+        if store.sign_in_state(who["id"])["has_password"]:
+            if not store.check_password(who["id"], body.get("password")):
+                server.limiter.fail(ip)
+                raise WrongPassword("пароль неверен")
+        else:   # у записи из Google пароля нет: подтверждением служит свежий вход
+            age = store.session_age(self._cookie(SESSION_COOKIE))
+            if age is None or age > DELETE_FRESH_SEC:
+                raise Conflict("для удаления войдите заново через Google и повторите в течение %d минут" % (DELETE_FRESH_SEC // 60))
+        mail = store.email_state(who["id"])
+        address = mail["address"] if mail["verified"] else None     # неподтверждённый адрес мог ввести кто угодно: ему не пишем
+        if not store.delete_user(who["id"]):
+            return self._error(404, "такой записи уже нет")
+        LOG.info("запись удалена по просьбе её владельца: %s, с %s", who["username"], ip)
+        if address and server.mail_allowed(address):
+            server.mail_addr_limiter.fail(address)
+            server.mailer.send(address, *deleted_mail_text(who["username"], server.cfg.contact_email, server.cfg.public_url))
+        return self._json(200, {"ok": True}, self._session_cookie("", 0))
 
     # --- администратор: люди и регистрация ------------------------------------------------
     def _admin_api(self, path, who):

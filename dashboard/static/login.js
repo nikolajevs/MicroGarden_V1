@@ -48,7 +48,9 @@
 
   const params = new URLSearchParams(location.search);
   // После смены пароля по ссылке из письма сюда ведёт /login?reset=1, а после неудачного входа через Google /login?google=код
-  $('notice').hidden = params.get('reset') !== '1';
+  // /login?deleted=1 — человек только что удалил свою запись и все данные
+  if (params.get('deleted') === '1') $('notice').textContent = 'Аккаунт и все данные удалены.';
+  $('notice').hidden = params.get('reset') !== '1' && params.get('deleted') !== '1';
   $('google-link').href = Lib.googleHref(params.get('next'));
   if (params.get('google')) showError(Lib.googleError(params.get('google')));
 
