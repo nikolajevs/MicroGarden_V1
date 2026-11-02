@@ -371,6 +371,22 @@ test('главная без данных: остаются шапка и под�
   assert.match(app, /state\.status = status;\s*state\.fetchedAt = Date\.now\(\);\s*renderStatus\(\);\s*csvLink\(\);\s*if \(series\) for \(const key in CHARTS\) drawChart/);
 });
 
+test('шапка: заголовок «MicroGarden» без V1, а подписи «Телеметрия плат(ы)» под ним нет ни на одной странице', () => {
+  const index = read('static', 'index.html');
+  assert.match(index, /<h1>MicroGarden<\/h1>/);
+  assert.ok(!/V1/.test(index.split('<body>')[1]), 'в разметке главной страницы нет «V1»');
+  for (const file of fs.readdirSync(path.join(__dirname, '..', 'static'))) {
+    const text = read('static', file);
+    assert.ok(!/Телеметрия плат/.test(text), file + ': подпись «Телеметрия плат(ы)» убрана');
+    if (file.endsWith('.html')) assert.ok(!/<h1>MicroGarden V1<\/h1>/.test(text), file + ': заголовок без V1');
+  }
+  // Строка под названием на главной остаётся только для данных платы (плата, прошивка, связь): пока замеров нет, она скрыта
+  assert.match(index, /<p class="sub" id="sub" hidden><\/p>/);
+  const app = read('static', 'app.js');
+  assert.match(app, /\$\('sub'\)\.hidden = true;[^\n]*\n\s*\$\('sub'\)\.textContent = '';/, 'без замеров строка скрыта и пуста');
+  assert.match(app, /\$\('sub'\)\.hidden = false;\s*\n\s*\$\('sub'\)\.textContent = 'Плата ' \+ st\.device/, 'с замерами строка показана');
+});
+
 test('число оповещений на колокольчике прячется атрибутом hidden: правило display не должно его перебивать', () => {
   const css = read('static', 'style.css');
   assert.match(css, /\.bell-count \{[^}]*display: inline-flex/, 'у значка задан display, поэтому атрибут hidden сам его не скроет');

@@ -413,7 +413,8 @@
       pill.className = 'pill pill-wait';
       pill.textContent = 'Плата ещё не присылала данные';
       cards.classList.add('stale');
-      $('sub').textContent = 'Телеметрия платы';
+      $('sub').hidden = true;     // строка под названием нужна только когда есть замеры: тогда в ней плата, прошивка и связь
+      $('sub').textContent = '';
       renderBell([]);
       return;
     }
@@ -426,6 +427,7 @@
     // Неисправности датчиков, часов, SD и измерителя питания показывает колокольчик; здесь остаётся то,
     // что не неисправность: версия прошивки, уровень Wi-Fi и время работы (последние два — только пока плата на связи)
     const info = st.sample || {};
+    $('sub').hidden = false;
     $('sub').textContent = 'Плата ' + st.device + (info.fw ? ' · прошивка ' + info.fw : '') +
       (online && info.rssi !== undefined ? ' · Wi-Fi ' + fmt(info.rssi, 0) + ' дБм' : '') +
       (online && info.uptime_s !== undefined ? ' · работает ' + formatAgo(info.uptime_s) : '');
