@@ -377,8 +377,7 @@ test('главная без данных: остаются шапка и под�
 test('шапка: заголовок «MicroGarden» без V1, а подписи «Телеметрия плат(ы)» под ним нет ни на одной странице', () => {
   const index = read('static', 'index.html');
   assert.match(index, /<h1>MicroGarden<\/h1>/);
-  // (в адресе репозитория в подвале «MicroGarden_V1» есть, это имя проекта на GitHub, а не надпись в шапке)
-  assert.ok(!/V1/.test(index.split('<body>')[1].replace(/https:\/\/github\.com\/[^"]+/g, '')), 'в разметке главной страницы нет «V1»');
+  assert.ok(!/V1/.test(index.split('<body>')[1]), 'в разметке главной страницы нет «V1»');
   for (const file of fs.readdirSync(path.join(__dirname, '..', 'static'))) {
     const text = read('static', file);
     assert.ok(!/Телеметрия плат/.test(text), file + ': подпись «Телеметрия плат(ы)» убрана');

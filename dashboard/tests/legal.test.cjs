@@ -16,12 +16,11 @@ const LINKS = [
   ['/privacy#cookies', 'Файлы cookie'],
   ['/account#delete', 'Удалить данные и аккаунт'],
   ['/privacy#contact', 'Контакты'],
-  ['https://github.com/nikolajevs/MicroGarden_V1', 'Исходный код'],
 ];
 const FIELDS = ['OPERATOR', 'CONTACT', 'RETENTION_DAYS', 'LOG_RETENTION_DAYS', 'SESSION_DAYS', 'SITE'];
 const count = (text, part) => text.split(part).length - 1;
 
-test('подвал: на каждой странице ровно один, с теми же шестью ссылками в том же порядке', () => {
+test('подвал: на каждой странице ровно один, с теми же пятью ссылками в том же порядке', () => {
   assert.ok(PAGES.length >= 12, 'страницы найдены: ' + PAGES.join(', '));
   for (const name of ['index.html', 'boards.html', 'account.html', 'settings.html', 'admin.html', 'login.html', 'register.html',
     'forgot.html', 'reset.html', 'verify.html', 'privacy.html', 'terms.html']) {
@@ -49,14 +48,15 @@ test('подвал стоит последним внутри страницы: 
   }
 });
 
-test('ссылка на внешний сайт открывается без передачи адреса страницы и окна-родителя, остальные ведут на этот же сайт', () => {
+test('подвал ведёт только внутрь сайта, а об исходном коде и репозитории на страницах не говорится', () => {
   for (const name of PAGES) {
-    const footer = read('static', name).match(FOOTER_RE)[0];
+    const html = read('static', name);
+    const footer = html.match(FOOTER_RE)[0];
     for (const [, href, rest] of footer.matchAll(/<a href="([^"]+)"([^>]*)>/g)) {
-      if (/^https?:/.test(href)) assert.match(rest, /rel="noopener"/, name + ': ' + href);
-      else assert.ok(href.startsWith('/') && !href.startsWith('//') && !/rel=/.test(rest), name + ': ' + href + ' внутри сайта');
+      assert.ok(href.startsWith('/') && !href.startsWith('//') && !/rel=|target=/.test(rest), name + ': ' + href + ' внутри сайта, в той же вкладке');
     }
-    assert.ok(!/target=/.test(footer), name + ': ссылки открываются в той же вкладке');
+    // владелец просил не упоминать исходный код: ни ссылки в подвале, ни фразы в политике
+    assert.ok(!/github\.com|[Ии]сходный код|[Рр]епозитори/.test(html), name + ': нет упоминаний об исходном коде');
   }
 });
 
