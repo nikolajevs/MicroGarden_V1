@@ -116,10 +116,25 @@ test('страницы входа и регистрации показывают
   assert.match(login, /\$\('google-link'\)\.href = Lib\.googleHref\(params\.get\('next'\)\);/, 'после входа человека вернут туда, куда он шёл');
   assert.match(login, /if \(params\.get\('google'\)\) showError\(Lib\.googleError\(params\.get\('google'\)\)\);/);
   assert.match(read('static', 'register.js'), /\$\('google-box'\)\.hidden = !\(data\.google && data\.open\);/, 'при закрытой регистрации кнопки нет');
+  const labels = { 'login.html': 'Войти через Google', 'register.html': 'Зарегистрироваться через Google' };
   for (const file of ['login.html', 'register.html']) {
-    assert.match(read('static', file), /<div id="google-box" class="auth-alt" hidden>[\s\S]*<a class="btn" id="google-link" href="\/auth\/google">/, file);
+    const html = read('static', file);
+    assert.match(html, /<div id="google-box" class="auth-alt" hidden>[\s\S]*<a class="btn google" id="google-link" href="\/auth\/google">/, file);
+    // значок: «G» в фирменных цветах, нарисован прямо в странице (CSP внешних картинок не даёт), для экрана скрыт, подпись остаётся текстом
+    const link = html.match(/<a class="btn google" id="google-link"[\s\S]*?<\/a>/)[0];
+    assert.match(link, /<svg viewBox="0 0 48 48"[^>]*aria-hidden="true"/, file + ': значок не читается экраном');
+    for (const colour of ['#EA4335', '#4285F4', '#FBBC05', '#34A853']) assert.ok(link.includes(colour), file + ': цвет значка ' + colour);
+    assert.ok(link.endsWith('<span>' + labels[file] + '</span></a>'), file + ': подпись кнопки');
+    assert.ok(!/<script>/.test(html) && !/ style=/.test(html), file + ': CSP запрещает встроенные скрипты и стили');
   }
-  assert.match(read('static', 'style.css'), /\.auth-alt\[hidden\] \{ display: none; \}/, 'правило display не должно перебивать hidden');
+  const css = read('static', 'style.css');
+  assert.match(css, /\.auth-alt\[hidden\] \{ display: none; \}/, 'правило display не должно перебивать hidden');
+  // Кнопка светлая в любой теме (на тёмной странице синий текст по тёмному фону был плохо виден): тёмный текст по белому
+  const rule = css.match(/\.btn\.google \{([^}]*)\}/)[1];
+  assert.match(rule, /color: #1f1f1f/);
+  assert.match(rule, /background: #fff/);
+  assert.match(rule, /display: inline-flex/);
+  assert.match(css, /\.btn\.google\[hidden\] \{ display: none; \}/);
 });
 
 test('аккаунт: у записи без пароля нет поля «Текущий пароль», а запросы уходят без него', () => {

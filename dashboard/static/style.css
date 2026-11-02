@@ -380,6 +380,12 @@ button.btn:disabled { opacity: .5; cursor: default; }
 .auth-alt[hidden] { display: none; }
 .auth-alt .legend-note { margin: 0; }
 @media (max-width: 520px) { .auth-alt .btn { width: 100%; text-align: center; } }
+/* Кнопка Google светлая в любой теме, чтобы хорошо читалась на тёмной странице; значок — «G» в фирменных цветах */
+.btn.google { display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; color: #1f1f1f; background: #fff; border-color: #747775; }
+.btn.google:hover { background: #f1f3f4; border-color: #1f1f1f; }
+.btn.google[hidden] { display: none; }
+.btn.google svg { flex: 0 0 auto; }
+@media (max-width: 520px) { .btn.google { width: 100%; justify-content: center; } }
 .notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-bg); }
 .notice[hidden] { display: none; }
 .notice a { color: var(--accent); }
