@@ -16,6 +16,9 @@
 Почта (необязательна): если в .env заданы DASH_SMTP_HOST, DASH_MAIL_FROM и DASH_PUBLIC_URL, регистрация просит адрес
 и присылает ссылку для его подтверждения, а забытый пароль восстанавливается по ссылке из письма. Письма уходят через
 внешний SMTP-сервис в фоновом потоке. `python server.py test-mail адрес` отправляет пробное письмо.
+
+Вход через Google (необязателен): если заданы DASH_GOOGLE_CLIENT_ID, DASH_GOOGLE_CLIENT_SECRET и DASH_PUBLIC_URL, на
+страницах входа и регистрации появляется кнопка «Войти через Google» (OpenID Connect, код авторизации с PKCE).
 """
 import base64
 import csv
@@ -36,12 +39,14 @@ import ssl
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from contextlib import closing
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parseaddr
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 HERE = Path(__file__).resolve().parent
 STATIC_DIR = HERE / "static"
@@ -95,6 +100,21 @@ MAIL_DAILY_LIMIT = 100         # писем в сутки на весь серв
 MAIL_QUEUE_MAX = 50
 MAIL_ATTEMPTS = 2              # доставка письма пробуется дважды: сбой сети бывает коротким
 SMTP_TIMEOUT = 20
+
+# Вход через Google: OpenID Connect, код авторизации с PKCE. Подпись ID-токена не проверяется: токен приходит прямо от
+# Google по TLS в ответ на запрос с секретом клиента, и по OpenID Connect Core (3.1.3.7) этого достаточно; проверяются
+# издатель, получатель, срок, одноразовое число (nonce) и подтверждённая почта. Так хватает одной стандартной библиотеки.
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+GOOGLE_CALLBACK = "/auth/google/callback"            # этот адрес возврата записывается в консоли Google
+GOOGLE_CLIENT_ID_RE = re.compile(r"[A-Za-z0-9._-]{8,200}\.apps\.googleusercontent\.com")
+GOOGLE_STATE_TTL = 600         # на вход у Google даётся десять минут
+GOOGLE_STATES_MAX = 1000       # незавершённых входов в памяти одновременно
+GOOGLE_PER_IP = 30             # начатых входов через Google с одного адреса за час
+GOOGLE_TIMEOUT = 10
+OAUTH_COOKIE = "dash_oauth"
+NO_PASSWORD_MARK = "!"         # у записи, созданной входом через Google, пароля нет: его задают в «Аккаунте» или по почте
 
 # Числовые поля показаний: имя -> (минимум, максимум, целое). Всё, что вне диапазона или не
 # число, отбрасывается: плата с повреждённым ответом датчика не должна ломать графики.
@@ -385,6 +405,25 @@ class Config:
         self.mail_from = env.get("DASH_MAIL_FROM", "").strip()
         self.mail_reply_to = env.get("DASH_MAIL_REPLY_TO", "").strip()
         self.mail_daily_limit = int(env.get("DASH_MAIL_DAILY_LIMIT", str(MAIL_DAILY_LIMIT)))
+        # Вход через Google: идентификатор и секрет клиента из консоли Google, адрес возврата строится из DASH_PUBLIC_URL
+        self.google_client_id = env.get("DASH_GOOGLE_CLIENT_ID", "").strip()
+        self.google_client_secret = env.get("DASH_GOOGLE_CLIENT_SECRET", "").strip()
+
+    @property
+    def google_enabled(self):
+        return bool(self.google_client_id and self.google_client_secret and self.public_url)
+
+    def google_problems(self):
+        """Что не так с настройками входа через Google (пустой список, если всё в порядке или он не настроен совсем)."""
+        problems = []
+        if self.google_client_id or self.google_client_secret:
+            if not GOOGLE_CLIENT_ID_RE.fullmatch(self.google_client_id):
+                problems.append("DASH_GOOGLE_CLIENT_ID: идентификатор клиента вида 123456-abc.apps.googleusercontent.com")
+            if len(self.google_client_secret) < 10:
+                problems.append("DASH_GOOGLE_CLIENT_SECRET: секрет клиента из консоли Google (он задаётся вместе с идентификатором)")
+            if not self.public_url:
+                problems.append("DASH_PUBLIC_URL: для входа через Google нужен адрес сайта, из него строится адрес возврата")
+        return problems
 
     @property
     def mail_enabled(self):
@@ -427,7 +466,7 @@ class Config:
         return problems
 
     def validate(self):
-        problems = self.mail_problems()
+        problems = self.mail_problems() + self.google_problems()
         # Токен из .env необязателен: токены приёма создаются на странице /boards.
         if self.ingest_token and len(self.ingest_token) < 24:
             problems.append("DASH_INGEST_TOKEN: нужен токен не короче 24 символов (или уберите его из .env)")
@@ -496,7 +535,7 @@ CREATE TABLE IF NOT EXISTS users(
   pass_hash TEXT NOT NULL,            -- scrypt$N$r$p$соль$хеш; у администратора 'env': его пароль в .env
   role TEXT NOT NULL DEFAULT 'user',  -- 'admin' (владелец сервера) или 'user'
   created_at INTEGER NOT NULL, last_login_at INTEGER, reg_ip TEXT,
-  disabled INTEGER NOT NULL DEFAULT 0);   -- столбцы email и email_verified_at добавляет Store._migrate_email
+  disabled INTEGER NOT NULL DEFAULT 0);   -- email и email_verified_at добавляет Store._migrate_email, google_sub — _migrate_google
 CREATE TABLE IF NOT EXISTS mail_tokens(
   token_hash TEXT PRIMARY KEY,        -- SHA-256 значения из ссылки в письме; самого значения в базе нет
   user_id INTEGER NOT NULL,
@@ -545,6 +584,14 @@ class Conflict(Exception):
 
 class WrongPassword(ValueError):
     """Неверный текущий пароль при его смене: такие попытки считаются как неудачные входы."""
+
+
+class GoogleRefused(Exception):
+    """Вход через Google верный, но запись войти не может; code уходит на страницу входа (?google=код)."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
 
 
 def clean_name(value):
@@ -665,6 +712,7 @@ class Store:
         self._migrate_boards()
         self._migrate_accounts()
         self._migrate_email()
+        self._migrate_google()
 
     def _migrate_boards(self):
         """При первом запуске с реестром плат уже присылавшие данные платы вносятся в него сами, чтобы
@@ -694,6 +742,13 @@ class Store:
                 cx.execute("ALTER TABLE users ADD COLUMN email_verified_at INTEGER")
             cx.execute("CREATE INDEX IF NOT EXISTS users_email ON users(email)")
             cx.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_verified ON users(email) WHERE email_verified_at IS NOT NULL")
+
+    def _migrate_google(self):
+        """Запись, созданная входом через Google или связанная с ним, хранит неизменный идентификатор человека у Google (sub)."""
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            if "google_sub" not in [row[1] for row in cx.execute("PRAGMA table_info(users)")]:
+                cx.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+            cx.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
 
     def _connect(self):
         cx = sqlite3.connect(self.path, timeout=10)
@@ -1153,6 +1208,9 @@ class Store:
             verify_password(password, dummy_hash())
             return None
         user_id, name, pass_hash, role, disabled = row
+        if pass_hash == NO_PASSWORD_MARK:     # запись создана входом через Google: пароля нет; время ответа то же, что при неверном
+            verify_password(password, dummy_hash())
+            return None
         ok = self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK else verify_password(password, pass_hash)
         if not ok or disabled:
             return None
@@ -1200,15 +1258,15 @@ class Store:
             cx.execute("DELETE FROM mail_tokens WHERE expires_at <= ?", (now,))
 
     def change_password(self, user_id, old_password, new_password, keep_token=None):
-        """Смена своего пароля: остальные сессии этого человека закрываются, текущая остаётся.
-        Пароль администратора задаётся в .env и здесь не меняется."""
+        """Смена своего пароля: остальные сессии этого человека закрываются, текущая остаётся. У записи, созданной входом
+        через Google, пароля нет, и первый задаётся без текущего. Пароль администратора задаётся в .env и здесь не меняется."""
         with closing(self._connect()) as cx:
             row = cx.execute("SELECT username, pass_hash FROM users WHERE id=?", (user_id,)).fetchone()
         if row is None:
             raise ValueError("человек не найден")
         if row[1] == ADMIN_PASSWORD_MARK:
             raise Conflict("пароль администратора задаётся в файле .env на сервере")
-        if not verify_password(old_password if isinstance(old_password, str) else "", row[1]):
+        if row[1] != NO_PASSWORD_MARK and not verify_password(old_password if isinstance(old_password, str) else "", row[1]):
             raise WrongPassword("текущий пароль неверен")
         new_hash = hash_password(clean_password(new_password, row[0]))
         keep = self._session_hash(keep_token) if keep_token else ""
@@ -1259,9 +1317,9 @@ class Store:
         if row is None:
             raise ValueError("человек не найден")
         pass_hash, current, verified = row
-        if not isinstance(password, str) or not (self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK
-                                                 else verify_password(password, pass_hash)):
-            raise WrongPassword("пароль неверен")
+        if pass_hash != NO_PASSWORD_MARK and (not isinstance(password, str) or not (
+                self.check_admin_password(password) if pass_hash == ADMIN_PASSWORD_MARK else verify_password(password, pass_hash))):
+            raise WrongPassword("пароль неверен")     # у записи из Google пароля нет: подтверждением служит вход
         if verified and current == email:
             raise Conflict("этот адрес уже подтверждён")
         with self._write_lock, closing(self._connect()) as cx, cx:
@@ -1343,16 +1401,75 @@ class Store:
                 cx.execute("DELETE FROM mail_tokens WHERE kind='email' AND email=?", (email,))
         return {"username": username}
 
+    # --- вход через Google ------------------------------------------------------------------
+    def sign_in_state(self, user_id):
+        """Как человек входит: есть ли у записи пароль и привязан ли Google."""
+        with closing(self._connect()) as cx:
+            row = cx.execute("SELECT pass_hash, google_sub IS NOT NULL FROM users WHERE id=?", (user_id,)).fetchone()
+        return {"has_password": bool(row) and row[0] != NO_PASSWORD_MARK, "google": bool(row and row[1])}
+
+    @staticmethod
+    def _free_username(cx, email):
+        """Имя для новой записи из Google: начало адреса почты, а если занято, с четырьмя цифрами."""
+        base = re.sub(r"[^A-Za-z0-9_.-]", "_", email.partition("@")[0]).strip("._-")[:24] or "user"
+        while len(base) < 3:
+            base += "x"
+        if base.lower() in RESERVED_USERNAMES:
+            base = "g-" + base
+        for name in [base] + ["%s-%04d" % (base, secrets.randbelow(10000)) for _ in range(30)]:
+            if USERNAME_RE.fullmatch(name) and not cx.execute("SELECT 1 FROM users WHERE username=?", (name,)).fetchone():
+                return name
+        raise GoogleRefused("full", "не удалось подобрать имя для новой записи")
+
+    def google_login(self, sub, email, ip=None, now=None):
+        """Человек подтвердил себя у Google: sub — его постоянный идентификатор, email — адрес, который Google подтвердил.
+        -> ({"id", "username", "role"}, создана ли новая запись). Порядок: 1) запись с этим sub; 2) запись с этим
+        подтверждённым адресом получает sub (вход по почте и через Google ведёт в одну запись); 3) иначе создаётся запись без
+        пароля с уже подтверждённым адресом. Чужие неподтверждённые заявки на адрес при этом снимаются: адрес принадлежит
+        тому, кто владеет почтой, и запись, заведённая заранее на чужой адрес, входа в эту не даёт. Администратор входит
+        только по паролю из .env. Нельзя войти: GoogleRefused."""
+        now = int(time.time() if now is None else now)
+        created = False
+        with self._write_lock, closing(self._connect()) as cx, cx:
+            row = cx.execute("SELECT id, username, role, disabled FROM users WHERE google_sub=?", (sub,)).fetchone()
+            if row is None:
+                found = cx.execute("SELECT id, username, role, disabled, google_sub FROM users WHERE email=? AND email_verified_at IS NOT NULL",
+                                   (email,)).fetchone()
+                if found is not None:
+                    if found[4] is not None:     # запись уже связана с другим Google-человеком (адрес мог достаться новому владельцу)
+                        raise GoogleRefused("other", "эта запись уже связана с другим аккаунтом Google")
+                    if found[2] != "admin" and not found[3]:
+                        cx.execute("UPDATE users SET google_sub=? WHERE id=?", (sub, found[0]))
+                    row = found[:4]
+            if row is None:
+                if not self.registration_open():
+                    raise GoogleRefused("closed", "регистрация закрыта")
+                if cx.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= self.max_users:
+                    raise GoogleRefused("full", "на сервере уже %d человек" % self.max_users)
+                cx.execute("UPDATE users SET email=NULL WHERE email=? AND email_verified_at IS NULL", (email,))
+                cx.execute("DELETE FROM mail_tokens WHERE email=?", (email,))
+                username = self._free_username(cx, email)
+                user_id = cx.execute("INSERT INTO users(username, pass_hash, role, created_at, reg_ip, email, email_verified_at, google_sub)"
+                                     " VALUES (?, ?, 'user', ?, ?, ?, ?, ?)", (username, NO_PASSWORD_MARK, now, ip, email, now, sub)).lastrowid
+                row, created = (user_id, username, "user", 0), True
+            if row[2] == "admin":
+                raise GoogleRefused("admin", "администратор входит только по паролю")
+            if row[3]:
+                raise GoogleRefused("blocked", "запись заблокирована")
+            cx.execute("UPDATE users SET last_login_at=? WHERE id=?", (now, row[0]))
+        return {"id": row[0], "username": row[1], "role": row[2]}, created
+
     # --- администратор: люди ---------------------------------------------------------------
     _USER_COLUMNS = ("u.id, u.username, u.role, u.created_at, u.last_login_at, u.disabled, u.reg_ip,"
-                     " (SELECT COUNT(*) FROM boards b WHERE b.owner_id=u.id), u.email, u.email_verified_at")
+                     " (SELECT COUNT(*) FROM boards b WHERE b.owner_id=u.id), u.email, u.email_verified_at,"
+                     " u.google_sub IS NOT NULL")
 
     @staticmethod
     def _user_item(row):
-        user_id, name, role, created, last_login, disabled, reg_ip, boards, email, verified = row
+        user_id, name, role, created, last_login, disabled, reg_ip, boards, email, verified, google = row
         return {"id": user_id, "username": name, "role": role, "created_at": created, "last_login_at": last_login,
                 "disabled": bool(disabled), "reg_ip": reg_ip, "boards": boards, "email": email,
-                "email_verified": bool(verified)}
+                "email_verified": bool(verified), "google": bool(google)}
 
     def list_users(self):
         with closing(self._connect()) as cx:
@@ -1626,6 +1743,127 @@ def describe_mail_error(exc):
     return "%s: %s" % (type(exc).__name__, _smtp_text(exc))
 
 
+class GoogleError(Exception):
+    """Вход через Google не удался; code уходит на страницу входа (?google=код), текст идёт в журнал сервера."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def safe_next(value):
+    """Куда вести после входа: только путь на этом же сайте (то же правило, что AuthLib.safeNext на страницах)."""
+    if not isinstance(value, str) or len(value) > 300 or not value.startswith("/") or value.startswith("//"):
+        return "/"
+    if "\\" in value or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return "/"
+    if value.split("?", 1)[0].split("#", 1)[0] in ("/login", "/register", "/forgot", "/login.html", "/register.html", "/forgot.html"):
+        return "/"
+    return value
+
+
+class GoogleClient:
+    """Вход через Google: OpenID Connect, код авторизации и PKCE. Начатые входы хранятся в памяти: процесс один, а
+    перезапуск лишь заставит начать вход заново."""
+
+    def __init__(self, cfg, post=None):
+        self.cfg = cfg
+        self.post = post or self._post     # тесты подменяют: принимает поля формы, возвращает ответ Google (словарь)
+        self._lock = threading.Lock()
+        self._states = {}                  # state -> (когда начат, nonce, verifier, куда вести после входа)
+
+    @property
+    def enabled(self):
+        return self.cfg.google_enabled
+
+    @property
+    def redirect_uri(self):
+        return self.cfg.public_url + GOOGLE_CALLBACK
+
+    def begin(self, next_path="/", now=None):
+        """Начало входа. -> (state: его же кладут в cookie, адрес страницы Google)."""
+        now = time.time() if now is None else now
+        state, nonce, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(24), secrets.token_urlsafe(48)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+        with self._lock:
+            if len(self._states) >= GOOGLE_STATES_MAX:
+                self._states = {k: v for k, v in self._states.items() if now - v[0] < GOOGLE_STATE_TTL}
+                if len(self._states) >= GOOGLE_STATES_MAX:
+                    raise GoogleError("busy", "слишком много незавершённых входов")
+            self._states[state] = (now, nonce, verifier, next_path)
+        query = urlencode({"client_id": self.cfg.google_client_id, "redirect_uri": self.redirect_uri, "response_type": "code",
+                           "scope": "openid email", "state": state, "nonce": nonce, "code_challenge": challenge,
+                           "code_challenge_method": "S256", "prompt": "select_account"})
+        return state, GOOGLE_AUTH_URL + "?" + query
+
+    def forget(self, state):
+        with self._lock:
+            self._states.pop(state, None)
+
+    def finish(self, state, code, now=None):
+        """Обмен кода на ID-токен и проверка его утверждений. -> {"sub", "email", "next"}; не вышло: GoogleError."""
+        now = time.time() if now is None else now
+        with self._lock:
+            record = self._states.pop(state, None)         # одноразово: повторить тот же адрес возврата нельзя
+        if record is None or now - record[0] > GOOGLE_STATE_TTL:
+            raise GoogleError("state", "вход не начинали или он устарел")
+        if not isinstance(code, str) or not 1 <= len(code) <= 2048:
+            raise GoogleError("error", "в адресе возврата нет кода авторизации")
+        try:
+            answer = self.post({"code": code, "client_id": self.cfg.google_client_id, "client_secret": self.cfg.google_client_secret,
+                                "redirect_uri": self.redirect_uri, "grant_type": "authorization_code", "code_verifier": record[2]})
+        except (OSError, ValueError) as exc:               # сеть, TLS, ответ не JSON
+            raise GoogleError("error", "обмен кода не удался: %s %s" % (type(exc).__name__, getattr(exc, "code", ""))) from None
+        if not isinstance(answer, dict) or not isinstance(answer.get("id_token"), str):
+            reason = answer.get("error") if isinstance(answer, dict) else None
+            raise GoogleError("error", "Google не выдал ID-токен: %s" % redact_emails(str(reason)[:60]))   # invalid_grant, redirect_uri_mismatch…
+        claims = self._claims(answer["id_token"], record[1], now)
+        claims["next"] = record[3]
+        return claims
+
+    def _claims(self, id_token, nonce, now):
+        parts = id_token.split(".")
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)).decode("utf-8")) if len(parts) == 3 else None
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict):
+            raise GoogleError("error", "ID-токен неверного вида")
+        client_id, audience = self.cfg.google_client_id, payload.get("aud")
+        audiences = audience if isinstance(audience, list) else [audience]
+        if payload.get("iss") not in GOOGLE_ISSUERS:
+            raise GoogleError("error", "ID-токен выдан не Google")
+        if client_id not in audiences or (len(audiences) > 1 and payload.get("azp") != client_id):
+            raise GoogleError("error", "ID-токен выдан другому приложению")
+        exp, iat = payload.get("exp"), payload.get("iat")
+        if isinstance(exp, bool) or not isinstance(exp, (int, float)) or exp <= now - 60:
+            raise GoogleError("error", "ID-токен просрочен")
+        if isinstance(iat, (int, float)) and not isinstance(iat, bool) and iat > now + 300:
+            raise GoogleError("error", "ID-токен выдан «в будущем»: часы сервера расходятся с Google")
+        if not isinstance(payload.get("nonce"), str) or not hmac.compare_digest(payload["nonce"].encode("utf-8"), nonce.encode("utf-8")):
+            raise GoogleError("state", "в ID-токене чужое одноразовое число (nonce)")
+        sub = payload.get("sub")
+        if not isinstance(sub, str) or not 1 <= len(sub) <= 255:
+            raise GoogleError("error", "в ID-токене нет идентификатора человека")
+        verified = payload.get("email_verified")
+        if not (verified is True or verified == "true"):
+            raise GoogleError("unverified", "Google не подтвердил адрес почты")
+        try:
+            email = clean_email(payload.get("email"))
+        except ValueError:
+            raise GoogleError("email", "адрес почты из Google не принят") from None
+        return {"sub": sub, "email": email}
+
+    def _post(self, form):
+        request = urllib.request.Request(GOOGLE_TOKEN_URL, data=urlencode(form).encode("ascii"), method="POST",
+                                         headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=GOOGLE_TIMEOUT, context=ssl.create_default_context()) as response:
+                return json.loads(response.read(65536).decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return json.loads(exc.read(4096).decode("utf-8"))   # 400 {"error": "invalid_grant"…}: причина нужна журналу; не JSON — ошибка выше
+
+
 class FailureLimiter:
     """Блокирует ключ (адрес, имя) после limit неудачных попыток за window секунд: по умолчанию 10 за 10 минут."""
 
@@ -1714,7 +1952,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
         if ctype.startswith("text/html"):
             self.send_header("Content-Security-Policy", CSP)
-        for key, value in (headers or {}).items():
+        # headers: словарь или список пар (когда нужно несколько Set-Cookie в одном ответе)
+        for key, value in (headers.items() if isinstance(headers, dict) else headers or ()):
             self.send_header(key, value)
         self.end_headers()
         if self.command != "HEAD":
@@ -1727,8 +1966,8 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, status, message, headers=None):
         self._json(status, {"ok": False, "error": message}, headers)
 
-    def _redirect(self, location):
-        self._send(302, b"", "text/plain; charset=utf-8", {"Location": location})
+    def _redirect(self, location, cookies=()):
+        self._send(302, b"", "text/plain; charset=utf-8", [("Location", location)] + [("Set-Cookie", value) for value in cookies])
 
     def _page(self, name):
         self._send(200, (STATIC_DIR / name).read_bytes(), HTML, {"Cache-Control": "no-cache"})
@@ -1752,6 +1991,12 @@ class Handler(BaseHTTPRequestHandler):
         secure = self.headers.get("X-Forwarded-Proto") == "https" or self.server.cfg.cookie_secure
         return {"Set-Cookie": "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d%s"
                 % (SESSION_COOKIE, token, max_age, "; Secure" if secure else "")}
+
+    def _oauth_cookie(self, state, max_age):
+        """Cookie связывает начатый вход через Google с этим браузером (защита от подмены входа): путь только /auth/google,
+        SameSite=Lax, чтобы браузер вернул её при переходе обратно со страницы Google."""
+        secure = self.headers.get("X-Forwarded-Proto") == "https" or self.server.cfg.cookie_secure
+        return "%s=%s; Path=/auth/google; HttpOnly; SameSite=Lax; Max-Age=%d%s" % (OAUTH_COOKIE, state, max_age, "; Secure" if secure else "")
 
     def _principal(self):
         """Кто вошёл: {"id", "username", "role"} или None. Сначала сессия по cookie; для скриптов администратор
@@ -1844,6 +2089,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._register()
             if path in ("/api/forgot", "/api/verify", "/api/reset", "/api/reset/check"):
                 return self._mail_api(path)
+            if path in ("/auth/google", GOOGLE_CALLBACK) and self.command == "GET":
+                return self._google_start(query) if path == "/auth/google" else self._google_callback(query)
             if path in OPEN_PAGES and reading:
                 return self._page(OPEN_PAGES[path])
 
@@ -1868,9 +2115,10 @@ class Handler(BaseHTTPRequestHandler):
 
             # --- дальше только для вошедших ---
             if path == "/api/me" and reading:
-                return self._json(200, {"user": who, "registration_open": self.server.store.registration_open(),
-                                        "mail_enabled": self.server.mailer.enabled,
-                                        "email": self.server.store.email_state(who["id"])})
+                return self._json(200, dict({"user": who, "registration_open": self.server.store.registration_open(),
+                                             "mail_enabled": self.server.mailer.enabled,
+                                             "email": self.server.store.email_state(who["id"])},
+                                            **self.server.store.sign_in_state(who["id"])))
             if path == "/api/logout":
                 return self._logout()
             if path == "/api/account/password":
@@ -2054,6 +2302,54 @@ class Handler(BaseHTTPRequestHandler):
             server.limiter.fail(ip)
             raise
         return self._json(200, {"ok": True})
+
+    # --- вход через Google ---------------------------------------------------------------
+    def _google_start(self, query):
+        """Начало входа: человека отправляют на страницу Google, а в браузере остаётся cookie с тем же state."""
+        server, ip = self.server, self._client_ip()
+        if not server.google.enabled:
+            return self._error(404, "вход через Google на этом сервере не настроен")
+        if server.google_ip_limiter.blocked(ip):
+            return self._redirect("/login?google=limit")
+        server.google_ip_limiter.fail(ip)
+        try:
+            state, url = server.google.begin(safe_next((query.get("next") or [""])[0]))
+        except GoogleError as exc:
+            LOG.warning("вход через Google: %s, с %s", exc, ip)
+            return self._redirect("/login?google=" + exc.code)
+        return self._redirect(url, [self._oauth_cookie(state, GOOGLE_STATE_TTL)])
+
+    def _google_callback(self, query):
+        """Возврат со страницы Google. Вход засчитывается, только если state из адреса совпал с cookie этого браузера и
+        с начатым входом, а ID-токен прошёл проверки; любой исход убирает cookie."""
+        server, store, ip = self.server, self.server.store, self._client_ip()
+        if not server.google.enabled:
+            return self._error(404, "вход через Google на этом сервере не настроен")
+        clear = self._oauth_cookie("", 0)
+
+        def back(code):
+            return self._redirect("/login?google=" + code, [clear])
+
+        state, code = (query.get("state") or [""])[0], (query.get("code") or [""])[0]
+        if (query.get("error") or [""])[0]:                 # человек отказался или Google отклонил запрос
+            server.google.forget(state)
+            return back("denied")
+        cookie = self._cookie(OAUTH_COOKIE)
+        if not state or not cookie or not hmac.compare_digest(state.encode("utf-8"), cookie.encode("utf-8")):
+            server.google.forget(state)
+            server.google_ip_limiter.fail(ip)
+            return back("state")
+        try:
+            claims = server.google.finish(state, code)
+            who, created = store.google_login(claims["sub"], claims["email"], ip)
+        except (GoogleError, GoogleRefused) as exc:
+            LOG.warning("вход через Google не удался: %s, с %s", exc, ip)
+            server.google_ip_limiter.fail(ip)
+            return back(exc.code)
+        LOG.info("вход через Google: %s%s, с %s", who["username"], " (новая запись)" if created else "", ip)
+        token = store.create_session(who["id"], ip)
+        target = claims["next"] if claims["next"] != "/" or not created else "/boards"
+        return self._redirect(target, [self._session_cookie(token, store.session_days * 86400)["Set-Cookie"], clear])
 
     # --- почта: восстановление пароля, подтверждение адреса, свой адрес --------------------
     def _mail_api(self, path):
@@ -2350,6 +2646,8 @@ class DashServer(ThreadingHTTPServer):
         self.ingest_gate = RateGate(INGEST_MIN_GAP)
         self.cfg_gate = RateGate(2)                                      # запросы на смену настроек: не чаще раза в 2 с на человека и плату
         self.mailer = Mailer(cfg)
+        self.google = GoogleClient(cfg)
+        self.google_ip_limiter = FailureLimiter(limit=GOOGLE_PER_IP, window=3600)       # начатые входы через Google и неудачные возвраты
         self.mail_ip_limiter = FailureLimiter(limit=MAIL_PER_IP, window=3600)           # запросы, после которых уходит письмо
         self.mail_addr_limiter = FailureLimiter(limit=MAIL_PER_ADDRESS, window=3600)    # письма на один адрес
         self.token_limiter = FailureLimiter(limit=20, window=600)                       # недействительные ссылки из писем
@@ -2360,7 +2658,7 @@ class DashServer(ThreadingHTTPServer):
 
     def registration_info(self):
         """Что страницам входа знать до входа: открыта ли регистрация и какие способы входа и почты есть."""
-        return {"open": self.store.registration_open(), "mail": self.mailer.enabled, "google": False}
+        return {"open": self.store.registration_open(), "mail": self.mailer.enabled, "google": self.google.enabled}
 
     def mail_allowed(self, email):
         """Можно ли слать письмо на этот адрес (почта настроена, за час на него ушло меньше MAIL_PER_ADDRESS писем).

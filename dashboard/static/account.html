@@ -39,7 +39,7 @@
           <span class="label">Новый адрес</span>
           <input class="input" id="email-new" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
         </label>
-        <label class="field">
+        <label class="field" id="email-password-field">
           <span class="label">Текущий пароль</span>
           <input class="input" id="email-password" type="password" autocomplete="current-password" maxlength="128" required>
         </label>
@@ -53,8 +53,10 @@
   <section class="panel" aria-labelledby="password-title">
     <h2 id="password-title">Сменить пароль</h2>
     <p id="admin-note" class="legend-note" hidden>Пароль администратора задаётся в файле .env на сервере (DASH_VIEW_PASSWORD) и здесь не меняется.</p>
+    <p id="google-state" class="legend-note" hidden>К записи подключён вход через Google.</p>
+    <p id="no-password" class="legend-note" hidden>Пароля у записи пока нет: вы входите через Google. Задайте его, чтобы входить и по имени или почте.</p>
     <form id="password-form" class="auth-form" novalidate>
-      <label class="field">
+      <label class="field" id="old-field">
         <span class="label">Текущий пароль</span>
         <input class="input" id="old" type="password" autocomplete="current-password" maxlength="128" required>
       </label>

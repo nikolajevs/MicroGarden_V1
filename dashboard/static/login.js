@@ -35,17 +35,22 @@
     }
   });
 
-  // Если регистрация закрыта, ссылки на неё не показываем; «Забыли пароль?» только там, где настроена почта
+  // Если регистрация закрыта, ссылки на неё не показываем; «Забыли пароль?» только там, где настроена почта, а кнопка
+  // «Войти через Google» только там, где настроен вход через Google
   fetch('/api/registration', { cache: 'no-store' })
     .then((res) => res.json())
     .then((data) => {
       $('register-note').hidden = !data.open;
       $('forgot-note').hidden = !data.mail;
+      $('google-box').hidden = !data.google;
     })
     .catch(() => { /* без ответа ссылка остаётся: страница регистрации сама скажет, закрыта ли она */ });
 
-  // После смены пароля по ссылке из письма сюда ведёт /login?reset=1
-  $('notice').hidden = new URLSearchParams(location.search).get('reset') !== '1';
+  const params = new URLSearchParams(location.search);
+  // После смены пароля по ссылке из письма сюда ведёт /login?reset=1, а после неудачного входа через Google /login?google=код
+  $('notice').hidden = params.get('reset') !== '1';
+  $('google-link').href = Lib.googleHref(params.get('next'));
+  if (params.get('google')) showError(Lib.googleError(params.get('google')));
 
   $('username').focus();
 })();

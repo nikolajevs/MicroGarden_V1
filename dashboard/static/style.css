@@ -376,6 +376,10 @@ button.btn:disabled { opacity: .5; cursor: default; }
 .auth-form[hidden], .empty[hidden], .field[hidden], .btn[hidden] { display: none; }   /* display у этих правил сильнее атрибута hidden */
 .auth-form .btn { justify-self: start; }
 @media (max-width: 520px) { .auth-form .btn { width: 100%; } }
+.auth-alt { display: grid; gap: 8px; justify-items: start; margin: 4px 0 12px; }
+.auth-alt[hidden] { display: none; }
+.auth-alt .legend-note { margin: 0; }
+@media (max-width: 520px) { .auth-alt .btn { width: 100%; text-align: center; } }
 .notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-bg); }
 .notice[hidden] { display: none; }
 .notice a { color: var(--accent); }

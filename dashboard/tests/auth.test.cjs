@@ -70,6 +70,70 @@ test('новый пароль по ссылке из письма и смена 
   assert.match(Lib.validateEmailChange('new@example.com', '').error, /пароль/);
 });
 
+test('запись из Google: первый пароль и первая смена почты не требуют текущего пароля', () => {
+  assert.deepEqual(Lib.validatePasswordChange('', 'brand new password', 'brand new password', 'ivan', false), { ok: true, new: 'brand new password' });
+  assert.match(Lib.validatePasswordChange('', 'short', 'short', 'ivan', false).error, /Пароль/, 'новый пароль проверяется так же');
+  assert.match(Lib.validatePasswordChange('', 'brand new password', 'other new password', 'ivan', false).error, /не совпадают/);
+  assert.match(Lib.validatePasswordChange('', 'brand new password', 'brand new password', 'ivan', true).error, /текущий/, 'у записи с паролем он нужен');
+  assert.match(Lib.validatePasswordChange('', 'brand new password', 'brand new password', 'ivan').error, /текущий/, 'по умолчанию нужен');
+  assert.deepEqual(Lib.validateEmailChange('New@Example.com', '', false), { ok: true, email: 'new@example.com' });
+  assert.match(Lib.validateEmailChange('bad', '', false).error, /Почта/);
+  assert.match(Lib.validateEmailChange('new@example.com', '', true).error, /пароль/);
+});
+
+test('вход через Google: тексты ошибок и адрес кнопки', () => {
+  assert.equal(Lib.googleError(''), '');
+  assert.equal(Lib.googleError(null), '');
+  assert.equal(Lib.googleError('unknown-code'), Lib.GOOGLE_ERRORS.error, 'незнакомый код даёт общее сообщение');
+  assert.equal(Lib.googleError('__proto__'), Lib.GOOGLE_ERRORS.error, 'код из адреса не должен вытаскивать служебные свойства');
+  for (const [code, text] of Object.entries(Lib.GOOGLE_ERRORS)) assert.ok(text.length > 10 && text.endsWith('.'), code);
+  assert.equal(new Set(Object.values(Lib.GOOGLE_ERRORS)).size, Object.keys(Lib.GOOGLE_ERRORS).length, 'у каждого кода свой текст');
+  assert.equal(Lib.googleHref(null), '/auth/google');
+  assert.equal(Lib.googleHref('/'), '/auth/google');
+  assert.equal(Lib.googleHref('/settings?device=a-1'), '/auth/google?next=%2Fsettings%3Fdevice%3Da-1');
+  for (const evil of ['https://evil.example/', '//evil.example', '/login', 'javascript:alert(1)', '/a\nb']) assert.equal(Lib.googleHref(evil), '/auth/google', evil);
+});
+
+test('вход через Google: коды ошибок страницы и сервера совпадают, адрес возврата одинаков в коде, README и консоли Google', () => {
+  const server = read('server.py');
+  const codes = new Set([
+    ...[...server.matchAll(/Google(?:Error|Refused)\("(\w+)"/g)].map((m) => m[1]),
+    ...[...server.matchAll(/back\("(\w+)"\)/g)].map((m) => m[1]),
+    ...[...server.matchAll(/"\/login\?google=(\w+)"/g)].map((m) => m[1]),
+  ]);
+  assert.ok(codes.size >= 10, 'найдены коды ошибок сервера: ' + [...codes].join(', '));
+  for (const code of codes) assert.ok(code in Lib.GOOGLE_ERRORS, 'у кода «' + code + '» есть текст на странице входа');
+  for (const code of Object.keys(Lib.GOOGLE_ERRORS)) assert.ok(codes.has(code), 'код «' + code + '» нужен: сервер его выдаёт');
+  assert.match(server, /GOOGLE_CALLBACK = "\/auth\/google\/callback"/);
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  assert.ok(readme.includes('https://dash.dvinsk.lat/auth/google/callback'), 'адрес возврата для консоли Google записан в README');
+  assert.match(server, /"scope": "openid email"/, 'запрашиваются только openid и email');
+});
+
+test('страницы входа и регистрации показывают кнопку Google только там, где вход настроен, а ошибки берут из адреса', () => {
+  const login = read('static', 'login.js');
+  assert.match(login, /\$\('google-box'\)\.hidden = !data\.google;/);
+  assert.match(login, /\$\('google-link'\)\.href = Lib\.googleHref\(params\.get\('next'\)\);/, 'после входа человека вернут туда, куда он шёл');
+  assert.match(login, /if \(params\.get\('google'\)\) showError\(Lib\.googleError\(params\.get\('google'\)\)\);/);
+  assert.match(read('static', 'register.js'), /\$\('google-box'\)\.hidden = !\(data\.google && data\.open\);/, 'при закрытой регистрации кнопки нет');
+  for (const file of ['login.html', 'register.html']) {
+    assert.match(read('static', file), /<div id="google-box" class="auth-alt" hidden>[\s\S]*<a class="btn" id="google-link" href="\/auth\/google">/, file);
+  }
+  assert.match(read('static', 'style.css'), /\.auth-alt\[hidden\] \{ display: none; \}/, 'правило display не должно перебивать hidden');
+});
+
+test('аккаунт: у записи без пароля нет поля «Текущий пароль», а запросы уходят без него', () => {
+  const script = read('static', 'account.js');
+  assert.match(script, /showPasswordMode\(data\.has_password !== false\);/);
+  assert.match(script, /Lib\.validatePasswordChange\(\$\('old'\)\.value, \$\('new'\)\.value, \$\('repeat'\)\.value, user && user\.username, hasPassword\)/);
+  assert.match(script, /hasPassword \? \{ old: check\.old, new: check\.new \} : \{ new: check\.new \}/);
+  assert.match(script, /Lib\.validateEmailChange\(\$\('email-new'\)\.value, \$\('email-password'\)\.value, hasPassword\)/);
+  assert.match(script, /\$\('google-state'\)\.hidden = !data\.google;/);
+  const html = read('static', 'account.html');
+  assert.match(html, /<label class="field" id="old-field">/);
+  assert.match(html, /<label class="field" id="email-password-field">/);
+});
+
 test('ссылка из письма: значение берётся только из «#token=…» нужной длины и алфавита', () => {
   const token = 'abcdefghij0123456789_-ABCDEFGHIJ';
   assert.equal(Lib.tokenFromHash('#token=' + token), token);
